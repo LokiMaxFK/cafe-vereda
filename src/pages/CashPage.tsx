@@ -36,6 +36,11 @@ function mapCashMovement(row: Record<string, unknown>): CashMovement {
 function rpcErrorMessage(error: { message?: string } | null) {
   if (!error) return "Ocurrió un error inesperado.";
   if (error.message?.includes("Note required")) return "El motivo o insumo es obligatorio.";
+  if (error.message?.includes("Amount must be greater than zero")) return "El importe debe ser mayor que cero.";
+  if (error.message?.includes("Cash session not open")) return "Este turno ya no está abierto.";
+  if (error.message?.includes("Invalid opening fund")) return "El fondo inicial no es válido.";
+  if (error.message?.includes("Invalid counted amount")) return "El efectivo contado no es válido.";
+  if (error.message?.includes("Idempotency key already used")) return "Este movimiento ya fue registrado.";
   if (error.message?.includes("one_open_cash_session")) return "Ya hay un turno abierto.";
   return error.message ?? "Ocurrió un error inesperado.";
 }
@@ -214,9 +219,8 @@ export function CashPage() {
     if (!navigator.onLine) return "Necesitas conexión a internet para hacer el corte.";
     const { data, error: rpcError } = await supabase.rpc("close_cash_session", { p_cash_session_id: cashSession.id, p_counted_cash_cents: Math.round(counted * 100) });
     if (rpcError || !data) return rpcErrorMessage(rpcError);
-    await load();
     return mapCashSession(data as Record<string, unknown>);
-  }, [cashSession, load]);
+  }, [cashSession]);
 
   if (!supabase) {
     return <Page size="wide"><EmptyState icon={<WalletCards />} title="Caja no disponible" description="Configura Supabase para operar el arqueo de caja." /></Page>;
@@ -242,7 +246,8 @@ export function CashPage() {
     );
   }
 
-  const withdrawn = movements.filter((movement) => movement.type === "withdrawal" || movement.type === "adjustment").reduce((sum, movement) => sum + movement.amount, 0);
+  const withdrawalMovements = movements.filter((movement) => movement.type === "withdrawal" || movement.type === "adjustment");
+  const withdrawn = withdrawalMovements.reduce((sum, movement) => sum + movement.amount, 0);
   const cash = cashSalesCents / 100;
   const expected = cashSession.openingFund + cash - withdrawn;
   const openedByMe = cashSession.openedBy === session?.id;
@@ -259,15 +264,15 @@ export function CashPage() {
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard icon={<WalletCards />} label="Fondo inicial" value={mxn.format(cashSession.openingFund)} tone="primary" />
         <MetricCard icon={<Banknote />} label="Efectivo en ventas" value={mxn.format(cash)} detail="Desde la apertura del turno" tone="success" />
-        <MetricCard icon={<ArrowDownLeft />} label="Retiros" value={mxn.format(withdrawn)} detail={`${movements.filter((m) => m.type === "withdrawal" || m.type === "adjustment").length} movimientos`} tone="danger" />
+        <MetricCard icon={<ArrowDownLeft />} label="Retiros" value={mxn.format(withdrawn)} detail={`${withdrawalMovements.length} movimientos`} tone="danger" />
         <MetricCard icon={<Calculator />} label="Efectivo esperado" value={mxn.format(expected)} detail="Antes del conteo" />
       </div>
       <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_380px]">
         <Panel className="p-5">
           <h2 className="text-lg font-bold">Movimientos del turno</h2>
-          {movements.length ? (
+          {withdrawalMovements.length ? (
             <div className="mt-4 divide-y divide-outline-variant/25">
-              {movements.filter((movement) => movement.type === "withdrawal" || movement.type === "adjustment").map((movement) => (
+              {withdrawalMovements.map((movement) => (
                 <div className="flex items-center justify-between py-4" key={movement.id}>
                   <div className="flex items-center gap-3">
                     <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-error-container text-error"><ArrowDownLeft size={18} /></span>
@@ -298,7 +303,16 @@ export function CashPage() {
         </Panel>
       </div>
       {withdrawOpen && <WithdrawModal onClose={() => setWithdrawOpen(false)} onSubmit={recordWithdrawal} />}
-      {closeModalOpen && <CloseSessionModal expected={expected} onClose={() => setCloseModalOpen(false)} onSubmit={closeSession} />}
+      {closeModalOpen && (
+        <CloseSessionModal
+          expected={expected}
+          onClose={() => {
+            setCloseModalOpen(false);
+            void load();
+          }}
+          onSubmit={closeSession}
+        />
+      )}
     </Page>
   );
 }
