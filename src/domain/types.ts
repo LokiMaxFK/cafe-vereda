@@ -26,8 +26,13 @@ export interface Product {
   variants?: ProductVariant[];
   available: boolean;
   schedule?: string;
+  modifierIds?: string[];
 }
 export interface OrderModifier { id: string; name: string; price: number; }
+export interface CatalogExtra extends OrderModifier {
+  active: boolean;
+  productIds: string[];
+}
 export interface OrderItem {
   id: string;
   productId: string;
