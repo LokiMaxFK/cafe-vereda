@@ -30,6 +30,10 @@ export function qzSigningIsConfigured() {
   return Boolean(import.meta.env.VITE_QZ_CERTIFICATE && signingConfigured);
 }
 
+export function qzCertificateConfigured() {
+  return Boolean(import.meta.env.VITE_QZ_CERTIFICATE?.trim());
+}
+
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "No fue posible comunicarse con QZ Tray.";
 }
@@ -70,7 +74,10 @@ export async function printWithQz(settings: PrinterSettings, document: ThermalPr
 export function qzErrorMessage(error: unknown) {
   const message = errorMessage(error);
   if (/websocket|connect|refused|closed/i.test(message)) {
-    return "No se pudo conectar con QZ Tray. Confirma que está instalado y abierto en esta computadora.";
+    const signingHint = qzCertificateConfigured()
+      ? ""
+      : " Este despliegue no tiene configurado el certificado de firma de QZ Tray (VITE_QZ_CERTIFICATE): en cada estación deberás presionar «Allow» y marcar «Remember this decision» en el aviso de QZ Tray para que la conexión pase.";
+    return `No se pudo conectar con QZ Tray. Confirma que está instalado y abierto en esta computadora.${signingHint}`;
   }
   return message;
 }

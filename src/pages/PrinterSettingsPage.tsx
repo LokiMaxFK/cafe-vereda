@@ -4,7 +4,7 @@ import QRCode from "qrcode";
 import { Button, FieldLabel, InlineAlert, Page, PageHeader, Panel, SelectField, TextField } from "../../design-system/react";
 import type { Order } from "../domain/types";
 import { createCommandDocument, createTicketDocument, paperFromWidth } from "../lib/printing";
-import { connectQzTray, printWithQz, qzErrorMessage, qzIsConnected, type QzConnectionState } from "../lib/qzPrinting";
+import { connectQzTray, printWithQz, qzCertificateConfigured, qzErrorMessage, qzIsConnected, type QzConnectionState } from "../lib/qzPrinting";
 import { loadPrinterSettings, mergeTicketDesign, savePrinterSettings, ticketDesignFrom, type PrinterSettings } from "../lib/printerSettings";
 import { loadUniversalTicketDesign, saveUniversalTicketDesign } from "../lib/ticketDesign";
 
@@ -239,6 +239,7 @@ export function PrinterSettingsPage() {
             <div className="flex gap-3"><span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary-fixed text-primary"><PlugZap /></span><div><h2 className="font-bold">Conexión con QZ Tray</h2><p className="mt-1 text-sm text-on-surface-variant">QZ Tray detecta las impresoras instaladas por Windows y les envía el trabajo directamente.</p></div></div>
             <span className={`inline-flex shrink-0 items-center gap-2 rounded-full px-3 py-1.5 text-xs font-bold ${status.tone === "success" ? "bg-tertiary-fixed text-tertiary" : status.tone === "danger" ? "bg-error-container text-error" : "bg-surface-container-high text-on-surface-variant"}`}>{status.tone === "success" ? <CheckCircle2 size={15} /> : <AlertTriangle size={15} />}{status.label}</span>
           </div>
+          {!qzCertificateConfigured() && <div className="mt-4"><InlineAlert>Este despliegue no tiene configurado el certificado de firma de QZ Tray (falta <code>VITE_QZ_CERTIFICATE</code> en el build). No es una falla de la impresora: sin certificado, QZ Tray funciona pero pide autorizar manualmente cada estación con «Allow» + «Remember this decision», y puede quedarse esperando esa autorización si nadie la confirma. Configura la variable y despliega la función <code>qz-sign</code> con el secreto <code>QZ_PRIVATE_KEY</code> para impresión firmada — ver docs/IMPRESION_TERMICA.md.</InlineAlert></div>}
           {error && <div className="mt-4"><InlineAlert>{error}</InlineAlert></div>}
           {success && <div className="mt-4"><InlineAlert tone="success">{success}</InlineAlert></div>}
           {connection !== "connected" && <div className="mt-5 flex flex-wrap gap-3"><Button variant="primary" onClick={() => void refreshPrinters()} disabled={connection === "connecting"}><PlugZap size={18} /> Conectar QZ Tray</Button><a className="inline-flex min-h-touch-target-min items-center gap-2 px-2 text-sm font-semibold text-primary underline" href="https://qz.io/download" target="_blank" rel="noreferrer">Descargar QZ Tray <ExternalLink size={15} /></a></div>}
