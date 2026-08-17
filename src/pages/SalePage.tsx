@@ -7,8 +7,8 @@ import type { PaymentMethod } from "../domain/types";
 import { Modal } from "../components/Modal";
 import { ProductPicker } from "../components/ProductPicker";
 import { OrderStatusBadge } from "../components/StatusBadge";
+import { printErrorMessage } from "../lib/browserPrinting";
 import { printCommand, printTicket } from "../lib/printing";
-import { qzErrorMessage } from "../lib/qzPrinting";
 import { useApp } from "../state/AppContext";
 
 const paymentOptions: Array<{ value: PaymentMethod; label: string; icon: typeof Banknote }> = [
@@ -49,7 +49,7 @@ export function SalePage() {
     if (!cancelItemId || !cancelReason.trim()) return;
     const item = activeOrder.items.find((candidate) => candidate.id === cancelItemId); if (!item) return;
     const batchId = await cancelCommandedItem(activeOrder.id, cancelItemId, cancelReason);
-    if (batchId) { try { await printCommand(activeOrder, [{ ...item, status: "cancelled", cancellationReason: cancelReason, cancellationBatchId: batchId }], 0, true); } catch (reason) { setMessage(`Incidencia creada, pero no se pudo imprimir la cancelación: ${qzErrorMessage(reason)}`); } }
+    if (batchId) { try { await printCommand(activeOrder, [{ ...item, status: "cancelled", cancellationReason: cancelReason, cancellationBatchId: batchId }], 0, true); } catch (reason) { setMessage(`Incidencia creada, pero no se pudo imprimir la cancelación: ${printErrorMessage(reason)}`); } }
     setCancelItemId(null); setCancelReason("");
   }
   async function dispatch() {
@@ -58,7 +58,7 @@ export function SalePage() {
     const batchId = await dispatchPending(activeOrder.id);
     if (batchId) {
       setMessage(`${commandItems.length} artículo${commandItems.length === 1 ? "" : "s"} enviado${commandItems.length === 1 ? "" : "s"} a preparación.`);
-      try { await printCommand({ ...activeOrder, items: commandItems.map((item) => ({ ...item, dispatchBatchId: batchId })) }, commandItems.map((item) => ({ ...item, dispatchBatchId: batchId }))); } catch (reason) { setMessage(`Comanda enviada a preparación, pero no se pudo imprimir: ${qzErrorMessage(reason)}`); }
+      try { await printCommand({ ...activeOrder, items: commandItems.map((item) => ({ ...item, dispatchBatchId: batchId })) }, commandItems.map((item) => ({ ...item, dispatchBatchId: batchId }))); } catch (reason) { setMessage(`Comanda enviada a preparación, pero no se pudo imprimir: ${printErrorMessage(reason)}`); }
     }
   }
   async function finalize() {
@@ -73,15 +73,15 @@ export function SalePage() {
   async function finish() {
     const refreshed = orders.find((item) => item.id === activeOrder.id) ?? activeOrder;
     await closeOrder(activeOrder.id);
-    try { await printTicket(refreshed); } catch (reason) { setMessage(`Venta cerrada, pero no se pudo imprimir el ticket: ${qzErrorMessage(reason)}`); }
+    try { await printTicket(refreshed); } catch (reason) { setMessage(`Venta cerrada, pero no se pudo imprimir el ticket: ${printErrorMessage(reason)}`); }
     setCheckoutOpen(false); navigate("/salon");
   }
   async function reprintTicket() {
-    try { await printTicket(activeOrder); } catch (reason) { setMessage(`No se pudo imprimir el ticket: ${qzErrorMessage(reason)}`); }
+    try { await printTicket(activeOrder); } catch (reason) { setMessage(`No se pudo imprimir el ticket: ${printErrorMessage(reason)}`); }
   }
   async function reprintCommand() {
     const items = activeOrder.items.filter((item) => item.dispatchBatchId);
-    try { await printCommand(activeOrder, items, 1); } catch (reason) { setMessage(`No se pudo reimprimir la comanda: ${qzErrorMessage(reason)}`); }
+    try { await printCommand(activeOrder, items, 1); } catch (reason) { setMessage(`No se pudo reimprimir la comanda: ${printErrorMessage(reason)}`); }
   }
   async function performOrderAction() {
     if (!orderAction || !orderActionReason.trim()) return;

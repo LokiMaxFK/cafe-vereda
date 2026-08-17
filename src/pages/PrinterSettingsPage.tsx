@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, CheckCircle2, ExternalLink, ImagePlus, PlugZap, Printer, RefreshCw, Save, TestTube2, Trash2 } from "lucide-react";
+import { CheckCircle2, ImagePlus, Printer, Save, TestTube2, Trash2 } from "lucide-react";
 import QRCode from "qrcode";
 import { Button, FieldLabel, InlineAlert, Page, PageHeader, Panel, SelectField, TextField } from "../../design-system/react";
 import type { Order } from "../domain/types";
-import { createCommandDocument, createTicketDocument, paperFromWidth } from "../lib/printing";
-import { connectQzTray, printWithQz, qzCertificateConfigured, qzErrorMessage, qzIsConnected, type QzConnectionState } from "../lib/qzPrinting";
+import { printErrorMessage } from "../lib/browserPrinting";
+import { createCommandDocument, createTicketDocument, paperFromWidth, printDocumentLocally } from "../lib/printing";
 import { loadPrinterSettings, mergeTicketDesign, savePrinterSettings, ticketDesignFrom, type PrinterSettings } from "../lib/printerSettings";
 import { loadUniversalTicketDesign, saveUniversalTicketDesign } from "../lib/ticketDesign";
 
@@ -24,13 +24,6 @@ const testOrder: Order = {
     { id: "test-toast", productId: "toast", name: "Toast de aguacate", quantity: 1, unitPrice: 110, modifiers: [], status: "dispatched", dispatchBatchId: "prueba-001" }
   ],
   payments: [{ id: "test-payment", method: "card", amount: 270, tip: 20, createdAt: "2026-08-17T15:32:00.000Z" }]
-};
-
-const connectionCopy: Record<QzConnectionState, { label: string; tone: "neutral" | "success" | "danger" }> = {
-  disconnected: { label: "Sin conectar", tone: "neutral" },
-  connecting: { label: "Conectando…", tone: "neutral" },
-  connected: { label: "QZ Tray conectado", tone: "success" },
-  error: { label: "Conexión no disponible", tone: "danger" }
 };
 
 function isValidTicketUrl(value: string) {
@@ -93,22 +86,17 @@ async function createThermalLogo(imageBlob: Blob) {
 
 export function PrinterSettingsPage() {
   const [settings, setSettings] = useState<PrinterSettings>(() => loadPrinterSettings());
-  const [printers, setPrinters] = useState<string[]>([]);
-  const [connection, setConnection] = useState<QzConnectionState>(() => qzIsConnected() ? "connected" : "disconnected");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [printing, setPrinting] = useState<"command" | "ticket" | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
 
   const paper = paperFromWidth(settings.paperWidthMm);
-  const status = connectionCopy[connection];
-  const selectedPrinterMissing = Boolean(settings.printerName && printers.length && !printers.includes(settings.printerName));
   const previewWidth = settings.paperWidthMm === 58 ? "230px" : "310px";
 
   const preview = useMemo(() => createTicketDocument(testOrder, paper, settings), [paper, settings]);
 
   useEffect(() => {
-    if (qzIsConnected()) void refreshPrinters();
     void loadUniversalTicketDesign().then((design) => setSettings((current) => mergeTicketDesign(current, design))).catch((reason: Error) => setError(reason.message));
   }, []);
 
@@ -127,27 +115,13 @@ export function PrinterSettingsPage() {
     setSuccess("");
   }
 
-  async function refreshPrinters() {
-    setConnection("connecting");
-    setError("");
-    try {
-      const found = await connectQzTray();
-      setPrinters(found);
-      setConnection("connected");
-      if (!found.length) setError("QZ Tray está conectado, pero Windows no reportó impresoras disponibles.");
-    } catch (reason) {
-      setConnection("error");
-      setError(qzErrorMessage(reason));
-    }
-  }
-
   async function save() {
     try {
       const prepared = await prepareTicketSettings(settings);
       const normalized = savePrinterSettings(prepared);
       setSettings(normalized);
       await saveUniversalTicketDesign(ticketDesignFrom(normalized));
-      setSuccess("Diseño del ticket guardado para todo el café. La impresora permanece configurada solo en esta estación.");
+      setSuccess("Diseño del ticket guardado. El navegador usará la impresora que elijas en el diálogo de Windows.");
       setError("");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "No se pudo guardar la configuración del ticket.");
@@ -213,12 +187,10 @@ export function PrinterSettingsPage() {
       const document = kind === "command"
         ? createCommandDocument(testOrder, testOrder.items, 0, false, paperFromWidth(printableSettings.paperWidthMm), printableSettings)
         : createTicketDocument(testOrder, paperFromWidth(printableSettings.paperWidthMm), printableSettings);
-      await printWithQz(printableSettings, document);
-      setConnection("connected");
-      setSuccess(`${kind === "command" ? "Comanda" : "Ticket"} de prueba enviado a ${normalized.printerName}.`);
+      await printDocumentLocally(document);
+      setSuccess(`Se abrió el diálogo para imprimir ${kind === "command" ? "la comanda" : "el ticket"} de prueba.`);
     } catch (reason) {
-      setConnection(qzIsConnected() ? "connected" : "error");
-      setError(qzErrorMessage(reason));
+      setError(printErrorMessage(reason));
     } finally {
       setPrinting(null);
     }
@@ -228,38 +200,29 @@ export function PrinterSettingsPage() {
     <PageHeader
       eyebrow="ESTACIÓN DE IMPRESIÓN"
       title="Probar impresora térmica"
-      description="La impresora se elige por computadora; el diseño del ticket se comparte con todo el café al guardar."
-      action={<><Button variant="secondary" onClick={() => void refreshPrinters()} disabled={connection === "connecting"}><RefreshCw size={18} className={connection === "connecting" ? "animate-spin" : ""} /> Buscar impresoras</Button><Button variant="primary" onClick={() => void save()}><Save size={18} /> Guardar</Button></>}
+      description="Imprime con el diálogo nativo del navegador; no requiere QZ Tray, certificados ni servicios locales adicionales."
+      action={<Button variant="primary" onClick={() => void save()}><Save size={18} /> Guardar</Button>}
     />
 
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
       <div className="space-y-5">
         <Panel className="p-5">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div className="flex gap-3"><span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary-fixed text-primary"><PlugZap /></span><div><h2 className="font-bold">Conexión con QZ Tray</h2><p className="mt-1 text-sm text-on-surface-variant">QZ Tray detecta las impresoras instaladas por Windows y les envía el trabajo directamente.</p></div></div>
-            <span className={`inline-flex shrink-0 items-center gap-2 rounded-full px-3 py-1.5 text-xs font-bold ${status.tone === "success" ? "bg-tertiary-fixed text-tertiary" : status.tone === "danger" ? "bg-error-container text-error" : "bg-surface-container-high text-on-surface-variant"}`}>{status.tone === "success" ? <CheckCircle2 size={15} /> : <AlertTriangle size={15} />}{status.label}</span>
+            <div className="flex gap-3"><span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary-fixed text-primary"><Printer /></span><div><h2 className="font-bold">Impresión local del navegador</h2><p className="mt-1 text-sm text-on-surface-variant">El ticket se genera en esta computadora y Windows se encarga de enviarlo a la impresora.</p></div></div>
+            <span className="inline-flex shrink-0 items-center gap-2 rounded-full bg-tertiary-fixed px-3 py-1.5 text-xs font-bold text-tertiary"><CheckCircle2 size={15} /> Lista para imprimir</span>
           </div>
-          {!qzCertificateConfigured() && <p className="mt-4 text-sm text-on-surface-variant">Este despliegue no tiene certificado de firma configurado (<code>VITE_QZ_CERTIFICATE</code>). Es opcional: solo evita que QZ Tray pida autorizar cada estación con «Allow» + «Remember this decision» la primera vez. Puedes ignorarlo si no te molesta ese paso manual — ver docs/IMPRESION_TERMICA.md si más adelante quieres configurarlo.</p>}
+          <p className="mt-4 text-sm text-on-surface-variant">Al imprimir, elige la Suzwip en el diálogo de Windows, usa el tamaño de papel correcto y desactiva encabezados y pies de página. Chrome normalmente conserva la última impresora seleccionada.</p>
           {error && <div className="mt-4"><InlineAlert>{error}</InlineAlert></div>}
           {success && <div className="mt-4"><InlineAlert tone="success">{success}</InlineAlert></div>}
-          {connection !== "connected" && <div className="mt-5 flex flex-wrap gap-3"><Button variant="primary" onClick={() => void refreshPrinters()} disabled={connection === "connecting"}><PlugZap size={18} /> Conectar QZ Tray</Button><a className="inline-flex min-h-touch-target-min items-center gap-2 px-2 text-sm font-semibold text-primary underline" href="https://qz.io/download" target="_blank" rel="noreferrer">Descargar QZ Tray <ExternalLink size={15} /></a></div>}
         </Panel>
 
         <Panel className="p-5">
           <div className="mb-5 flex items-center gap-3"><span className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary-fixed text-primary"><Printer /></span><div><h2 className="font-bold">Impresora y formato</h2><p className="text-sm text-on-surface-variant">Compatible con la Suzwip de 58 mm y con cualquier impresora disponible en Windows.</p></div></div>
           <div className="grid gap-4 sm:grid-cols-2">
-            <FieldLabel label="Impresora de esta estación" hint={selectedPrinterMissing ? "La impresora guardada ya no aparece. Selecciona otra antes de probar." : "El nombre viene directamente de Windows."}>
-              <SelectField value={settings.printerName} onChange={(event) => updateSettings({ printerName: event.target.value })} disabled={!printers.length}>
-                <option value="">{printers.length ? "Selecciona una impresora" : "Conecta QZ Tray para buscar"}</option>
-                {selectedPrinterMissing && <option value={settings.printerName}>{settings.printerName} (no disponible)</option>}
-                {printers.map((printer) => <option key={printer} value={printer}>{printer}</option>)}
-              </SelectField>
-            </FieldLabel>
             <FieldLabel label="Ancho de papel"><SelectField value={settings.paperWidthMm} onChange={(event) => updateSettings({ paperWidthMm: Number(event.target.value) as 58 | 80, printableWidthMm: Number(event.target.value) === 58 ? 48 : 72 })}><option value="58">58 mm</option><option value="80">80 mm</option></SelectField></FieldLabel>
             <FieldLabel label="Ancho útil de impresión (mm)" hint="58 mm suele imprimir solo 48 mm útiles. Reduce este valor si se corta a la derecha."><TextField type="number" min="32" max={settings.paperWidthMm - 4} step="0.5" value={settings.printableWidthMm} onChange={(event) => updateSettings({ printableWidthMm: Number(event.target.value) })} /></FieldLabel>
             <FieldLabel label="Margen superior (mm)" hint="Espacio antes y después del contenido."><TextField type="number" min="0" max="8" step="0.5" value={settings.marginMm} onChange={(event) => updateSettings({ marginMm: Number(event.target.value) })} /></FieldLabel>
             <FieldLabel label="Tamaño de texto"><SelectField value={settings.fontScale} onChange={(event) => updateSettings({ fontScale: event.target.value as PrinterSettings["fontScale"] })}><option value="compact">Compacto</option><option value="normal">Normal</option><option value="large">Grande</option></SelectField></FieldLabel>
-            <FieldLabel label="Copias predeterminadas de comanda" hint="Se imprimen automáticamente al enviar una comanda a preparación."><SelectField value={settings.commandCopies} onChange={(event) => updateSettings({ commandCopies: Number(event.target.value) as 1 | 2 })}><option value="1">1 copia</option><option value="2">2 copias</option></SelectField></FieldLabel>
           </div>
         </Panel>
 
@@ -291,8 +254,7 @@ export function PrinterSettingsPage() {
 
         <Panel className="p-5">
           <div className="mb-5"><h2 className="font-bold">Pruebas de impresión</h2><p className="mt-1 text-sm text-on-surface-variant">No modifican órdenes ni pagos. Verifica acentos, notas, cantidades, totales y el ancho del papel.</p></div>
-          <div className="grid gap-3 sm:grid-cols-2"><Button variant="primary" size="lg" onClick={() => void printTest("command")} disabled={!settings.printerName || printing !== null}><TestTube2 size={18} /> {printing === "command" ? "Enviando…" : "Imprimir comanda"}</Button><Button variant="success" size="lg" onClick={() => void printTest("ticket")} disabled={!settings.printerName || printing !== null}><Printer size={18} /> {printing === "ticket" ? "Enviando…" : "Imprimir ticket"}</Button></div>
-          {!settings.printerName && <p className="mt-3 text-sm text-on-surface-variant">Selecciona una impresora para habilitar las pruebas.</p>}
+          <div className="grid gap-3 sm:grid-cols-2"><Button variant="primary" size="lg" onClick={() => void printTest("command")} disabled={printing !== null}><TestTube2 size={18} /> {printing === "command" ? "Abriendo…" : "Imprimir comanda"}</Button><Button variant="success" size="lg" onClick={() => void printTest("ticket")} disabled={printing !== null}><Printer size={18} /> {printing === "ticket" ? "Abriendo…" : "Imprimir ticket"}</Button></div>
         </Panel>
       </div>
 

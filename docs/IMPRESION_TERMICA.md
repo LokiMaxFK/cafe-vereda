@@ -1,44 +1,33 @@
-# Impresora térmica por estación
+# Impresión térmica local
 
-La pantalla **Configuración → Configurar y probar** conecta el POS a QZ Tray y a las impresoras que Windows tenga instaladas. La impresora seleccionada se guarda por estación; el diseño del ticket se comparte para todo el café cuando Supabase está configurado.
+La pantalla **Configuración → Configurar y probar** utiliza la impresión nativa del navegador. No requiere QZ Tray, certificados, llaves privadas, extensiones ni un servicio local adicional.
+
+El POS genera la comanda o el ticket dentro del navegador y abre el diálogo de impresión de Windows. El contenido no se envía a un proveedor de impresión.
 
 ## Preparar la Suzwip de 58 mm en Windows
 
 1. Conecta la impresora por USB y enciéndela.
-2. Instala **58MM Thermal Printer Driver & Tools** y confirma que Windows muestre una impresora en *Configuración → Bluetooth y dispositivos → Impresoras y escáneres*.
-3. Desde Windows, imprime una página de prueba y configura el tamaño de papel de 58 mm cuando el driver lo permita.
-4. Instala y abre [QZ Tray](https://qz.io/download) en la misma computadora.
-5. En el POS, entra a **Configuración → Configurar y probar**, pulsa **Conectar QZ Tray**, selecciona la impresora encontrada, confirma el ancho útil de 48 mm para papel de 58 mm y guarda.
-6. Imprime una comanda y un ticket de prueba. Confirma que los acentos, las notas y los importes se lean completos.
+2. Instala el controlador **58MM Thermal Printer Driver & Tools** incluido por el fabricante.
+3. Confirma que Windows muestre la impresora en **Configuración → Bluetooth y dispositivos → Impresoras y escáneres**.
+4. Imprime una página de prueba desde Windows.
+5. En el POS, entra a **Configuración → Configurar y probar** y conserva un ancho de papel de 58 mm y un ancho útil inicial de 48 mm.
+6. Pulsa **Imprimir comanda** o **Imprimir ticket**.
+7. En el diálogo del navegador, elige la Suzwip, desactiva encabezados y pies de página, usa márgenes en cero y selecciona el tamaño de papel térmico del controlador.
 
-## QZ Tray sin avisos de permiso
+Chrome suele recordar la última impresora y las preferencias elegidas para las siguientes impresiones del mismo perfil de Windows.
 
-### Solución inmediata por estación
+## Limitación del navegador
 
-Cuando aparezca el cuadro de QZ Tray, marca **Remember this decision** y presiona **Allow**. QZ recordará el permiso para esa computadora e impresora.
+Los navegadores no permiten que una página web seleccione una impresora ni imprima silenciosamente. El diálogo de impresión debe ser confirmado por el operador. Esta restricción evita que un sitio web imprima sin permiso.
 
-### Impresión silenciosa segura para producción
-
-La aplicación incluye soporte para firmar los trabajos de QZ y quitar el estado `Anonymous / Untrusted`. Esto requiere un certificado de QZ Tray y no se debe resolver guardando la llave privada en el navegador.
-
-1. Obtén `digital-certificate.txt` y `private-key.pem` (PKCS#8 de 2048 bits) desde el portal de QZ Tray. Para certificados confiables en producción, QZ requiere un plan que permita generar el certificado. El certificado público puede estar en el frontend; la llave privada no.
-2. Agrega el contenido completo de `digital-certificate.txt` en `VITE_QZ_CERTIFICATE` de `.env.production`, usando `\n` para los saltos de línea.
-3. Guarda la llave PEM únicamente como secreto `QZ_PRIVATE_KEY` de Supabase.
-4. Despliega la función `qz-sign` y aplica las migraciones de Supabase, incluidas `branch_settings` y sus políticas.
-5. Publica una nueva compilación del frontend. Cada trabajo será firmado por la Edge Function solo para personal autenticado y activo.
-
-Nunca agregues `QZ_PRIVATE_KEY` a `.env`, `VITE_*`, el repositorio ni Hostinger. Sin certificado/llave, QZ seguirá solicitando autorización por seguridad.
-
-### Prueba sin compra, en una sola computadora
-
-QZ permite crear un certificado de demostración, confiable solo en la PC donde se genera. En esa PC abre **QZ Tray → Advanced → Site Manager → + → Create New** y acepta la instalación del certificado. QZ dejará en el Escritorio una carpeta `QZ Tray Demo Cert` con `digital-certificate.txt` y `private-key.pem`. Puedes usar esos mismos dos archivos en los pasos anteriores para probar la firma; no se deben usar para otras estaciones ni como configuración de producción.
+La aplicación no intenta detectar las impresoras instaladas. Windows muestra las disponibles en el diálogo y entrega el trabajo al controlador seleccionado.
 
 ## Notas operativas
 
-- La primera conexión de QZ Tray puede pedir autorización; esta fase usa QZ sin firma para permitir la prueba física.
 - La prueba no crea órdenes ni pagos reales.
-- Si el contenido se corta a la derecha, reduce el **ancho útil de impresión** de 48 mm a 47 o 46 mm; si queda demasiado pequeño, usa texto normal o grande. Si el driver ofrece 80 mm, cambia el ancho desde la pantalla y vuelve a probar.
-- En **Contenido del ticket final** puedes usar el botón **Usar logo Café Vereda** o cargar una imagen PNG/JPG de hasta 500 KB, escribir el texto de despedida y elegir los datos visibles por artículo.
-- En el campo **URL para código QR** escribe una dirección `https://` o `http://`. El POS genera el QR en blanco y negro y lo incrusta en el ticket para que imprima aunque no haya internet al momento de cobrar.
-- El diseño guardado por gerencia se aplica a tickets en todas las estaciones conectadas. Cada estación conserva su propio nombre de impresora.
-- El envío de trabajos desde móviles/tablets a la estación central se implementará en una fase posterior con una cola de impresión.
+- Si el contenido se corta a la derecha, reduce el **ancho útil de impresión** de 48 mm a 47 o 46 mm.
+- Si el driver ofrece únicamente papel de 80 mm, cambia el ancho desde la pantalla y vuelve a probar.
+- Para comandas duplicadas, cambia **Copias** a 2 en el diálogo de impresión.
+- En **Contenido del ticket final** puedes usar el logo de Café Vereda o cargar una imagen PNG/JPG de hasta 500 KB.
+- El código QR queda incrustado en el ticket para poder imprimirlo aunque la conexión se interrumpa después de guardar el diseño.
+- El diseño guardado por gerencia se comparte entre estaciones cuando Supabase está configurado; la impresora se elige localmente en cada computadora.

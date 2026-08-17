@@ -12,12 +12,12 @@ export function SettingsPage() {
           <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary-fixed text-primary"><Printer /></span>
           <div>
             <h2 className="font-bold">Impresión térmica</h2>
-            <p className="text-sm text-on-surface-variant">Configura una impresora por estación y ejecuta pruebas reales.</p>
+            <p className="text-sm text-on-surface-variant">Ajusta el formato y prueba la impresión nativa del navegador.</p>
           </div>
         </div>
         <Button variant="primary" onClick={() => navigate("/configuracion/impresion")}><Printer size={18} /> Configurar y probar</Button>
       </div>
-      <p className="mt-5 rounded-xl bg-surface-container-low p-4 text-sm text-on-surface-variant">La impresora se guarda en esta computadora. El diseño del ticket se guarda al pulsar <strong>Guardar</strong> dentro de la configuración de impresión.</p>
+      <p className="mt-5 rounded-xl bg-surface-container-low p-4 text-sm text-on-surface-variant">No requiere QZ Tray ni certificados. La impresora se elige desde el diálogo de Windows y el diseño del ticket se guarda al pulsar <strong>Guardar</strong>.</p>
     </Panel>
   </Page>;
 }

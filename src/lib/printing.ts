@@ -1,7 +1,7 @@
 import { itemTotal, mxn, orderTotal } from "../domain/money";
 import type { Order, OrderItem } from "../domain/types";
+import { printWithBrowser, type ThermalPrintDocument } from "./browserPrinting";
 import { defaultPrinterSettings, loadPrinterSettings, mergeTicketDesign, type PrintFontScale, type PrinterSettings, type PaperWidthMm } from "./printerSettings";
-import { printWithQz, type ThermalPrintDocument } from "./qzPrinting";
 import { loadUniversalTicketDesign } from "./ticketDesign";
 
 export type PrintPaper = "58" | "80";
@@ -26,19 +26,8 @@ function printDocument(title: string, body: string, paper: PrintPaper, options: 
   };
 }
 
-function openPrintDocument(document: ThermalPrintDocument) {
-  const popup = window.open("", "_blank", "width=420,height=720");
-  if (!popup) throw new Error("Permite ventanas emergentes para imprimir.");
-  popup.document.write(`${document.html}<script>window.onload=()=>{window.print();window.onafterprint=()=>window.close()}<\/script>`);
-  popup.document.close();
-}
-
-async function dispatchPrint(document: ThermalPrintDocument, settings: PrinterSettings, copies = 1) {
-  if (settings.printerName) {
-    for (let copy = 0; copy < copies; copy += 1) await printWithQz(settings, document);
-    return;
-  }
-  openPrintDocument(document);
+export async function printDocumentLocally(document: ThermalPrintDocument) {
+  await printWithBrowser(document);
 }
 
 export function createCommandDocument(order: Order, items: OrderItem[], copyNumber = 0, cancellation = false, paper: PrintPaper = "80", options?: Partial<PrintLayoutOptions>) {
@@ -78,8 +67,7 @@ export async function printCommand(order: Order, items: OrderItem[], copyNumber 
   const settings = loadPrinterSettings();
   const resolvedPaper = paper ?? paperFromWidth(settings.paperWidthMm);
   const document = createCommandDocument(order, items, copyNumber, cancellation, resolvedPaper, settings);
-  const copies = !copyNumber && !cancellation ? settings.commandCopies : 1;
-  await dispatchPrint(document, settings, copies);
+  await printDocumentLocally(document);
 }
 
 export async function printTicket(order: Order, paper?: PrintPaper) {
@@ -87,7 +75,7 @@ export async function printTicket(order: Order, paper?: PrintPaper) {
   const design = await loadUniversalTicketDesign().catch(() => undefined);
   const settings = design ? mergeTicketDesign(localSettings, design) : localSettings;
   const document = createTicketDocument(order, paper ?? paperFromWidth(settings.paperWidthMm), settings);
-  await dispatchPrint(document, settings);
+  await printDocumentLocally(document);
 }
 
 export function paperFromWidth(width: PaperWidthMm): PrintPaper {
