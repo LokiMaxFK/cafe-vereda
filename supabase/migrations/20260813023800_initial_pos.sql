@@ -585,8 +585,12 @@ grant usage on schema private to authenticated;
 grant execute on function private.current_role(), private.is_manager() to authenticated;
 grant execute on function public.open_cash_session(integer), public.record_cash_movement(uuid,public.cash_movement_type,integer,text,text), public.dispatch_order_items(uuid,uuid[],uuid), public.close_order(uuid), public.reverse_sale(uuid,text), public.sync_offline_operations(jsonb) to authenticated;
 
-alter table realtime.messages enable row level security;
-create policy "authenticated receive branch broadcasts" on realtime.messages for select to authenticated using ((select realtime.topic()) = 'branch:main');
+-- realtime.messages es propiedad de supabase_realtime_admin; el rol de migraciones
+-- (postgres) no puede alterarla ni crear políticas sobre ella. RLS ya viene activo
+-- por defecto en proyectos nuevos. Aplica esto manualmente desde el SQL Editor del
+-- dashboard de Supabase después de esta migración:
+--   create policy "authenticated receive branch broadcasts" on realtime.messages
+--     for select to authenticated using ((select realtime.topic()) = 'branch:main');
 
 create or replace function private.broadcast_order_changes()
 returns trigger language plpgsql security definer set search_path = '' as $$
