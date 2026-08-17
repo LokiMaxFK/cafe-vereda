@@ -2,7 +2,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { products } from "../data/menu";
 import { initialTables } from "../data/tables";
 import { orderSubtotal, orderTotal } from "../domain/money";
-import type { AppRole, Order, OrderItem, PaymentMethod, Product, StaffSession, SyncStatus } from "../domain/types";
+import { mergeOrAddItem, type OrderItemInput } from "../domain/orderItem";
+import type { AppRole, CafeTable, Order, OrderItem, PaymentMethod, StaffSession, SyncStatus } from "../domain/types";
 import { db } from "../lib/db";
 import { queueOperation, syncPendingOperations } from "../lib/offline";
 import { isSupabaseConfigured, supabase, usernameToInternalEmail } from "../lib/supabase";
@@ -34,28 +35,31 @@ const sampleOrders: Order[] = [
   }
 ];
 
-interface AddItemInput { product: Product; variantId?: string; modifiers?: OrderItem["modifiers"]; notes?: string; }
 interface AppContextValue {
   session: StaffSession | null;
   orders: Order[];
+  tables: CafeTable[];
   online: boolean;
   syncStatus: SyncStatus;
   pendingCount: number;
   demoMode: boolean;
   login: (username: string, pin: string) => Promise<void>;
   logout: () => Promise<void>;
-  startOrder: (type: "table" | "takeaway", target?: string) => Promise<Order>;
-  addItem: (orderId: string, input: AddItemInput) => Promise<void>;
+  startOrder: (type: "table" | "takeaway", target?: string, items?: OrderItem[]) => Promise<Order>;
+  addItem: (orderId: string, input: OrderItemInput) => Promise<void>;
   changeQuantity: (orderId: string, itemId: string, delta: number) => Promise<void>;
   cancelCommandedItem: (orderId: string, itemId: string, reason: string) => Promise<string | null>;
   dispatchPending: (orderId: string) => Promise<string | null>;
   markOrderReady: (orderId: string) => Promise<void>;
+  finalizeOrder: (orderId: string) => Promise<void>;
   addPayment: (orderId: string, method: PaymentMethod, amount: number, tip: number) => Promise<void>;
   closeOrder: (orderId: string) => Promise<void>;
   setDiscount: (orderId: string, amount: number, reason: string) => Promise<void>;
   cancelOrder: (orderId: string, reason: string) => Promise<void>;
   reverseSale: (orderId: string, reason: string) => Promise<void>;
   forceSync: () => Promise<void>;
+  addTable: () => Promise<CafeTable>;
+  updateTable: (tableId: string, patch: Partial<Pick<CafeTable, "seats" | "shape" | "x" | "y" | "active">>) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -74,16 +78,22 @@ function demoIdentity(username: string): StaffSession | null {
 export function AppProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<StaffSession | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [tables, setTables] = useState<CafeTable[]>([]);
   const [online, setOnline] = useState(navigator.onLine);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(navigator.onLine ? "synced" : "pending");
   const [pendingCount, setPendingCount] = useState(0);
 
   useEffect(() => {
-    Promise.all([db.orders.toArray(), db.sessions.orderBy("validatedAt").last()]).then(async ([savedOrders, savedSession]) => {
+    Promise.all([db.orders.toArray(), db.cafeTables.toArray(), db.sessions.orderBy("validatedAt").last()]).then(async ([savedOrders, savedTables, savedSession]) => {
       if (!savedOrders.length && !isSupabaseConfigured) {
         await db.orders.bulkPut(sampleOrders);
         setOrders(sampleOrders);
       } else setOrders(savedOrders);
+      if (savedTables.length) setTables(savedTables);
+      else if (!isSupabaseConfigured) {
+        await db.cafeTables.bulkPut(initialTables);
+        setTables(initialTables);
+      }
       if (savedSession) setSession(savedSession);
       setPendingCount(await db.pendingOperations.where("status").anyOf("pending", "review_required").count());
     });
@@ -128,15 +138,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setOrders(remoteOrders);
   }, []);
 
+  const pullRemoteTables = useCallback(async () => {
+    if (!supabase || !navigator.onLine) return;
+    const { data, error } = await supabase.from("cafe_tables").select("*").order("number");
+    if (error || !data) return;
+    const remoteTables: CafeTable[] = data.map((row: Record<string, unknown>) => ({
+      id: `t${row.number}`, number: Number(row.number), seats: Number(row.seats), shape: row.shape as CafeTable["shape"],
+      x: Number(row.x), y: Number(row.y), active: Boolean(row.active)
+    }));
+    await db.cafeTables.bulkPut(remoteTables);
+    setTables(remoteTables);
+  }, []);
+
   const forceSync = useCallback(async () => {
     if (!navigator.onLine) { setSyncStatus("pending"); return; }
     setSyncStatus("syncing");
     const result = await syncPendingOperations();
     if (!result.review) await pullRemoteOrders();
+    await pullRemoteTables();
     const count = await db.pendingOperations.where("status").anyOf("pending", "review_required").count();
     setPendingCount(count);
     setSyncStatus(result.review > 0 ? "review_required" : "synced");
-  }, [pullRemoteOrders]);
+  }, [pullRemoteOrders, pullRemoteTables]);
 
   useEffect(() => {
     const connected = () => { setOnline(true); void forceSync(); };
@@ -193,11 +216,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await db.sessions.clear(); setSession(null);
   }, []);
 
-  const startOrder = useCallback(async (type: "table" | "takeaway", target?: string) => {
+  const startOrder = useCallback(async (type: "table" | "takeaway", target?: string, items: OrderItem[] = []) => {
     if (!session) throw new Error("Sesión requerida");
     const nextFolio = Math.max(1044, ...orders.map((order) => order.folio)) + 1;
     const order: Order = {
-      id: crypto.randomUUID(), folio: nextFolio, type, status: "open", items: [], payments: [], discount: 0,
+      id: crypto.randomUUID(), folio: nextFolio, type, status: "open", items, payments: [], discount: 0,
       openedBy: session.id, openedAt: new Date().toISOString(), updatedAt: new Date().toISOString(), syncStatus: "pending",
       ...(type === "table" ? { tableId: target } : { customerName: target || undefined })
     };
@@ -207,11 +230,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return order;
   }, [orders, session, forceSync]);
 
-  const addItem = useCallback(async (orderId: string, { product, variantId, modifiers = [], notes }: AddItemInput) => {
+  const addItem = useCallback(async (orderId: string, input: OrderItemInput) => {
     const order = orders.find((item) => item.id === orderId); if (!order) return;
-    const variant = product.variants?.find((item) => item.id === variantId);
-    const item: OrderItem = { id: crypto.randomUUID(), productId: product.id, name: product.name, quantity: 1, unitPrice: variant?.price ?? product.price, variant: variant?.name, modifiers, notes: notes?.trim() || undefined, status: "pending" };
-    await persistOrder({ ...order, items: [...order.items, item] }, "add_order_item");
+    await persistOrder({ ...order, items: mergeOrAddItem(order.items, input) }, "add_order_item");
   }, [orders, persistOrder]);
 
   const cancelCommandedItem = useCallback(async (orderId: string, itemId: string, reason: string) => {
@@ -242,6 +263,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await persistOrder({ ...order, status: "ready", items: order.items.map((item) => item.status === "dispatched" ? { ...item, status: "prepared" } : item) }, "mark_order_ready");
   }, [orders, persistOrder]);
 
+  const finalizeOrder = useCallback(async (orderId: string) => {
+    const order = orders.find((item) => item.id === orderId); if (!order) return;
+    await persistOrder({ ...order, status: "served" }, "finalize_order");
+  }, [orders, persistOrder]);
+
   const addPayment = useCallback(async (orderId: string, method: PaymentMethod, amount: number, tip: number) => {
     const order = orders.find((item) => item.id === orderId); if (!order || amount <= 0) return;
     await persistOrder({ ...order, payments: [...order.payments, { id: crypto.randomUUID(), method, amount, tip, createdAt: new Date().toISOString() }] }, "record_payment");
@@ -259,7 +285,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [orders, persistOrder, session]);
 
   const cancelOrder = useCallback(async (orderId: string, reason: string) => {
-    const order = orders.find((item) => item.id === orderId); if (!order || !reason.trim() || !["open", "preparing", "ready"].includes(order.status)) return;
+    const order = orders.find((item) => item.id === orderId); if (!order || !reason.trim() || !["open", "preparing", "ready", "served"].includes(order.status)) return;
     await persistOrder({ ...order, status: "cancelled", discountReason: `Cancelación: ${reason.trim()}` }, "cancel_order");
   }, [orders, persistOrder]);
 
@@ -269,7 +295,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await persistOrder({ ...order, status: "reversed", discountReason: `Reversión: ${reason.trim()}` }, "reverse_sale");
   }, [orders, persistOrder, session]);
 
-  const value = useMemo(() => ({ session, orders, online, syncStatus, pendingCount, demoMode: !isSupabaseConfigured, login, logout, startOrder, addItem, changeQuantity, cancelCommandedItem, dispatchPending, markOrderReady, addPayment, closeOrder, setDiscount, cancelOrder, reverseSale, forceSync }), [session, orders, online, syncStatus, pendingCount, login, logout, startOrder, addItem, changeQuantity, cancelCommandedItem, dispatchPending, markOrderReady, addPayment, closeOrder, setDiscount, cancelOrder, reverseSale, forceSync]);
+  const addTable = useCallback(async () => {
+    if (session?.role !== "manager") throw new Error("Sólo gerencia puede editar mesas.");
+    const nextNumber = Math.max(0, ...tables.map((table) => table.number)) + 1;
+    const table: CafeTable = { id: `t${nextNumber}`, number: nextNumber, seats: 2, shape: "square", x: 50, y: 50, active: true };
+    if (supabase && navigator.onLine) {
+      const { error } = await supabase.from("cafe_tables").insert({ number: table.number, seats: table.seats, shape: table.shape, x: table.x, y: table.y, active: true });
+      if (error) throw new Error(error.message);
+    }
+    await db.cafeTables.put(table);
+    setTables((current) => [...current, table]);
+    return table;
+  }, [tables, session]);
+
+  const updateTable = useCallback(async (tableId: string, patch: Partial<Pick<CafeTable, "seats" | "shape" | "x" | "y" | "active">>) => {
+    if (session?.role !== "manager") throw new Error("Sólo gerencia puede editar mesas.");
+    const table = tables.find((item) => item.id === tableId); if (!table) return;
+    const next = { ...table, ...patch };
+    if (supabase && navigator.onLine) {
+      const { error } = await supabase.from("cafe_tables").update(patch).eq("number", table.number);
+      if (error) throw new Error(error.message);
+    }
+    await db.cafeTables.put(next);
+    setTables((current) => current.map((item) => item.id === tableId ? next : item));
+  }, [tables, session]);
+
+  const value = useMemo(() => ({ session, orders, tables, online, syncStatus, pendingCount, demoMode: !isSupabaseConfigured, login, logout, startOrder, addItem, changeQuantity, cancelCommandedItem, dispatchPending, markOrderReady, finalizeOrder, addPayment, closeOrder, setDiscount, cancelOrder, reverseSale, forceSync, addTable, updateTable }), [session, orders, tables, online, syncStatus, pendingCount, login, logout, startOrder, addItem, changeQuantity, cancelCommandedItem, dispatchPending, markOrderReady, finalizeOrder, addPayment, closeOrder, setDiscount, cancelOrder, reverseSale, forceSync, addTable, updateTable]);
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }
 
@@ -279,4 +330,4 @@ export function useApp() {
   return context;
 }
 
-export { initialTables, products };
+export { products };

@@ -1,6 +1,6 @@
 export type AppRole = "barista" | "manager";
 export type OrderType = "table" | "takeaway";
-export type OrderStatus = "open" | "preparing" | "ready" | "closed" | "cancelled" | "reversed";
+export type OrderStatus = "open" | "preparing" | "ready" | "served" | "closed" | "cancelled" | "reversed";
 export type OrderItemStatus = "pending" | "dispatched" | "prepared" | "cancelled";
 export type PaymentMethod = "cash" | "card" | "transfer";
 export type CashMovementType = "opening" | "withdrawal" | "adjustment" | "closing";
@@ -66,6 +66,7 @@ export interface CafeTable {
   shape: "round" | "square" | "rectangular";
   x: number;
   y: number;
+  active: boolean;
 }
 export interface PendingOperation {
   id: string;

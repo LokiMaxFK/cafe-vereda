@@ -1,9 +1,8 @@
-import { useState, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import { ArrowRight, BarChart3, BookOpen, Boxes, ChefHat, Clock3, Coffee, LayoutGrid, Plus, ShoppingBag, Users, WalletCards } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
-import { Badge, Button, EmptyState, MetricCard, Page, PageHeader, Panel, SectionHeader, TextField } from "../../design-system/react";
+import { Badge, Button, EmptyState, MetricCard, Page, PageHeader, Panel, SectionHeader } from "../../design-system/react";
 import { mxn, orderTotal } from "../domain/money";
-import { Modal } from "../components/Modal";
 import { OrderStatusBadge } from "../components/StatusBadge";
 import { SyncPill } from "../components/SyncPill";
 import { useApp } from "../state/AppContext";
@@ -11,10 +10,10 @@ import { useApp } from "../state/AppContext";
 interface QuickAction { key: string; label: string; description: string; icon: ReactNode; onClick: () => void; managerOnly?: boolean; featured?: boolean; }
 
 export function DashboardPage() {
-  const { session, orders, startOrder } = useApp();
+  const { session, orders } = useApp();
   const navigate = useNavigate();
   const manager = session?.role === "manager";
-  const activeOrders = orders.filter((order) => !["closed", "cancelled", "reversed"].includes(order.status));
+  const activeOrders = orders.filter((order) => !["served", "closed", "cancelled", "reversed"].includes(order.status));
   const preparing = activeOrders.filter((order) => order.status === "preparing");
   const ready = activeOrders.filter((order) => order.status === "ready");
   const closedToday = orders.filter((order) => order.status === "closed");
@@ -23,19 +22,9 @@ export function DashboardPage() {
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Buenos días" : hour < 19 ? "Buenas tardes" : "Buenas noches";
 
-  const [orderModalOpen, setOrderModalOpen] = useState(false);
-  const [customer, setCustomer] = useState("");
-
-  async function placeOrder() {
-    const order = await startOrder("takeaway", customer.trim());
-    setOrderModalOpen(false);
-    setCustomer("");
-    navigate(`/venta/${order.id}`);
-  }
-
   const quickActions: QuickAction[] = [
-    { key: "new-order", label: "Pedir orden", description: "Nuevo pedido para llevar, listo en segundos", icon: <Plus size={20} />, onClick: () => setOrderModalOpen(true), featured: true },
-    { key: "salon", label: "Salón", description: "Abrir una mesa o ver el croquis", icon: <LayoutGrid size={20} />, onClick: () => navigate("/salon") },
+    { key: "new-order", label: "Nuevo Pedido", description: "Elige productos y luego asigna mesa o para llevar", icon: <Plus size={20} />, onClick: () => navigate("/venta/nueva"), featured: true },
+    { key: "salon", label: "Salón", description: "Ver mesas y pedidos abiertos", icon: <LayoutGrid size={20} />, onClick: () => navigate("/salon") },
     { key: "preparacion", label: "Preparación", description: "Ver la cola de comandas activas", icon: <ChefHat size={20} />, onClick: () => navigate("/preparacion") },
     { key: "pedidos", label: "Pedidos", description: "Historial completo de la operación", icon: <Coffee size={20} />, onClick: () => navigate("/pedidos") },
     { key: "caja", label: "Caja", description: "Cortes, retiros y efectivo esperado", icon: <WalletCards size={20} />, onClick: () => navigate("/caja"), managerOnly: true },
@@ -81,21 +70,6 @@ export function DashboardPage() {
           </button>
         ))}
       </div>
-
-      {orderModalOpen && (
-        <Modal title="Nuevo pedido para llevar" description="El nombre es opcional y sólo identifica esta orden." onClose={() => setOrderModalOpen(false)}>
-          <div className="space-y-5">
-            <label className="block text-sm font-semibold text-on-surface-variant">
-              Nombre del pedido
-              <TextField value={customer} onChange={(event) => setCustomer(event.target.value)} placeholder="Ej. Mariana" autoFocus />
-            </label>
-            <div className="flex justify-end gap-2">
-              <Button onClick={() => setOrderModalOpen(false)}>Cancelar</Button>
-              <Button variant="primary" onClick={() => void placeOrder()}>Crear pedido</Button>
-            </div>
-          </div>
-        </Modal>
-      )}
 
       <div className="mt-8 grid gap-6 xl:grid-cols-[1fr_1.1fr]">
         <Panel className="p-5">
