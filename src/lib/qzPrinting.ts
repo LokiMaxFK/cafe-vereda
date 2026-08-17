@@ -77,7 +77,10 @@ export function qzErrorMessage(error: unknown) {
     const signingHint = qzCertificateConfigured()
       ? ""
       : " Este despliegue no tiene configurado el certificado de firma de QZ Tray (VITE_QZ_CERTIFICATE): en cada estación deberás presionar «Allow» y marcar «Remember this decision» en el aviso de QZ Tray para que la conexión pase.";
-    return `No se pudo conectar con QZ Tray. Confirma que está instalado y abierto en esta computadora.${signingHint}`;
+    const secureSiteHint = location.protocol === "https:"
+      ? " Como el sitio abre por HTTPS, el navegador necesita confiar en el certificado local de QZ Tray: abre https://localhost:8181/ en este mismo navegador, acepta la advertencia de seguridad una vez, y vuelve a intentar."
+      : "";
+    return `No se pudo conectar con QZ Tray. Confirma que está instalado y abierto en esta computadora.${signingHint}${secureSiteHint} (Detalle técnico: ${message})`;
   }
   return message;
 }
