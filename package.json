@@ -13,8 +13,11 @@
   "dependencies": {
     "@fontsource/plus-jakarta-sans": "^5.2.8",
     "@supabase/supabase-js": "^2.55.0",
+    "@types/qrcode": "^1.5.6",
     "dexie": "^4.2.0",
     "lucide-react": "^0.468.0",
+    "qrcode": "^1.5.4",
+    "qz-tray": "^2.2.6",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^7.8.2"
@@ -22,6 +25,7 @@
   "devDependencies": {
     "@tailwindcss/container-queries": "^0.1.1",
     "@tailwindcss/forms": "^0.5.10",
+    "@types/qz-tray": "^2.2.2",
     "@types/react": "^18.3.24",
     "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react": "^4.7.0",

@@ -80,7 +80,7 @@ export function SalePage() {
   }
   async function finish() {
     const refreshed = orders.find((item) => item.id === activeOrder.id) ?? activeOrder;
-    await closeOrder(activeOrder.id); printTicket(refreshed); setCheckoutOpen(false); navigate("/salon");
+    await closeOrder(activeOrder.id); await printTicket(refreshed); setCheckoutOpen(false); navigate("/salon");
   }
   async function performOrderAction() {
     if (!orderAction || !orderActionReason.trim()) return;

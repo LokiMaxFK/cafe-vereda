@@ -1,5 +1,23 @@
-import { Database, Printer, Radio, Save, Server, ShieldCheck } from "lucide-react";
-import { Badge, Button, FieldLabel, Page, PageHeader, Panel, SelectField, TextField } from "../../design-system/react";
-import { isSupabaseConfigured } from "../lib/supabase";
+import { Printer } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Button, Page, PageHeader, Panel } from "../../design-system/react";
 
-export function SettingsPage() { return <Page size="default"><PageHeader eyebrow="SUCURSAL ÚNICA" title="Configuración" description="Impresión, conexión y datos generales del punto de venta." action={<Button variant="primary"><Save size={18} /> Guardar cambios</Button>} /><div className="space-y-5"><Panel className="p-5"><div className="mb-5 flex items-center gap-3"><span className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary-fixed text-primary"><Printer /></span><div><h2 className="font-bold">Impresión térmica</h2><p className="text-sm text-on-surface-variant">Una impresora · diálogo manual del navegador</p></div></div><div className="grid gap-4 sm:grid-cols-2"><FieldLabel label="Ancho de papel"><SelectField defaultValue="80"><option value="58">58 mm</option><option value="80">80 mm</option></SelectField></FieldLabel><FieldLabel label="Copias de comanda"><SelectField defaultValue="1"><option>1</option><option>2</option></SelectField></FieldLabel></div></Panel><Panel className="p-5"><div className="mb-5 flex items-center gap-3"><span className="flex h-11 w-11 items-center justify-center rounded-xl bg-tertiary-fixed text-tertiary"><Database /></span><div><div className="flex items-center gap-2"><h2 className="font-bold">Supabase</h2><Badge tone={isSupabaseConfigured ? "success" : "neutral"}>{isSupabaseConfigured ? "Conectado" : "Modo demostración"}</Badge></div><p className="text-sm text-on-surface-variant">Datos, autenticación y sincronización</p></div></div><div className="grid gap-4 sm:grid-cols-2"><FieldLabel label="Proyecto"><TextField value={isSupabaseConfigured ? "Proyecto configurado" : "Pendiente de configurar .env"} disabled /></FieldLabel><FieldLabel label="Canal Realtime"><TextField value="branch:main" disabled /></FieldLabel></div></Panel><Panel className="p-5"><div className="mb-5 flex items-center gap-3"><span className="flex h-11 w-11 items-center justify-center rounded-xl bg-secondary-container"><ShieldCheck /></span><div><h2 className="font-bold">Seguridad y hosting</h2><p className="text-sm text-on-surface-variant">Build estático preparado para Hostinger</p></div></div><div className="grid gap-3 sm:grid-cols-3"><div className="rounded-xl bg-surface-container-low p-4"><Server size={18} className="mb-2 text-primary" /><p className="text-sm font-bold">HTTPS requerido</p><p className="mt-1 text-xs text-on-surface-variant">HSTS y encabezados incluidos</p></div><div className="rounded-xl bg-surface-container-low p-4"><Radio size={18} className="mb-2 text-primary" /><p className="text-sm font-bold">Realtime privado</p><p className="mt-1 text-xs text-on-surface-variant">Canal autenticado</p></div><div className="rounded-xl bg-surface-container-low p-4"><Database size={18} className="mb-2 text-primary" /><p className="text-sm font-bold">RLS activo</p><p className="mt-1 text-xs text-on-surface-variant">Mínimo privilegio</p></div></div></Panel></div></Page>; }
+export function SettingsPage() {
+  const navigate = useNavigate();
+  return <Page size="default">
+    <PageHeader eyebrow="SUCURSAL ÚNICA" title="Configuración" description="Ajustes operativos del punto de venta." />
+    <Panel className="p-5">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary-fixed text-primary"><Printer /></span>
+          <div>
+            <h2 className="font-bold">Impresión térmica</h2>
+            <p className="text-sm text-on-surface-variant">Configura una impresora por estación y ejecuta pruebas reales.</p>
+          </div>
+        </div>
+        <Button variant="primary" onClick={() => navigate("/configuracion/impresion")}><Printer size={18} /> Configurar y probar</Button>
+      </div>
+      <p className="mt-5 rounded-xl bg-surface-container-low p-4 text-sm text-on-surface-variant">La impresora se guarda en esta computadora. El diseño del ticket se guarda al pulsar <strong>Guardar</strong> dentro de la configuración de impresión.</p>
+    </Panel>
+  </Page>;
+}
