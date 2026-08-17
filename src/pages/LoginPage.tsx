@@ -12,11 +12,11 @@ export function LoginPage() {
   const [showPin, setShowPin] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  if (session) return <Navigate to="/salon" replace />;
+  if (session) return <Navigate to="/inicio" replace />;
 
   async function submit(event: FormEvent) {
     event.preventDefault(); setError(""); setLoading(true);
-    try { await login(username, pin); navigate("/salon"); }
+    try { await login(username, pin); navigate("/inicio"); }
     catch (reason) { setError(reason instanceof Error ? reason.message : "No se pudo iniciar sesión."); }
     finally { setLoading(false); }
   }

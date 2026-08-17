@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BarChart3, BookOpen, Boxes, ClipboardList, Coffee, LayoutGrid, LogOut, Settings, Users, WalletCards } from "lucide-react";
+import { BarChart3, BookOpen, Boxes, ClipboardList, Coffee, Home, LayoutGrid, LogOut, Settings, Users, WalletCards } from "lucide-react";
 import { Link, Navigate, Outlet, useLocation } from "react-router-dom";
 import { AppShell, InlineAlert } from "../../design-system/react";
 import { useApp } from "../state/AppContext";
@@ -11,7 +11,8 @@ export function ProtectedLayout() {
   if (!session) return <Navigate to="/" replace />;
   const manager = session.role === "manager";
   const navItems = [
-    { href: "/salon", label: "Salón", icon: <LayoutGrid size={21} />, group: "Operación", exact: true },
+    { href: "/inicio", label: "Inicio", icon: <Home size={21} />, group: "Operación", exact: true },
+    { href: "/salon", label: "Salón", icon: <LayoutGrid size={21} />, group: "Operación" },
     { href: "/preparacion", label: "Preparación", icon: <ClipboardList size={21} />, group: "Operación" },
     { href: "/pedidos", label: "Pedidos", icon: <Coffee size={21} />, group: "Operación" },
     ...(manager ? [

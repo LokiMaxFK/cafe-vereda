@@ -4,6 +4,7 @@ import { ManagerOnly } from "./components/ManagerOnly";
 import { ProtectedLayout } from "./layout/ProtectedLayout";
 import { CashPage } from "./pages/CashPage";
 import { CatalogPage } from "./pages/CatalogPage";
+import { DashboardPage } from "./pages/DashboardPage";
 import { InventoryPage } from "./pages/InventoryPage";
 import { LoginPage } from "./pages/LoginPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
@@ -25,6 +26,7 @@ export default function App() {
   return <><ScrollToTop /><Routes>
     <Route path="/" element={<LoginPage />} />
     <Route element={<ProtectedLayout />}>
+      <Route path="inicio" element={<DashboardPage />} />
       <Route path="salon" element={<SalonPage />} />
       <Route path="preparacion" element={<PreparationPage />} />
       <Route path="pedidos" element={<OrdersPage />} />
