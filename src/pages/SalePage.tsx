@@ -8,6 +8,7 @@ import { Modal } from "../components/Modal";
 import { ProductPicker } from "../components/ProductPicker";
 import { OrderStatusBadge } from "../components/StatusBadge";
 import { printCommand, printTicket } from "../lib/printing";
+import { qzErrorMessage } from "../lib/qzPrinting";
 import { useApp } from "../state/AppContext";
 
 const paymentOptions: Array<{ value: PaymentMethod; label: string; icon: typeof Banknote }> = [
@@ -48,7 +49,7 @@ export function SalePage() {
     if (!cancelItemId || !cancelReason.trim()) return;
     const item = activeOrder.items.find((candidate) => candidate.id === cancelItemId); if (!item) return;
     const batchId = await cancelCommandedItem(activeOrder.id, cancelItemId, cancelReason);
-    if (batchId) { try { printCommand(activeOrder, [{ ...item, status: "cancelled", cancellationReason: cancelReason, cancellationBatchId: batchId }], 0, true); } catch { setMessage("Incidencia creada. Habilita ventanas emergentes para imprimir la cancelación."); } }
+    if (batchId) { try { await printCommand(activeOrder, [{ ...item, status: "cancelled", cancellationReason: cancelReason, cancellationBatchId: batchId }], 0, true); } catch (reason) { setMessage(`Incidencia creada, pero no se pudo imprimir la cancelación: ${qzErrorMessage(reason)}`); } }
     setCancelItemId(null); setCancelReason("");
   }
   async function dispatch() {
@@ -57,7 +58,7 @@ export function SalePage() {
     const batchId = await dispatchPending(activeOrder.id);
     if (batchId) {
       setMessage(`${commandItems.length} artículo${commandItems.length === 1 ? "" : "s"} enviado${commandItems.length === 1 ? "" : "s"} a preparación.`);
-      try { printCommand({ ...activeOrder, items: commandItems.map((item) => ({ ...item, dispatchBatchId: batchId })) }, commandItems.map((item) => ({ ...item, dispatchBatchId: batchId }))); } catch { setMessage("Comanda creada. Habilita ventanas emergentes para imprimir."); }
+      try { await printCommand({ ...activeOrder, items: commandItems.map((item) => ({ ...item, dispatchBatchId: batchId })) }, commandItems.map((item) => ({ ...item, dispatchBatchId: batchId }))); } catch (reason) { setMessage(`Comanda enviada a preparación, pero no se pudo imprimir: ${qzErrorMessage(reason)}`); }
     }
   }
   async function finalize() {
@@ -71,7 +72,16 @@ export function SalePage() {
   }
   async function finish() {
     const refreshed = orders.find((item) => item.id === activeOrder.id) ?? activeOrder;
-    await closeOrder(activeOrder.id); await printTicket(refreshed); setCheckoutOpen(false); navigate("/salon");
+    await closeOrder(activeOrder.id);
+    try { await printTicket(refreshed); } catch (reason) { setMessage(`Venta cerrada, pero no se pudo imprimir el ticket: ${qzErrorMessage(reason)}`); }
+    setCheckoutOpen(false); navigate("/salon");
+  }
+  async function reprintTicket() {
+    try { await printTicket(activeOrder); } catch (reason) { setMessage(`No se pudo imprimir el ticket: ${qzErrorMessage(reason)}`); }
+  }
+  async function reprintCommand() {
+    const items = activeOrder.items.filter((item) => item.dispatchBatchId);
+    try { await printCommand(activeOrder, items, 1); } catch (reason) { setMessage(`No se pudo reimprimir la comanda: ${qzErrorMessage(reason)}`); }
   }
   async function performOrderAction() {
     if (!orderAction || !orderActionReason.trim()) return;
@@ -84,7 +94,7 @@ export function SalePage() {
     <div className="flex min-h-screen flex-col bg-background">
       <header className="sticky top-0 z-30 flex min-h-16 items-center justify-between gap-3 border-b border-outline-variant/30 bg-background/95 px-4 py-2 backdrop-blur sm:px-6">
         <div className="flex min-w-0 items-center gap-3"><Button size="icon" variant="ghost" onClick={() => navigate("/salon")} aria-label="Volver al salón"><ArrowLeft size={20} /></Button><div><div className="flex items-center gap-2"><h1 className="truncate text-lg font-bold">{order.type === "table" ? `Mesa ${order.tableId?.replace("t", "")}` : order.customerName || "Para llevar"}</h1><OrderStatusBadge status={order.status} /></div><p className="text-xs text-on-surface-variant">Orden #{order.folio} · {new Date(order.openedAt).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}</p></div></div>
-        <div className="relative flex items-center gap-2">{editable && <Button className="hidden sm:inline-flex" onClick={() => setDiscountOpen(true)} disabled={session?.role !== "manager"}>Descuento</Button>}{order.status === "closed" ? <Button variant="primary" onClick={() => printTicket(order)}><Printer size={18} /> Ticket</Button> : order.status === "served" ? <Button variant="primary" onClick={() => setCheckoutOpen(true)} disabled={!order.items.length || ["cancelled", "reversed"].includes(order.status)}>Cobrar <ChevronRight size={18} /></Button> : <Button variant="success" onClick={() => void finalize()} disabled={!order.items.length || pendingItems.length > 0}><ClipboardCheck size={18} /> Finalizar orden</Button>}<Button size="icon" variant="ghost" aria-label="Más acciones" onClick={() => setActionsOpen((value) => !value)}><MoreVertical size={19} /></Button>{actionsOpen && <div className="absolute right-0 top-12 z-40 w-56 rounded-xl border border-outline-variant/40 bg-surface-container-lowest p-2 shadow-2xl">{[...editableStatuses, "served"].includes(order.status) && <button className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-sm font-semibold text-error hover:bg-error-container" onClick={() => { setOrderAction("cancel"); setActionsOpen(false); }}><Trash2 size={17} /> Cancelar cuenta</button>}{order.status === "closed" && session?.role === "manager" && <button className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-sm font-semibold text-error hover:bg-error-container" onClick={() => { setOrderAction("reverse"); setActionsOpen(false); }}><RotateCcw size={17} /> Revertir venta</button>}{order.items.some((item) => item.dispatchBatchId) && <button className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-sm font-semibold hover:bg-surface-container-low" onClick={() => { const items = order.items.filter((item) => item.dispatchBatchId); printCommand(order, items, 1); setActionsOpen(false); }}><Printer size={17} /> Reimprimir COPIA 1</button>}</div>}</div>
+        <div className="relative flex items-center gap-2">{editable && <Button className="hidden sm:inline-flex" onClick={() => setDiscountOpen(true)} disabled={session?.role !== "manager"}>Descuento</Button>}{order.status === "closed" ? <Button variant="primary" onClick={() => void reprintTicket()}><Printer size={18} /> Ticket</Button> : order.status === "served" ? <Button variant="primary" onClick={() => setCheckoutOpen(true)} disabled={!order.items.length || ["cancelled", "reversed"].includes(order.status)}>Cobrar <ChevronRight size={18} /></Button> : <Button variant="success" onClick={() => void finalize()} disabled={!order.items.length || pendingItems.length > 0}><ClipboardCheck size={18} /> Finalizar orden</Button>}<Button size="icon" variant="ghost" aria-label="Más acciones" onClick={() => setActionsOpen((value) => !value)}><MoreVertical size={19} /></Button>{actionsOpen && <div className="absolute right-0 top-12 z-40 w-56 rounded-xl border border-outline-variant/40 bg-surface-container-lowest p-2 shadow-2xl">{[...editableStatuses, "served"].includes(order.status) && <button className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-sm font-semibold text-error hover:bg-error-container" onClick={() => { setOrderAction("cancel"); setActionsOpen(false); }}><Trash2 size={17} /> Cancelar cuenta</button>}{order.status === "closed" && session?.role === "manager" && <button className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-sm font-semibold text-error hover:bg-error-container" onClick={() => { setOrderAction("reverse"); setActionsOpen(false); }}><RotateCcw size={17} /> Revertir venta</button>}{order.items.some((item) => item.dispatchBatchId) && <button className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-sm font-semibold hover:bg-surface-container-low" onClick={() => { void reprintCommand(); setActionsOpen(false); }}><Printer size={17} /> Reimprimir COPIA 1</button>}</div>}</div>
       </header>
       {message && <div className="mx-4 mt-3 sm:mx-6"><InlineAlert tone="success">{message}</InlineAlert></div>}
       <div className="grid flex-1 xl:grid-cols-[180px_minmax(0,1fr)_390px]">
