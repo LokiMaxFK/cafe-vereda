@@ -68,6 +68,26 @@ export interface CafeTable {
   y: number;
   active: boolean;
 }
+export interface CashMovement {
+  id: string;
+  cashSessionId: string;
+  type: CashMovementType;
+  amount: number;
+  note?: string;
+  recordedBy: string;
+  createdAt: string;
+}
+export interface CashSession {
+  id: string;
+  openedBy: string;
+  openingFund: number;
+  openedAt: string;
+  closedBy?: string;
+  closedAt?: string;
+  countedCash?: number;
+  expectedCash?: number;
+  difference?: number;
+}
 export interface PendingOperation {
   id: string;
   idempotencyKey: string;
