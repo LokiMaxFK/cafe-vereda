@@ -17,6 +17,7 @@ import { ReportsPage } from "./pages/ReportsPage";
 import { SalePage } from "./pages/SalePage";
 import { SalonPage } from "./pages/SalonPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { PrinterSettingsPage } from "./pages/PrinterSettingsPage";
 import { TablesPage } from "./pages/TablesPage";
 
 function ScrollToTop() {
@@ -42,6 +43,7 @@ export default function App() {
         <Route path="reportes" element={<ReportsPage />} />
         <Route path="personal" element={<PeoplePage />} />
         <Route path="configuracion" element={<SettingsPage />} />
+        <Route path="configuracion/impresion" element={<PrinterSettingsPage />} />
       </Route>
       <Route path="*" element={<NotFoundPage />} />
     </Route>
