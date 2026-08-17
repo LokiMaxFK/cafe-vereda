@@ -35,8 +35,8 @@ export default function App() {
       <Route path="preparacion" element={<PreparationPage />} />
       <Route path="pedidos" element={<OrdersPage />} />
       <Route path="cobros" element={<ReadyToChargePage />} />
+      <Route path="caja" element={<CashPage />} />
       <Route element={<ManagerOnly />}>
-        <Route path="caja" element={<CashPage />} />
         <Route path="catalogo" element={<CatalogPage />} />
         <Route path="mesas" element={<TablesPage />} />
         <Route path="insumos" element={<InventoryPage />} />

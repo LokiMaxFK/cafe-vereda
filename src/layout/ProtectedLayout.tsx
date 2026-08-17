@@ -17,8 +17,8 @@ export function ProtectedLayout() {
     { href: "/preparacion", label: "Preparación", icon: <ClipboardList size={21} />, group: "Operación" },
     { href: "/pedidos", label: "Pedidos", icon: <Coffee size={21} />, group: "Operación" },
     { href: "/cobros", label: "Cobros", icon: <HandCoins size={21} />, group: "Operación" },
+    { href: "/caja", label: "Caja", icon: <WalletCards size={21} />, group: "Operación" },
     ...(manager ? [
-      { href: "/caja", label: "Caja", icon: <WalletCards size={21} />, group: "Gestión" },
       { href: "/catalogo", label: "Catálogo", icon: <BookOpen size={21} />, group: "Gestión" },
       { href: "/mesas", label: "Mesas", icon: <LayoutTemplate size={21} />, group: "Gestión" },
       { href: "/insumos", label: "Insumos", icon: <Boxes size={21} />, group: "Gestión" },
