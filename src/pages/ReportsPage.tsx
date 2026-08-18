@@ -203,8 +203,14 @@ export function ReportsPage() {
 
   useEffect(() => { setPage(0); }, [filters, preset, customStart, customEnd]);
 
+  // Las fechas se extraen como primitivas a propósito: `rangeResult` es un objeto nuevo en cada
+  // render, así que depender de él volvería a consultar Supabase aunque el periodo no haya cambiado.
+  const rangeStart = rangeResult.range?.start;
+  const rangeEnd = rangeResult.range?.end;
+  const rangeComparisonStart = rangeResult.range?.comparisonStart;
+
   useEffect(() => {
-    if (!rangeResult.range) return;
+    if (!rangeComparisonStart || !rangeEnd) return;
     if (!supabase) {
       const demoOrders = orders.map(asDemoOrder);
       setRemoteOrders(demoOrders);
@@ -216,7 +222,7 @@ export function ReportsPage() {
     let active = true;
     setLoading(true);
     setError("");
-    void fetchReportOrders(rangeResult.range.comparisonStart, rangeResult.range.end)
+    void fetchReportOrders(rangeComparisonStart, rangeEnd)
       .then((result) => {
         if (!active) return;
         setRemoteOrders(result.orders);
@@ -226,16 +232,16 @@ export function ReportsPage() {
       .catch((reason) => { if (active) setError(reason instanceof Error ? reason.message : "No se pudo cargar el reporte."); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [orders, rangeResult.range?.comparisonStart, rangeResult.range?.end, reloadKey]);
+  }, [orders, rangeComparisonStart, rangeEnd, reloadKey]);
 
   useEffect(() => {
-    if (!rangeResult.range || !supabase) { setInventoryAnalysis([]); return; }
+    if (!rangeStart || !rangeEnd || !supabase) { setInventoryAnalysis([]); return; }
     let active = true;
-    void fetchInventoryAnalysis(rangeResult.range.start, rangeResult.range.end)
+    void fetchInventoryAnalysis(rangeStart, rangeEnd)
       .then((rows) => { if (active) setInventoryAnalysis(rows); })
       .catch(() => { if (active) setInventoryAnalysis([]); });
     return () => { active = false; };
-  }, [rangeResult.range?.start, rangeResult.range?.end, reloadKey]);
+  }, [rangeStart, rangeEnd, reloadKey]);
 
   const dataset = useMemo(() => rangeResult.range ? createReportDataset(remoteOrders, rangeResult.range, filters) : null, [filters, rangeResult.range, remoteOrders]);
   const hourlyPattern = useMemo(() => rangeResult.range ? createHourlyPattern(remoteOrders, rangeResult.range, filters) : [], [remoteOrders, rangeResult.range, filters]);

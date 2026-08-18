@@ -2,7 +2,12 @@ create extension if not exists pgcrypto;
 
 create type public.app_role as enum ('barista', 'manager');
 create type public.order_type as enum ('table', 'takeaway');
-create type public.order_status as enum ('open', 'preparing', 'ready', 'closed', 'cancelled', 'reversed');
+-- 'served' (orden entregada, pendiente de cobro) se declara desde el inicio a propósito.
+-- Postgres prohíbe usar un valor de enum en la misma transacción en que se agrega (SQLSTATE
+-- 55P04), así que 20260817162350, que lo agregaba y acto seguido lo usaba en una política RLS,
+-- no se podía aplicar sobre una base nueva. Ahí quedó como "add value if not exists" y el valor
+-- nace aquí, donde ya está comprometido antes de que cualquier migración lo referencie.
+create type public.order_status as enum ('open', 'preparing', 'ready', 'served', 'closed', 'cancelled', 'reversed');
 create type public.order_item_status as enum ('pending', 'dispatched', 'prepared', 'cancelled');
 create type public.payment_method as enum ('cash', 'card', 'transfer');
 create type public.cash_movement_type as enum ('opening', 'withdrawal', 'adjustment', 'closing');

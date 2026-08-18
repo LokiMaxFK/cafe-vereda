@@ -1,6 +1,9 @@
 -- Agrega el estado "served" (orden finalizada, lista para cobrar) al flujo de pedidos.
 -- No exige pago: separa el cierre de la fase de comandas/cocina del cobro real.
-alter type public.order_status add value 'served';
+-- El valor ya nace en la migración inicial: Postgres no permite usarlo en la misma transacción
+-- en que se agrega (SQLSTATE 55P04) y esta migración lo usa más abajo en las políticas RLS.
+-- Se conserva como no-op idempotente para las bases donde esta migración ya se aplicó.
+alter type public.order_status add value if not exists 'served';
 
 create or replace function public.sync_offline_operations(p_operations jsonb)
 returns jsonb language plpgsql security invoker set search_path = '' as $$
