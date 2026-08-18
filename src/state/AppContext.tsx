@@ -303,9 +303,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await db.sessions.clear(); setSession(null);
   }, []);
 
+  /**
+   * El folio se reserva de la secuencia del servidor para que el número impreso en la comanda
+   * sea ya el definitivo. Sin conexión se usa un consecutivo local provisional: el servidor lo
+   * respeta si sigue libre al sincronizar y, si no, le asigna uno de la secuencia.
+   */
+  const reserveFolio = useCallback(async () => {
+    const localFolio = Math.max(1044, ...orders.map((order) => order.folio)) + 1;
+    if (!supabase || !navigator.onLine) return localFolio;
+    const { data, error } = await supabase.rpc("next_order_folio");
+    return error || data == null ? localFolio : Number(data);
+  }, [orders]);
+
   const startOrder = useCallback(async (type: "table" | "takeaway", target?: string, items: OrderItem[] = []) => {
     if (!session) throw new Error("Sesión requerida");
-    const nextFolio = Math.max(1044, ...orders.map((order) => order.folio)) + 1;
+    const nextFolio = await reserveFolio();
     const order: Order = {
       id: crypto.randomUUID(), folio: nextFolio, type, status: "open", items, payments: [], discount: 0,
       openedBy: session.id, openedAt: new Date().toISOString(), updatedAt: new Date().toISOString(), syncStatus: "pending",
@@ -315,7 +327,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setOrders((current) => [...current, order]); setPendingCount((count) => count + 1);
     if (isSupabaseConfigured && navigator.onLine) void forceSync();
     return order;
-  }, [orders, session, forceSync]);
+  }, [reserveFolio, session, forceSync]);
 
   const addItem = useCallback(async (orderId: string, input: OrderItemInput) => {
     const order = orders.find((item) => item.id === orderId); if (!order) return;
