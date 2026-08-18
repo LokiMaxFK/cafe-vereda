@@ -36,7 +36,7 @@ class VeredaDatabase extends Dexie {
       pendingOperations: "id, idempotencyKey, deviceId, entityId, createdAt, status",
       catalog: "id, categoryId, available",
       catalogCategories: "id, name",
-      catalogExtras: "id, active, *productIds",
+      catalogExtras: "id, active",
       cafeTables: "id, number",
       sessions: "id, username, validatedAt",
       inventoryItems: "id, name, active",
