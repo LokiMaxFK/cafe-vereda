@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { categories as initialCategories, commonModifiers as initialExtras, products as initialProducts } from "../data/menu";
 import { initialTables } from "../data/tables";
+import { cancellableStatuses } from "../domain/order";
 import { orderSubtotal, orderTotal } from "../domain/money";
 import { mergeOrAddItem, type OrderItemInput } from "../domain/orderItem";
 import type { AppRole, CafeTable, CatalogExtra, Category, Order, OrderItem, PaymentMethod, Product, StaffSession, SyncStatus } from "../domain/types";
@@ -165,6 +166,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         status: row.status as Order["status"],
         discount: Number(row.discount_cents ?? 0) / 100,
         discountReason: row.discount_reason ? String(row.discount_reason) : undefined,
+        cancellationReason: row.cancellation_reason ? String(row.cancellation_reason) : undefined,
         openedBy: String(row.opened_by),
         openedAt: String(row.opened_at),
         updatedAt: String(row.updated_at),
@@ -371,8 +373,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [orders, persistOrder, session]);
 
   const cancelOrder = useCallback(async (orderId: string, reason: string) => {
-    const order = orders.find((item) => item.id === orderId); if (!order || !reason.trim() || !["open", "preparing", "ready", "served"].includes(order.status)) return;
-    await persistOrder({ ...order, status: "cancelled", discountReason: `Cancelación: ${reason.trim()}` }, "cancel_order");
+    const order = orders.find((item) => item.id === orderId); if (!order || !reason.trim() || !cancellableStatuses.includes(order.status)) return;
+    await persistOrder({ ...order, status: "cancelled", cancellationReason: reason.trim() }, "cancel_order");
   }, [orders, persistOrder]);
 
   const reverseSale = useCallback(async (orderId: string, reason: string) => {
