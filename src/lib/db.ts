@@ -1,5 +1,5 @@
 import Dexie, { type EntityTable } from "dexie";
-import type { CafeTable, CatalogExtra, Category, Order, PendingOperation, Product, StaffSession } from "../domain/types";
+import type { CafeTable, CatalogExtra, Category, InventoryCount, InventoryItem, InventoryMovement, Order, PendingOperation, Product, StaffSession } from "../domain/types";
 
 class VeredaDatabase extends Dexie {
   orders!: EntityTable<Order, "id">;
@@ -9,6 +9,9 @@ class VeredaDatabase extends Dexie {
   catalogExtras!: EntityTable<CatalogExtra, "id">;
   cafeTables!: EntityTable<CafeTable, "id">;
   sessions!: EntityTable<StaffSession, "id">;
+  inventoryItems!: EntityTable<InventoryItem, "id">;
+  inventoryCounts!: EntityTable<InventoryCount, "id">;
+  inventoryMovements!: EntityTable<InventoryMovement, "id">;
 
   constructor() {
     super("vereda-pos");
@@ -35,7 +38,10 @@ class VeredaDatabase extends Dexie {
       catalogCategories: "id, name",
       catalogExtras: "id, active",
       cafeTables: "id, number",
-      sessions: "id, username, validatedAt"
+      sessions: "id, username, validatedAt",
+      inventoryItems: "id, name, active",
+      inventoryCounts: "id, countedAt",
+      inventoryMovements: "id, itemId, recordedAt"
     });
   }
 }
