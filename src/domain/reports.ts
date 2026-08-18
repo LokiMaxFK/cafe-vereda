@@ -98,6 +98,19 @@ export interface ReportDataset {
   rows: ReportRow[];
 }
 
+export interface HourlyPatternPoint {
+  hour: number;
+  net: number;
+  tickets: number;
+}
+
+export interface DailySalesRow {
+  day: string;
+  label: string;
+  net: number;
+  tickets: number;
+}
+
 const emptyContributions = (): Record<PaymentMethod, number> => ({ cash: 0, card: 0, transfer: 0 });
 
 function dateParts(date: Date) {
@@ -346,10 +359,75 @@ export function createReportDataset(orders: ReportOrder[], range: ReportRange, f
       cancellations: metric(current.cancellations, previous.cancellations)
     },
     timeline: current.timeline,
-    products: current.products.slice(0, 8),
+    products: current.products,
     payments: current.payments,
     rows: current.rows
   };
+}
+
+export function sortProducts(products: ReportProduct[], mode: "quantity" | "revenue", direction: "top" | "bottom", limit = 8): ReportProduct[] {
+  const value = (product: ReportProduct) => (mode === "quantity" ? product.quantity : product.revenue);
+  return [...products].sort((a, b) => (direction === "top" ? value(b) - value(a) : value(a) - value(b))).slice(0, limit);
+}
+
+function hourOf(value: string) {
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: REPORT_TIME_ZONE, hour: "2-digit", hourCycle: "h23" }).formatToParts(new Date(value));
+  return Number(parts.find((part) => part.type === "hour")?.value ?? "0");
+}
+
+export function createHourlyPattern(orders: ReportOrder[], range: ReportRange, filters: ReportFilters): HourlyPatternPoint[] {
+  const buckets: HourlyPatternPoint[] = Array.from({ length: 24 }, (_, hour) => ({ hour, net: 0, tickets: 0 }));
+  for (const order of orders) {
+    const contributions = paymentContributions(order);
+    if (!matchesFilters(order, filters, contributions)) continue;
+    const closedInRange = isInRange(order.closedAt, range.start, range.end);
+    const reversedInRange = isInRange(order.reversedAt, range.start, range.end);
+    if (!closedInRange && !reversedInRange) continue;
+    const contribution = contributionForFilter(order, filters, contributions);
+    if (closedInRange && order.closedAt) {
+      const bucket = buckets[hourOf(order.closedAt)];
+      bucket.net += contribution;
+      bucket.tickets += 1;
+    }
+    if (reversedInRange && order.reversedAt) buckets[hourOf(order.reversedAt)].net -= contribution;
+  }
+  return buckets;
+}
+
+function dayKey(value: string) {
+  return formatDatePart(dateParts(new Date(value)));
+}
+
+function dayLabel(day: string) {
+  const [, month, date] = day.split("-");
+  return `${date}/${month}`;
+}
+
+export function createDailySales(orders: ReportOrder[], range: ReportRange, filters: ReportFilters): DailySalesRow[] {
+  const map = new Map<string, DailySalesRow>();
+  const rowFor = (day: string) => map.get(day) ?? { day, label: dayLabel(day), net: 0, tickets: 0 };
+  for (const order of orders) {
+    const contributions = paymentContributions(order);
+    if (!matchesFilters(order, filters, contributions)) continue;
+    const closedInRange = isInRange(order.closedAt, range.start, range.end);
+    const reversedInRange = isInRange(order.reversedAt, range.start, range.end);
+    if (!closedInRange && !reversedInRange) continue;
+    const contribution = contributionForFilter(order, filters, contributions);
+    if (closedInRange && order.closedAt) {
+      const day = dayKey(order.closedAt);
+      const row = rowFor(day);
+      row.net += contribution;
+      row.tickets += 1;
+      map.set(day, row);
+    }
+    if (reversedInRange && order.reversedAt) {
+      const day = dayKey(order.reversedAt);
+      const row = rowFor(day);
+      row.net -= contribution;
+      map.set(day, row);
+    }
+  }
+  return [...map.values()].sort((a, b) => b.day.localeCompare(a.day));
 }
 
 export function percentageChange(metric: ReportMetric) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createReportDataset, resolveReportRange, type ReportOrder } from "./reports";
+import { createDailySales, createHourlyPattern, createReportDataset, resolveReportRange, sortProducts, type ReportOrder, type ReportProduct } from "./reports";
 
 const range = resolveReportRange("custom", "2026-08-17", "2026-08-17");
 const filters = { employeeId: "", orderType: "all" as const, paymentMethod: "all" as const };
@@ -56,5 +56,64 @@ describe("report calculations", () => {
 
   it("enforces a maximum 90-day custom range", () => {
     expect(() => resolveReportRange("custom", "2026-01-01", "2026-04-01")).toThrow("hasta 90 días");
+  });
+});
+
+describe("hourly sales pattern", () => {
+  it("buckets net sales and tickets by local hour of day", () => {
+    const morning = order({ id: "morning", closedAt: "2026-08-17T14:00:00.000Z" }); // 08:00 local
+    const afternoon = order({ id: "afternoon", closedAt: "2026-08-17T20:00:00.000Z" }); // 14:00 local
+    const points = createHourlyPattern([morning, afternoon], range, filters);
+    expect(points).toHaveLength(24);
+    expect(points[8].net).toBe(180);
+    expect(points[8].tickets).toBe(1);
+    expect(points[14].net).toBe(180);
+    expect(points[14].tickets).toBe(1);
+    expect(points[9].net).toBe(0);
+  });
+
+  it("subtracts a reversal from its own hour, not the original sale's hour", () => {
+    const reversed = order({
+      id: "reversed", status: "reversed", openedAt: "2026-08-16T15:00:00.000Z", updatedAt: "2026-08-17T18:00:00.000Z",
+      closedAt: "2026-08-16T16:00:00.000Z", reversedAt: "2026-08-17T21:00:00.000Z", // 15:00 local
+      items: [{ id: "item", productId: "coffee", name: "Café", quantity: 1, unitPrice: 90, modifiers: [], status: "prepared" }],
+      payments: [{ id: "cash", method: "cash", amount: 90, tip: 10, createdAt: "2026-08-16T16:00:00.000Z" }]
+    });
+    const points = createHourlyPattern([reversed], range, filters);
+    expect(points[15].net).toBe(-90);
+    expect(points[15].tickets).toBe(0);
+  });
+});
+
+describe("daily sales table", () => {
+  it("groups by calendar day even when the timeline would use hourly buckets", () => {
+    const rows = createDailySales([order()], range, filters);
+    expect(rows).toEqual([{ day: "2026-08-17", label: "17/08", net: 180, tickets: 1 }]);
+  });
+
+  it("groups by calendar day even when the timeline would use weekly buckets", () => {
+    const wideRange = resolveReportRange("custom", "2026-07-01", "2026-08-17");
+    const first = order({ id: "first", closedAt: "2026-07-05T16:00:00.000Z" });
+    const second = order({ id: "second", closedAt: "2026-08-10T16:00:00.000Z" });
+    const rows = createDailySales([first, second], wideRange, filters);
+    expect(rows).toHaveLength(2);
+    expect(rows.map((row) => row.day)).toEqual(["2026-08-10", "2026-07-05"]);
+    expect(rows.every((row) => row.net === 180 && row.tickets === 1)).toBe(true);
+  });
+});
+
+describe("product ranking", () => {
+  const products: ReportProduct[] = [
+    { name: "Café", quantity: 10, revenue: 300 },
+    { name: "Té", quantity: 3, revenue: 90 },
+    { name: "Croissant", quantity: 5, revenue: 400 }
+  ];
+
+  it("returns the top products by quantity", () => {
+    expect(sortProducts(products, "quantity", "top", 2).map((product) => product.name)).toEqual(["Café", "Croissant"]);
+  });
+
+  it("returns the bottom products by revenue, excluding nothing beyond what sold", () => {
+    expect(sortProducts(products, "revenue", "bottom", 2).map((product) => product.name)).toEqual(["Té", "Café"]);
   });
 });
