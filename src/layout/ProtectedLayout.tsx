@@ -5,10 +5,11 @@ import { AppShell, InlineAlert } from "../../design-system/react";
 import { useApp } from "../state/AppContext";
 
 export function ProtectedLayout() {
-  const { session, logout, online, syncStatus, pendingCount } = useApp();
+  const { session, hydrated, logout, online, syncStatus, pendingCount } = useApp();
   const location = useLocation();
   const [logoutError, setLogoutError] = useState("");
-  if (!session) return <Navigate to="/" replace />;
+  if (!hydrated) return <div className="flex min-h-screen items-center justify-center bg-background text-on-surface-variant">Cargando…</div>;
+  if (!session) return <Navigate to="/" replace state={{ from: location.pathname + location.search }} />;
   const manager = session.role === "manager";
   const navItems = [
     { href: "/venta/nueva", label: "Nuevo Pedido", icon: <Plus size={21} />, group: "Operación" },

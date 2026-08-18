@@ -1,22 +1,25 @@
 import { useState, type FormEvent } from "react";
 import { ArrowRight, Coffee, Eye, EyeOff, ShieldCheck, WifiOff } from "lucide-react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { Button, FieldLabel, InlineAlert, TextField } from "../../design-system/react";
 import { useApp } from "../state/AppContext";
 
 export function LoginPage() {
-  const { session, login, online, demoMode } = useApp();
+  const { session, hydrated, login, online, demoMode } = useApp();
   const navigate = useNavigate();
+  const location = useLocation();
+  const redirectTo = (location.state as { from?: string } | null)?.from ?? "/inicio";
   const [username, setUsername] = useState("gerente");
   const [pin, setPin] = useState("2468");
   const [showPin, setShowPin] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  if (session) return <Navigate to="/inicio" replace />;
+  if (!hydrated) return <div className="flex min-h-screen items-center justify-center bg-background text-on-surface-variant">Cargando…</div>;
+  if (session) return <Navigate to={redirectTo} replace />;
 
   async function submit(event: FormEvent) {
     event.preventDefault(); setError(""); setLoading(true);
-    try { await login(username, pin); navigate("/inicio"); }
+    try { await login(username, pin); navigate(redirectTo, { replace: true }); }
     catch (reason) { setError(reason instanceof Error ? reason.message : "No se pudo iniciar sesión."); }
     finally { setLoading(false); }
   }

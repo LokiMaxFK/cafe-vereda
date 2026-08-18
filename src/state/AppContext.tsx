@@ -47,6 +47,7 @@ const sampleOrders: Order[] = [
 
 interface AppContextValue {
   session: StaffSession | null;
+  hydrated: boolean;
   orders: Order[];
   tables: CafeTable[];
   products: Product[];
@@ -94,6 +95,7 @@ function demoIdentity(username: string): StaffSession | null {
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<StaffSession | null>(null);
+  const [hydrated, setHydrated] = useState(false);
   const [orders, setOrders] = useState<Order[]>([]);
   const [tables, setTables] = useState<CafeTable[]>([]);
   const [products, setProducts] = useState<Product[]>(demoProducts);
@@ -125,7 +127,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       else if (!isSupabaseConfigured) { await db.catalogExtras.bulkPut(demoExtras); setExtras(demoExtras); }
       else setExtras([]);
       setPendingCount(await db.pendingOperations.where("status").anyOf("pending", "review_required").count());
-    });
+    }).finally(() => setHydrated(true));
   }, []);
 
   const pullRemoteOrders = useCallback(async () => {
@@ -495,7 +497,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setProducts(nextProducts);
   }, [session, extras, products]);
 
-  const value = useMemo(() => ({ session, orders, tables, products, categories, extras, online, syncStatus, pendingCount, demoMode: !isSupabaseConfigured, login, logout, startOrder, addItem, changeQuantity, cancelCommandedItem, dispatchPending, markOrderReady, finalizeOrder, addPayment, closeOrder, setDiscount, cancelOrder, reverseSale, forceSync, addTable, updateTable, createProduct, updateProduct, createExtra, updateExtra }), [session, orders, tables, products, categories, extras, online, syncStatus, pendingCount, login, logout, startOrder, addItem, changeQuantity, cancelCommandedItem, dispatchPending, markOrderReady, finalizeOrder, addPayment, closeOrder, setDiscount, cancelOrder, reverseSale, forceSync, addTable, updateTable, createProduct, updateProduct, createExtra, updateExtra]);
+  const value = useMemo(() => ({ session, hydrated, orders, tables, products, categories, extras, online, syncStatus, pendingCount, demoMode: !isSupabaseConfigured, login, logout, startOrder, addItem, changeQuantity, cancelCommandedItem, dispatchPending, markOrderReady, finalizeOrder, addPayment, closeOrder, setDiscount, cancelOrder, reverseSale, forceSync, addTable, updateTable, createProduct, updateProduct, createExtra, updateExtra }), [session, hydrated, orders, tables, products, categories, extras, online, syncStatus, pendingCount, login, logout, startOrder, addItem, changeQuantity, cancelCommandedItem, dispatchPending, markOrderReady, finalizeOrder, addPayment, closeOrder, setDiscount, cancelOrder, reverseSale, forceSync, addTable, updateTable, createProduct, updateProduct, createExtra, updateExtra]);
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }
 
