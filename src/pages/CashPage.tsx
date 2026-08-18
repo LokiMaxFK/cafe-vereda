@@ -180,7 +180,9 @@ export function CashPage() {
     const session = mapCashSession(sessionRow);
     const [{ data: movementRows, error: movementError }, { data: paymentRows, error: paymentError }] = await Promise.all([
       supabase.from("cash_movements").select("*").eq("cash_session_id", session.id).order("created_at", { ascending: false }),
-      supabase.from("payments").select("amount_cents").eq("method", "cash").gte("created_at", session.openedAt)
+      // Una venta revertida o cancelada conserva sus pagos, así que hay que descontarla del
+      // efectivo esperado; si no, el corte reporta un faltante por dinero que ya se devolvió.
+      supabase.from("payments").select("amount_cents, orders!inner(status)").eq("method", "cash").gte("created_at", session.openedAt).not("orders.status", "in", "(reversed,cancelled)")
     ]);
     if (movementError) setError(movementError.message);
     else if (paymentError) setError(paymentError.message);

@@ -7,6 +7,7 @@ import { mergeOrAddItem, type OrderItemInput } from "../domain/orderItem";
 import type { AppRole, CafeTable, CatalogExtra, Category, Order, OrderItem, PaymentMethod, Product, StaffSession, SyncStatus } from "../domain/types";
 import { db } from "../lib/db";
 import { queueOperation, syncPendingOperations } from "../lib/offline";
+import { mapRemoteOrder, REMOTE_ORDER_SELECT } from "../lib/remoteOrders";
 import { isSupabaseConfigured, supabase, usernameToInternalEmail } from "../lib/supabase";
 
 const now = new Date();
@@ -177,38 +178,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!supabase || !navigator.onLine) return;
     const { data, error } = await supabase
       .from("orders")
-      .select("*, cafe_tables(number), order_items(*), payments(*)")
+      .select(REMOTE_ORDER_SELECT)
       .order("updated_at", { ascending: false })
       .limit(250);
     if (error || !data) return;
-    const remoteOrders: Order[] = data.map((row: Record<string, unknown>) => {
-      const table = row.cafe_tables as { number?: number } | null;
-      const remoteItems = (row.order_items as Array<Record<string, unknown>> | null) ?? [];
-      const remotePayments = (row.payments as Array<Record<string, unknown>> | null) ?? [];
-      return {
-        id: String(row.id),
-        folio: Number(row.folio),
-        type: row.order_type as Order["type"],
-        tableId: table?.number ? `t${table.number}` : undefined,
-        customerName: row.customer_name ? String(row.customer_name) : undefined,
-        status: row.status as Order["status"],
-        discount: Number(row.discount_cents ?? 0) / 100,
-        discountReason: row.discount_reason ? String(row.discount_reason) : undefined,
-        cancellationReason: row.cancellation_reason ? String(row.cancellation_reason) : undefined,
-        openedBy: String(row.opened_by),
-        openedAt: String(row.opened_at),
-        updatedAt: String(row.updated_at),
-        syncStatus: "synced",
-        items: remoteItems.map((item) => ({
-          id: String(item.id), productId: String(item.product_id ?? ""), name: String(item.product_name), quantity: Number(item.quantity),
-          unitPrice: Number(item.unit_price_cents) / 100, variant: item.variant_name ? String(item.variant_name) : undefined,
-          modifiers: Array.isArray(item.modifiers) ? (item.modifiers as Array<{ id?: string; name?: string; price?: number }>).map((modifier) => ({ id: modifier.id ?? crypto.randomUUID(), name: modifier.name ?? "Extra", price: Number(modifier.price ?? 0) / 100 })) : [],
-          notes: item.notes ? String(item.notes) : undefined, cancellationReason: item.cancellation_reason ? String(item.cancellation_reason) : undefined,
-          status: item.status as OrderItem["status"]
-        })),
-        payments: remotePayments.map((payment) => ({ id: String(payment.id), method: payment.method as PaymentMethod, amount: Number(payment.amount_cents) / 100, tip: Number(payment.tip_cents) / 100, createdAt: String(payment.created_at) }))
-      };
-    });
+    const remoteOrders: Order[] = data.map((row) => mapRemoteOrder(row as Record<string, unknown>));
     await db.orders.bulkPut(remoteOrders);
     setOrders(remoteOrders);
   }, []);
@@ -329,9 +303,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await db.sessions.clear(); setSession(null);
   }, []);
 
+  /**
+   * El folio se reserva de la secuencia del servidor para que el número impreso en la comanda
+   * sea ya el definitivo. Sin conexión se usa un consecutivo local provisional: el servidor lo
+   * respeta si sigue libre al sincronizar y, si no, le asigna uno de la secuencia.
+   */
+  const reserveFolio = useCallback(async () => {
+    const localFolio = Math.max(1044, ...orders.map((order) => order.folio)) + 1;
+    if (!supabase || !navigator.onLine) return localFolio;
+    const { data, error } = await supabase.rpc("next_order_folio");
+    return error || data == null ? localFolio : Number(data);
+  }, [orders]);
+
   const startOrder = useCallback(async (type: "table" | "takeaway", target?: string, items: OrderItem[] = []) => {
     if (!session) throw new Error("Sesión requerida");
-    const nextFolio = Math.max(1044, ...orders.map((order) => order.folio)) + 1;
+    const nextFolio = await reserveFolio();
     const order: Order = {
       id: crypto.randomUUID(), folio: nextFolio, type, status: "open", items, payments: [], discount: 0,
       openedBy: session.id, openedAt: new Date().toISOString(), updatedAt: new Date().toISOString(), syncStatus: "pending",
@@ -341,7 +327,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setOrders((current) => [...current, order]); setPendingCount((count) => count + 1);
     if (isSupabaseConfigured && navigator.onLine) void forceSync();
     return order;
-  }, [orders, session, forceSync]);
+  }, [reserveFolio, session, forceSync]);
 
   const addItem = useCallback(async (orderId: string, input: OrderItemInput) => {
     const order = orders.find((item) => item.id === orderId); if (!order) return;
@@ -561,7 +547,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const productsInCategory = products.filter((product) => product.categoryId === categoryId).length;
     if (productsInCategory > 0) throw new Error(`Hay ${productsInCategory} producto(s) en esta categoría. Muévelos o elimínalos antes de borrarla.`);
     if (supabase) {
-      const { error } = await supabase.from("categories").delete().eq("id", categoryId);
+      // Baja lógica, igual que productos y extras. El DELETE real nunca funcionó: el rol
+      // `authenticated` no tiene ese privilegio sobre categories, y aunque lo tuviera chocaría
+      // contra la llave foránea de products, que conserva category_id al darse de baja.
+      const { error } = await supabase.from("categories").update({ active: false }).eq("id", categoryId);
       if (error) throw new Error(error.message);
     }
     await db.catalogCategories.delete(categoryId);
