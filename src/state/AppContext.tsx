@@ -82,6 +82,20 @@ interface AppContextValue {
 
 const AppContext = createContext<AppContextValue | null>(null);
 
+/**
+ * Primer hueco libre del croquis, para que las mesas nuevas no se apilen todas en el centro.
+ * Las tolerancias aproximan el tamaño de una mesa sobre el plano (~12 % de ancho, ~24 % de alto).
+ */
+function nextFreeSlot(tables: CafeTable[]) {
+  const taken = tables.filter((table) => table.active);
+  for (let y = 12; y <= 88; y += 4) {
+    for (let x = 8; x <= 88; x += 3) {
+      if (!taken.some((table) => Math.abs(table.x - x) < 12 && Math.abs(table.y - y) < 24)) return { x, y };
+    }
+  }
+  return { x: 50, y: 50 };
+}
+
 function demoIdentity(username: string): StaffSession | null {
   const normalized = username.trim().toLowerCase();
   if (["gerente", "demo", "jordan"].includes(normalized)) {
@@ -370,7 +384,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const addTable = useCallback(async () => {
     if (session?.role !== "manager") throw new Error("Sólo gerencia puede editar mesas.");
     const nextNumber = Math.max(0, ...tables.map((table) => table.number)) + 1;
-    const table: CafeTable = { id: `t${nextNumber}`, number: nextNumber, seats: 2, shape: "square", x: 50, y: 50, active: true };
+    const slot = nextFreeSlot(tables);
+    const table: CafeTable = { id: `t${nextNumber}`, number: nextNumber, seats: 2, shape: "square", x: slot.x, y: slot.y, active: true };
     if (supabase && navigator.onLine) {
       const { error } = await supabase.from("cafe_tables").insert({ number: table.number, seats: table.seats, shape: table.shape, x: table.x, y: table.y, active: true });
       if (error) throw new Error(error.message);
