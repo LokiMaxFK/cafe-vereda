@@ -1,9 +1,10 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Coffee, Pencil, Plus, Search, SlidersHorizontal } from "lucide-react";
 import { Badge, Button, FieldLabel, InlineAlert, Page, PageHeader, Panel, SelectField, TextareaField, TextField } from "../../design-system/react";
 import { Modal } from "../components/Modal";
 import { mxn } from "../domain/money";
-import type { CatalogExtra, Category, Product } from "../domain/types";
+import type { CatalogExtra, Category, InventoryItem, Product } from "../domain/types";
+import { supabase } from "../lib/supabase";
 import { useApp } from "../state/AppContext";
 
 function ProductForm({ product, categories, extras, onSave, onClose }: {
@@ -120,11 +121,69 @@ function ExtrasModal({ extras, products, onCreate, onUpdate, onClose }: {
   </Modal>;
 }
 
+function RecipeEditor({ product, products, onSelectProduct, onClose }: { product: Product; products: Product[]; onSelectProduct: (product: Product) => void; onClose: () => void }) {
+  const [items, setItems] = useState<InventoryItem[]>([]);
+  const [variant, setVariant] = useState("");
+  const [lines, setLines] = useState<Array<{ inventoryItemId: string; quantity: string }>>([]);
+  const [loading, setLoading] = useState(Boolean(supabase));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    setVariant("");
+    if (!supabase) { setLoading(false); return; }
+    void Promise.all([
+      supabase.from("inventory_items").select("id,name,unit,minimum_quantity,tolerance_quantity,active").eq("active", true).order("name"),
+      supabase.from("inventory_recipes").select("variant_name,inventory_recipe_lines(inventory_item_id,quantity)").eq("product_id", product.id)
+    ]).then(([itemResult, recipeResult]) => {
+      if (!active) return;
+      const caught = itemResult.error || recipeResult.error;
+      if (caught) setError(caught.message);
+      else {
+        setItems((itemResult.data ?? []).map((item) => ({ id: item.id, name: item.name, unit: item.unit, minimum: Number(item.minimum_quantity), tolerance: Number(item.tolerance_quantity ?? 0), active: item.active })));
+        const recipe = (recipeResult.data ?? []).find((entry) => entry.variant_name === "");
+        setLines((recipe?.inventory_recipe_lines ?? []).map((line) => ({ inventoryItemId: line.inventory_item_id, quantity: String(line.quantity) })));
+      }
+      setLoading(false);
+    });
+    return () => { active = false; };
+  }, [product.id]);
+
+  useEffect(() => {
+    if (!supabase) return;
+    void supabase.from("inventory_recipes").select("inventory_recipe_lines(inventory_item_id,quantity)").eq("product_id", product.id).eq("variant_name", variant).maybeSingle().then(({ data, error: caught }) => {
+      if (caught) setError(caught.message);
+      else setLines((data?.inventory_recipe_lines ?? []).map((line) => ({ inventoryItemId: line.inventory_item_id, quantity: String(line.quantity) })));
+    });
+  }, [product.id, variant]);
+
+  async function save() {
+    if (!supabase) { setError("Las recetas requieren la conexión a Supabase."); return; }
+    const normalized = lines.filter((line) => line.inventoryItemId && Number(line.quantity) > 0).map((line) => ({ inventoryItemId: line.inventoryItemId, quantity: Number(line.quantity) }));
+    setSaving(true); setError("");
+    const { error: caught } = await supabase.rpc("replace_inventory_recipe", { p_product_id: product.id, p_variant_name: variant, p_lines: normalized });
+    setSaving(false);
+    if (caught) setError(caught.message); else onClose();
+  }
+
+  return <Modal title={`Receta: ${product.name}`} description="La receta mide el consumo teórico al preparar; no descuenta existencias." onClose={onClose} width="max-w-2xl">
+    {error && <div className="mb-4"><InlineAlert>{error}</InlineAlert></div>}
+    {loading ? <p className="py-8 text-center text-sm text-on-surface-variant">Cargando insumos…</p> : <div className="space-y-4">
+      <label className="block text-sm font-semibold">Producto<SelectField value={product.id} onChange={(event) => { const next = products.find((item) => item.id === event.target.value); if (next) onSelectProduct(next); }}><option value={product.id}>{product.name}</option>{products.filter((item) => item.id !== product.id).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</SelectField></label>
+      <label className="block text-sm font-semibold">Presentación<SelectField value={variant} onChange={(event) => setVariant(event.target.value)}><option value="">Sin presentación / receta base</option>{product.variants?.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}</SelectField></label>
+      {!items.length ? <InlineAlert>Primero registra los insumos de esta receta.</InlineAlert> : <><div className="space-y-3">{lines.map((line, index) => <div key={`${line.inventoryItemId}-${index}`} className="grid grid-cols-[1fr_120px_auto] gap-2"><SelectField value={line.inventoryItemId} onChange={(event) => setLines((current) => current.map((value, position) => position === index ? { ...value, inventoryItemId: event.target.value } : value))}><option value="">Selecciona insumo</option>{items.map((item) => <option key={item.id} value={item.id}>{item.name} ({item.unit})</option>)}</SelectField><TextField type="number" min="0.001" step="0.001" value={line.quantity} onChange={(event) => setLines((current) => current.map((value, position) => position === index ? { ...value, quantity: event.target.value } : value))} placeholder="Cantidad" /><Button size="sm" onClick={() => setLines((current) => current.filter((_, position) => position !== index))}>Quitar</Button></div>)}</div><Button size="sm" onClick={() => setLines((current) => [...current, { inventoryItemId: items[0]?.id ?? "", quantity: "" }])}><Plus size={16} /> Agregar insumo</Button></>}
+      <div className="flex justify-end gap-2"><Button onClick={onClose}>Cancelar</Button><Button variant="primary" disabled={saving || !items.length} onClick={() => void save()}>{saving ? "Guardando…" : "Guardar receta"}</Button></div>
+    </div>}
+  </Modal>;
+}
+
 export function CatalogPage() {
   const { products, categories, extras, createProduct, updateProduct, createExtra, updateExtra } = useApp();
   const [query, setQuery] = useState("");
   const [editingProduct, setEditingProduct] = useState<Product | "new" | null>(null);
   const [showExtras, setShowExtras] = useState(false);
+  const [recipeProduct, setRecipeProduct] = useState<Product | null>(null);
   const [busyProductId, setBusyProductId] = useState("");
   const [error, setError] = useState("");
   const filtered = products.filter((product) => `${product.name} ${product.description ?? ""}`.toLowerCase().includes(query.toLowerCase()));
@@ -140,9 +199,11 @@ export function CatalogPage() {
   return <Page size="wide">
     <PageHeader eyebrow="MENÚ Y DISPONIBILIDAD" title="Catálogo" description="Administra los productos, sus precios, disponibilidad y extras permitidos." action={<><Button onClick={() => setShowExtras(true)}><SlidersHorizontal size={18} /> Extras</Button><Button variant="primary" onClick={() => setEditingProduct("new")}><Plus size={18} /> Nuevo producto</Button></>} />
     {error && <div className="mb-4"><InlineAlert>{error}</InlineAlert></div>}
+    {products.length > 0 && <div className="mb-4 flex justify-end"><Button onClick={() => setRecipeProduct(products[0])}>Configurar recetas</Button></div>}
     <Panel className="mb-5 flex flex-wrap items-center gap-x-8 gap-y-3 p-5"><div className="flex items-center gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-fixed text-primary"><Coffee size={20} /></span><div><p className="text-2xl font-bold">{products.length}</p><p className="text-xs text-on-surface-variant">productos</p></div></div><div><p className="text-2xl font-bold">{categories.length}</p><p className="text-xs text-on-surface-variant">categorías</p></div><div><p className="text-2xl font-bold">{extras.length}</p><p className="text-xs text-on-surface-variant">extras configurados</p></div></Panel>
     <Panel className="overflow-hidden"><div className="border-b border-outline-variant/30 p-4"><div className="relative max-w-sm"><Search size={18} className="absolute left-3 top-[15px] text-outline" /><TextField aria-label="Buscar en el catálogo" className="mt-0 pl-10" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar en el catálogo" /></div></div><div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead className="bg-surface-container-low text-xs uppercase text-on-surface-variant"><tr><th className="px-5 py-4">Producto</th><th className="px-5 py-4">Categoría</th><th className="px-5 py-4">Precio base</th><th className="px-5 py-4">Extras</th><th className="px-5 py-4">Disponible</th><th className="px-5 py-4 text-right">Acciones</th></tr></thead><tbody className="divide-y divide-outline-variant/25">{filtered.map((product) => <tr key={product.id}><td className="px-5 py-4"><p className="font-semibold">{product.name}</p><p className="max-w-sm truncate text-xs text-on-surface-variant">{product.description || (product.variants?.length ? `${product.variants.length} presentaciones` : product.schedule || "Precio único")}</p></td><td className="px-5 py-4"><Badge>{categories.find((category) => category.id === product.categoryId)?.name ?? "Sin categoría"}</Badge></td><td className="px-5 py-4 font-bold">{mxn.format(product.price)}</td><td className="px-5 py-4 text-on-surface-variant">{product.modifierIds?.length ?? 0}</td><td className="px-5 py-4"><button type="button" role="switch" aria-label={`Disponibilidad de ${product.name}`} aria-checked={product.available} disabled={busyProductId === product.id} onClick={() => void toggleAvailability(product)} className={`relative h-7 w-12 rounded-full transition disabled:opacity-50 ${product.available ? "bg-tertiary" : "bg-outline-variant"}`}><span className={`absolute top-1 h-5 w-5 rounded-full bg-white transition-all ${product.available ? "left-6" : "left-1"}`} /></button></td><td className="px-4 text-right"><Button size="sm" onClick={() => setEditingProduct(product)}><Pencil size={16} /> Editar</Button></td></tr>)}</tbody></table>{!filtered.length && <div className="p-10 text-center text-sm text-on-surface-variant">No se encontraron productos.</div>}</div></Panel>
     {editingProduct && <Modal title={editingProduct === "new" ? "Nuevo producto" : `Editar ${editingProduct.name}`} description={editingProduct === "new" ? "Registra un producto para que aparezca en la toma de pedidos." : "Los cambios se reflejarán en los próximos pedidos."} onClose={() => setEditingProduct(null)} width="max-w-2xl"><ProductForm key={editingProduct === "new" ? "new" : editingProduct.id} product={editingProduct === "new" ? null : editingProduct} categories={categories} extras={extras} onClose={() => setEditingProduct(null)} onSave={async (value) => { if (editingProduct === "new") await createProduct(value); else await updateProduct(editingProduct.id, value); }} /></Modal>}
     {showExtras && <ExtrasModal extras={extras} products={products} onClose={() => setShowExtras(false)} onCreate={async (value) => { await createExtra(value); }} onUpdate={async (id, value) => { await updateExtra(id, value); }} />}
+    {recipeProduct && <RecipeEditor product={recipeProduct} products={products} onSelectProduct={setRecipeProduct} onClose={() => setRecipeProduct(null)} />}
   </Page>;
 }

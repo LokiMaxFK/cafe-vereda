@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { BarChart3, CalendarDays, Download, FileText, RefreshCw, ReceiptText, RotateCcw, ShoppingBag, TrendingDown, TrendingUp, WalletCards, XCircle } from "lucide-react";
 import { Badge, Button, EmptyState, InlineAlert, LoadingState, MetricCard, Page, PageHeader, Panel, SelectField } from "../../design-system/react";
 import { mxn } from "../domain/money";
+import { createInventoryAnalysis, isInventoryVarianceAlert, type InventoryAnalysisRow } from "../domain/inventory";
 import {
   createReportDataset,
   dateInputValue,
@@ -17,7 +18,7 @@ import {
   type ReportPreset,
   type ReportStaff
 } from "../domain/reports";
-import type { Order, OrderItem, Payment, PaymentMethod } from "../domain/types";
+import type { InventoryCount, InventoryItem, InventoryMovement, InventoryUnit, Order, OrderItem, Payment, PaymentMethod } from "../domain/types";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
 import { useApp } from "../state/AppContext";
 
@@ -105,6 +106,24 @@ async function fetchReportOrders(start: string, end: string) {
   return { orders: [...unique.values()].map((row) => asReportOrder(row, staffMap)), staff };
 }
 
+async function fetchInventoryAnalysis(start: string, end: string): Promise<InventoryAnalysisRow[]> {
+  if (!supabase) return [];
+  const [itemResult, countResult, movementResult, usageResult] = await Promise.all([
+    supabase.from("inventory_items").select("id,name,unit,minimum_quantity,tolerance_quantity,active").eq("active", true).order("name"),
+    supabase.from("inventory_counts").select("id,counted_at,inventory_count_lines(inventory_item_id,quantity)").lte("counted_at", end).order("counted_at", { ascending: false }).limit(1000),
+    supabase.from("inventory_movements").select("id,inventory_item_id,movement_type,quantity,note,created_at").gte("created_at", start).lte("created_at", end).in("movement_type", ["entry", "waste"]).limit(1000),
+    supabase.from("inventory_usage_events").select("inventory_usage_lines(inventory_item_id,quantity)").gte("occurred_at", start).lte("occurred_at", end).limit(1000)
+  ]);
+  const caught = itemResult.error || countResult.error || movementResult.error || usageResult.error;
+  if (caught) throw new Error(caught.message);
+  const items: InventoryItem[] = (itemResult.data ?? []).map((row) => ({ id: row.id, name: row.name, unit: row.unit as InventoryUnit, minimum: Number(row.minimum_quantity), tolerance: Number(row.tolerance_quantity ?? 0), active: row.active }));
+  const counts: InventoryCount[] = (countResult.data ?? []).map((row) => ({ id: row.id, countedAt: row.counted_at, lines: (row.inventory_count_lines ?? []).map((line) => ({ itemId: line.inventory_item_id, quantity: Number(line.quantity) })) }));
+  const movements: InventoryMovement[] = (movementResult.data ?? []).map((row) => ({ id: row.id, itemId: row.inventory_item_id, type: row.movement_type as "entry" | "waste", quantity: Number(row.quantity), note: row.note, recordedAt: row.created_at }));
+  const expected: Record<string, number> = {};
+  for (const event of usageResult.data ?? []) for (const line of event.inventory_usage_lines ?? []) expected[line.inventory_item_id] = (expected[line.inventory_item_id] ?? 0) + Number(line.quantity);
+  return createInventoryAnalysis(items, counts, movements, expected, start, end);
+}
+
 function asDemoOrder(order: Order): ReportOrder {
   const isClosed = order.status === "closed" || order.status === "reversed";
   return {
@@ -171,6 +190,7 @@ export function ReportsPage() {
   const [reloadKey, setReloadKey] = useState(0);
   const [page, setPage] = useState(0);
   const [productMode, setProductMode] = useState<"quantity" | "revenue">("quantity");
+  const [inventoryAnalysis, setInventoryAnalysis] = useState<InventoryAnalysisRow[]>([]);
 
   const rangeResult = useMemo(() => {
     try { return { range: resolveReportRange(preset, customStart, customEnd), error: "" }; }
@@ -203,6 +223,15 @@ export function ReportsPage() {
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [orders, rangeResult.range?.comparisonStart, rangeResult.range?.end, reloadKey]);
+
+  useEffect(() => {
+    if (!rangeResult.range || !supabase) { setInventoryAnalysis([]); return; }
+    let active = true;
+    void fetchInventoryAnalysis(rangeResult.range.start, rangeResult.range.end)
+      .then((rows) => { if (active) setInventoryAnalysis(rows); })
+      .catch(() => { if (active) setInventoryAnalysis([]); });
+    return () => { active = false; };
+  }, [rangeResult.range?.start, rangeResult.range?.end, reloadKey]);
 
   const dataset = useMemo(() => rangeResult.range ? createReportDataset(remoteOrders, rangeResult.range, filters) : null, [filters, rangeResult.range, remoteOrders]);
   const visibleRows = dataset?.rows.slice(page * 25, page * 25 + 25) ?? [];
@@ -267,6 +296,7 @@ export function ReportsPage() {
           <Panel className="p-5"><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Productos cobrados</p><h2 className="mt-1 text-lg font-bold">Más vendidos</h2></div><SelectField className="mt-0 w-28" value={productMode} onChange={(event) => setProductMode(event.target.value as "quantity" | "revenue")}><option value="quantity">Unidades</option><option value="revenue">Ingreso</option></SelectField></div><div className="mt-6 space-y-4">{dataset.products.length ? dataset.products.map((product, index) => { const value = productMode === "quantity" ? product.quantity : product.revenue; return <div key={product.name}><div className="mb-2 flex justify-between gap-3 text-sm"><span className="min-w-0 truncate font-semibold"><span className="mr-2 text-outline">{index + 1}</span>{product.name}</span><strong>{productMode === "quantity" ? product.quantity : mxn.format(product.revenue)}</strong></div><div className="h-2 rounded-full bg-surface-container-high"><div className="h-full rounded-full bg-tertiary" style={{ width: `${(value / productMax) * 100}%` }} /></div></div>; }) : <p className="py-6 text-center text-sm text-on-surface-variant">Sin productos cobrados en el periodo.</p>}</div></Panel>
           <Panel className="overflow-hidden print:hidden"><div className="flex items-center justify-between gap-3 border-b border-outline-variant/25 p-5"><div><p className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Detalle auditable</p><h2 className="mt-1 text-lg font-bold">Ventas y movimientos</h2></div><Badge tone="neutral">{dataset.rows.length} registros</Badge></div>{dataset.rows.length ? <><div className="overflow-x-auto"><table className="w-full min-w-[900px] text-left text-sm"><thead className="bg-surface-container-low text-xs uppercase tracking-wider text-on-surface-variant"><tr><th className="px-5 py-3">Venta</th><th className="px-5 py-3">Evento</th><th className="px-5 py-3">Empleado</th><th className="px-5 py-3">Tipo</th><th className="px-5 py-3 text-right">Bruta</th><th className="px-5 py-3 text-right">Reversión</th><th className="px-5 py-3 text-right">Neta</th><th className="px-5 py-3 text-right">Propina</th></tr></thead><tbody className="divide-y divide-outline-variant/25">{visibleRows.map((row) => <tr key={row.order.id} className="hover:bg-surface-container-low/60"><td className="px-5 py-4"><Link className="font-bold text-primary hover:underline" to={`/venta/${row.order.id}`}>#{row.order.folio}</Link><p className="mt-1 text-xs text-on-surface-variant">{formatDate(row.order.closedAt ?? row.order.reversedAt ?? row.order.updatedAt)}</p></td><td className="px-5 py-4"><Badge tone={row.reversedInRange || row.cancelledInRange ? "danger" : "success"}>{reportEventLabel(row)}</Badge></td><td className="px-5 py-4">{row.order.closedByName ?? "—"}</td><td className="px-5 py-4">{row.order.type === "table" ? "Mesa" : "Para llevar"}</td><td className="px-5 py-4 text-right font-semibold">{mxn.format(row.gross)}</td><td className="px-5 py-4 text-right text-error">{row.reversal ? `-${mxn.format(row.reversal)}` : "—"}</td><td className={`px-5 py-4 text-right font-bold ${row.net < 0 ? "text-error" : ""}`}>{mxn.format(row.net)}</td><td className="px-5 py-4 text-right">{mxn.format(row.tip)}</td></tr>)}</tbody></table></div><div className="flex items-center justify-between gap-3 border-t border-outline-variant/25 p-4"><p className="text-sm text-on-surface-variant">Página {page + 1} de {pageCount}</p><div className="flex gap-2"><Button size="sm" disabled={page === 0} onClick={() => setPage((value) => value - 1)}>Anterior</Button><Button size="sm" disabled={page >= pageCount - 1} onClick={() => setPage((value) => value + 1)}>Siguiente</Button></div></div></> : <EmptyState icon={<ReceiptText />} title="Sin registros" description="No hay ventas, reversiones o cancelaciones que coincidan con los filtros." />}</Panel>
         </div>
+        <Panel className="mt-6 overflow-hidden print:hidden"><div className="border-b border-outline-variant/25 p-5"><p className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Insumos preparados</p><h2 className="mt-1 text-lg font-bold">Consumo físico vs. receta teórica</h2><p className="mt-1 text-sm text-on-surface-variant">Las ventas no descuentan existencias: este indicador compara conteos, entradas, mermas y preparaciones del periodo.</p></div>{inventoryAnalysis.length ? <div className="overflow-x-auto"><table className="w-full min-w-[820px] text-left text-sm"><thead className="bg-surface-container-low text-xs uppercase tracking-wider text-on-surface-variant"><tr><th className="px-5 py-3">Insumo</th><th className="px-5 py-3 text-right">Físico</th><th className="px-5 py-3 text-right">Teórico</th><th className="px-5 py-3 text-right">Merma</th><th className="px-5 py-3 text-right">Diferencia</th></tr></thead><tbody className="divide-y divide-outline-variant/25">{inventoryAnalysis.map((row) => <tr key={row.item.id}><td className="px-5 py-4"><p className="font-semibold">{row.item.name}</p><p className="text-xs text-on-surface-variant">{row.physical === undefined ? "Faltan dos conteos para comparar" : `Tolerancia ±${row.item.tolerance} ${row.item.unit}`}</p></td><td className="px-5 py-4 text-right font-semibold">{row.physical === undefined ? "—" : `${Number(row.physical.toFixed(3))} ${row.item.unit}`}</td><td className="px-5 py-4 text-right">{Number(row.theoretical.toFixed(3))} {row.item.unit}</td><td className="px-5 py-4 text-right">{Number(row.waste.toFixed(3))} {row.item.unit}</td><td className={`px-5 py-4 text-right font-bold ${isInventoryVarianceAlert(row) ? "text-error" : ""}`}>{row.variance === undefined ? "—" : `${row.variance > 0 ? "+" : ""}${Number(row.variance.toFixed(3))} ${row.item.unit}`}</td></tr>)}</tbody></table></div> : <div className="p-6 text-sm text-on-surface-variant">No hay información comparable de insumos para este periodo.</div>}</Panel>
       </>}
     </Page>
   );
