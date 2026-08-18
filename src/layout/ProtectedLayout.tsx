@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { BarChart3, BookOpen, Boxes, ClipboardList, Coffee, HandCoins, Home, LayoutGrid, LayoutTemplate, LogOut, Plus, Settings, Users, WalletCards } from "lucide-react";
 import { Link, Navigate, Outlet, useLocation } from "react-router-dom";
 import { AppShell, InlineAlert } from "../../design-system/react";
@@ -8,6 +8,13 @@ export function ProtectedLayout() {
   const { session, hydrated, logout, online, syncStatus, pendingCount } = useApp();
   const location = useLocation();
   const [logoutError, setLogoutError] = useState("");
+  // El aviso se retira solo: si no, queda pegado en pantalla el resto de la sesión, incluso
+  // después de recuperar la conexión, y termina desinformando.
+  useEffect(() => {
+    if (!logoutError) return;
+    const timer = setTimeout(() => setLogoutError(""), 6000);
+    return () => clearTimeout(timer);
+  }, [logoutError]);
   if (!hydrated) return <div className="flex min-h-screen items-center justify-center bg-background text-on-surface-variant">Cargando…</div>;
   if (!session) return <Navigate to="/" replace state={{ from: location.pathname + location.search }} />;
   const manager = session.role === "manager";
@@ -37,7 +44,7 @@ export function ProtectedLayout() {
       currentPath={location.pathname}
       status={status}
       logoutIcon={<LogOut size={18} />}
-      onLogout={() => void logout().catch((error: Error) => setLogoutError(error.message))}
+      onLogout={() => { setLogoutError(""); void logout().catch((error: Error) => setLogoutError(error.message)); }}
       renderLink={({ item, className, children, active, onNavigate }) => <Link to={item.href} className={className} aria-current={active ? "page" : undefined} onClick={onNavigate}>{children}</Link>}
     >
       {logoutError && <div className="fixed right-4 top-4 z-[90] max-w-sm"><InlineAlert>{logoutError}</InlineAlert></div>}

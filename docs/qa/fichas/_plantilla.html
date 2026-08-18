@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Ficha de funcionalidad</title>
+<style>
+  @page { size: Letter; margin: 16mm 14mm; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; color: #1b1b1f; font-size: 10.5pt; line-height: 1.45; margin: 0; }
+  header { border-bottom: 3px solid #6b4423; padding-bottom: 10px; margin-bottom: 18px; }
+  .eyebrow { font-size: 8pt; letter-spacing: .12em; text-transform: uppercase; color: #6b4423; font-weight: 700; margin: 0; }
+  h1 { font-size: 19pt; margin: 4px 0 6px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 8.5pt; color: #55525a; }
+  .meta b { color: #1b1b1f; }
+  h2 { font-size: 11.5pt; margin: 20px 0 8px; padding-bottom: 4px; border-bottom: 1px solid #dcd7d1; }
+  ul { margin: 0 0 0 16px; padding: 0; }
+  li { margin-bottom: 4px; }
+  table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-top: 6px; }
+  th { background: #f4efe9; text-align: left; font-size: 8pt; letter-spacing: .06em; text-transform: uppercase; color: #55525a; }
+  th, td { border: 1px solid #dcd7d1; padding: 6px 8px; vertical-align: top; }
+  .ok { color: #1b6b3a; font-weight: 700; }
+  .fail { color: #b3261e; font-weight: 700; }
+  .warn { color: #8a5a00; font-weight: 700; }
+  .box { background: #f7f4f0; border-left: 4px solid #6b4423; padding: 10px 12px; margin-top: 8px; }
+  footer { margin-top: 24px; padding-top: 8px; border-top: 1px solid #dcd7d1; font-size: 8pt; color: #7a767e; }
+</style>
+</head>
+<body>
+<header>
+  <p class="eyebrow">Vereda Café · Punto de venta · Ficha de funcionalidad</p>
+  <h1>FXX · Nombre de la funcionalidad</h1>
+  <div class="meta">
+    <span><b>Rutas:</b> /ruta</span>
+    <span><b>Rol requerido:</b> Gerente / Barista</span>
+    <span><b>Modo probado:</b> Demostración / Supabase real</span>
+    <span><b>Fecha:</b> DD/MM/AAAA</span>
+    <span><b>Versión:</b> commit XXXXXXX</span>
+  </div>
+</header>
+
+<h2>Qué hace</h2>
+<ul>
+  <li>Comportamiento verificado 1.</li>
+  <li>Comportamiento verificado 2.</li>
+</ul>
+
+<h2>Qué NO hace</h2>
+<ul>
+  <li>Límite o alcance no cubierto 1.</li>
+  <li>Límite o alcance no cubierto 2.</li>
+</ul>
+
+<h2>Resultado de las pruebas</h2>
+<table>
+  <thead><tr><th style="width:34%">Caso probado</th><th style="width:34%">Resultado esperado</th><th style="width:12%">Estado</th><th style="width:20%">Evidencia</th></tr></thead>
+  <tbody>
+    <tr><td>…</td><td>…</td><td class="ok">Correcto</td><td>evidencia/FXX-01.png</td></tr>
+  </tbody>
+</table>
+
+<h2>Funcionalidades conectadas verificadas</h2>
+<table>
+  <thead><tr><th style="width:26%">Funcionalidad</th><th style="width:54%">Efecto comprobado</th><th style="width:20%">Estado</th></tr></thead>
+  <tbody>
+    <tr><td>…</td><td>…</td><td class="ok">Correcto</td></tr>
+  </tbody>
+</table>
+
+<h2>Pruebas automatizadas</h2>
+<ul>
+  <li><code>src/…/archivo.test.ts</code> — N casos, cubren …</li>
+</ul>
+
+<h2>Limitaciones conocidas y riesgos para la entrega</h2>
+<div class="box">
+  <ul>
+    <li>…</li>
+  </ul>
+</div>
+
+<footer>Documento generado durante la revisión previa a la entrega. Refleja el estado del código en el commit indicado.</footer>
+</body>
+</html>

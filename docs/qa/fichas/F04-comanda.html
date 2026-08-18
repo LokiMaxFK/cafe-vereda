@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>F04 · Comanda y envío a preparación</title>
+<style>
+  @page { size: Letter; margin: 16mm 14mm; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; color: #1b1b1f; font-size: 10.5pt; line-height: 1.45; margin: 0; }
+  header { border-bottom: 3px solid #6b4423; padding-bottom: 10px; margin-bottom: 18px; }
+  .eyebrow { font-size: 8pt; letter-spacing: .12em; text-transform: uppercase; color: #6b4423; font-weight: 700; margin: 0; }
+  h1 { font-size: 19pt; margin: 4px 0 6px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 8.5pt; color: #55525a; }
+  .meta b { color: #1b1b1f; }
+  h2 { font-size: 11.5pt; margin: 20px 0 8px; padding-bottom: 4px; border-bottom: 1px solid #dcd7d1; }
+  ul { margin: 0 0 0 16px; padding: 0; }
+  li { margin-bottom: 4px; }
+  table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-top: 6px; }
+  th { background: #f4efe9; text-align: left; font-size: 8pt; letter-spacing: .06em; text-transform: uppercase; color: #55525a; }
+  th, td { border: 1px solid #dcd7d1; padding: 6px 8px; vertical-align: top; }
+  .ok { color: #1b6b3a; font-weight: 700; }
+  .fail { color: #b3261e; font-weight: 700; }
+  .warn { color: #8a5a00; font-weight: 700; }
+  .box { background: #f7f4f0; border-left: 4px solid #6b4423; padding: 10px 12px; margin-top: 8px; }
+  .alert { background: #fdf0ef; border-left: 4px solid #b3261e; padding: 10px 12px; margin-top: 8px; }
+  code { font-size: 9pt; background: #f4efe9; padding: 1px 4px; border-radius: 3px; }
+  pre { background: #f4efe9; padding: 8px 10px; font-size: 8.5pt; margin: 6px 0; white-space: pre-wrap; }
+  footer { margin-top: 24px; padding-top: 8px; border-top: 1px solid #dcd7d1; font-size: 8pt; color: #7a767e; }
+</style>
+</head>
+<body>
+<header>
+  <p class="eyebrow">Vereda Café · Punto de venta · Ficha de funcionalidad</p>
+  <h1>F04 · Comanda y envío a preparación</h1>
+  <div class="meta">
+    <span><b>Ruta:</b> /venta/:orden</span>
+    <span><b>Roles:</b> Gerente y Barista</span>
+    <span><b>Modo probado:</b> Demostración y Supabase real</span>
+    <span><b>Fecha:</b> 18/08/2026</span>
+    <span><b>Versión:</b> commit afaed6f + correcciones</span>
+  </div>
+</header>
+
+<h2>Qué hace</h2>
+<ul>
+  <li><b>Captura la cuenta</b> con folio, destino (mesa o nombre para llevar), hora y estado siempre visibles.</li>
+  <li><b>Distingue tres estados por línea:</b> pendiente (aún no va a la barra), enviado (ya comandado) y cancelado.</li>
+  <li><b>Permite corregir sólo lo que no salió a la barra.</b> Los botones de cantidad existen únicamente en las líneas pendientes; bajar a 1 convierte el botón en papelera y elimina la línea. Una línea ya enviada no se puede modificar: sólo cancelarse con motivo.</li>
+  <li><b>Recalcula subtotal y total</b> en cada cambio, respetando el precio de la variante y sumando los extras.</li>
+  <li><b>Envía por lotes.</b> Cada envío marca las líneas pendientes con un identificador de lote propio e imprime una comanda que contiene <b>sólo lo nuevo</b>, sin repetir lo ya mandado. Un mismo pedido puede acumular varios lotes.</li>
+  <li><b>Cancela artículos ya comandados exigiendo un motivo</b> (no acepta espacios en blanco), genera un lote de cancelación, imprime una comanda de <b>CANCELACIÓN</b> con el motivo, y descuenta el importe del total.</li>
+  <li><b>Cancela parcialmente.</b> Si se comandaron 3 cafés y se cae 1, se anula sólo esa unidad: la línea se parte en dos y las 2 restantes siguen su curso en la barra. El selector muestra «1 de 3», el importe exacto que se descontará y un atajo «Todas». Cada anulación parcial queda como un registro propio, con su motivo, su importe y su lote, de modo que una misma línea puede anularse en varias ocasiones por motivos distintos sin que una pise a la otra.</li>
+  <li><b>Reimprime la comanda</b> del pedido marcándola como COPIA 1.</li>
+  <li><b>Bloquea el cierre prematuro:</b> «Finalizar orden» permanece deshabilitado mientras exista una línea pendiente sin enviar.</li>
+  <li><b>Restringe por rol:</b> el descuento sólo lo aplica gerencia; «Revertir venta» no aparece aquí porque sólo existe en ventas cerradas.</li>
+</ul>
+
+<h2>Qué NO hace</h2>
+<ul>
+  <li><b>No permite cambiar la cantidad de una línea ya enviada.</b> Para corregirla hay que cancelarla con motivo y capturarla de nuevo. Es deliberado: protege la trazabilidad.</li>
+  <li><b>No permite editar el motivo</b> de una cancelación una vez confirmada, ni deshacerla. Para revertir una anulación hay que capturar de nuevo el producto.</li>
+  <li><b>No imprime en silencio.</b> Cada comanda abre el diálogo de impresión del sistema, donde se elige la impresora. Es el diseño previsto (ver <code>docs/IMPRESION_TERMICA.md</code>: no usa QZ Tray ni servicios locales), pero implica una confirmación por cada envío.</li>
+  <li><b>No avisa si la impresión falla o se cancela.</b> El envío a preparación se registra igual aunque no salga el papel.</li>
+</ul>
+
+<h2>Resultado de las pruebas</h2>
+<table>
+  <thead><tr><th style="width:36%">Caso probado</th><th style="width:48%">Resultado obtenido</th><th style="width:16%">Estado</th></tr></thead>
+  <tbody>
+    <tr><td>Cabecera de la cuenta</td><td>Folio #1045, destino QA-18AGO-F04, hora y estado</td><td class="ok">Correcto</td></tr>
+    <tr><td>Agregar producto desde la cuenta</td><td>Espresso $48 → total $258</td><td class="ok">Correcto</td></tr>
+    <tr><td>Aumentar y reducir cantidad</td><td>2→3 ($315), 3→2 ($210); totales exactos</td><td class="ok">Correcto</td></tr>
+    <tr><td>Reducir hasta eliminar</td><td>En cantidad 1 el botón pasa a papelera y borra la línea</td><td class="ok">Correcto</td></tr>
+    <tr><td>Línea ya enviada</td><td>Sin controles de cantidad; sólo cancelable</td><td class="ok">Correcto</td></tr>
+    <tr><td>Enviar a preparación</td><td>Estado→En preparación, líneas→Enviado, imprime comanda</td><td class="ok">Correcto</td></tr>
+    <tr><td>Envío sin pendientes</td><td>El botón muestra «Todo fue comandado» y se deshabilita</td><td class="ok">Correcto</td></tr>
+    <tr><td>Segundo lote</td><td>Identificador propio (8efaec45 frente a dbe6775e) y la comanda trae sólo la línea nueva</td><td class="ok">Correcto</td></tr>
+    <tr><td>Repetir un producto ya comandado</td><td>Crea línea pendiente aparte; no altera la línea enviada</td><td class="ok">Correcto</td></tr>
+    <tr><td>Cancelar comandado sin motivo</td><td>Botón deshabilitado, también con sólo espacios</td><td class="ok">Correcto</td></tr>
+    <tr><td>Cancelar comandado con motivo</td><td>Imprime CANCELACIÓN con el motivo; total $306 → $96</td><td class="ok">Correcto</td></tr>
+    <tr><td><b>Cancelar 1 de 3</b> (funcionalidad nueva)</td><td>La línea queda en 2 unidades enviadas ($96) y nace una anulada de 1 ($48) con su motivo; total $297 → $249</td><td class="ok">Correcto</td></tr>
+    <tr><td>Selector de cantidad a cancelar</td><td>1→$48, 2→$96, 3→$144; se topa en el máximo y en el mínimo; atajo «Todas»</td><td class="ok">Correcto</td></tr>
+    <tr><td>Incidencia de una cancelación parcial</td><td>Imprime «1 × Espresso», no las 3, con su motivo</td><td class="ok">Correcto</td></tr>
+    <tr><td>Cola de la barra tras cancelar 1 de 3</td><td>Muestra 2 Espresso; la unidad anulada desaparece</td><td class="ok">Correcto</td></tr>
+    <tr><td><b>Contra la base real:</b> sincronización</td><td>23 operaciones encoladas, todas sincronizadas, ninguna «por revisar»</td><td class="ok">Correcto</td></tr>
+    <tr><td><b>Contra la base real:</b> línea partida</td><td>Persiste el Espresso de 2 unidades enviadas y el de 1 anulada con su motivo</td><td class="ok">Correcto</td></tr>
+    <tr><td><b>Contra la base real:</b> dos anulaciones en la misma línea</td><td>Cuatro incidencias independientes; ninguna pisa a la anterior</td><td class="ok">Correcto</td></tr>
+    <tr><td><b>Contra la base real:</b> importe de la incidencia</td><td>$48 por unidad anulada (correcto), pero sin sumar los extras cuando los hay</td><td class="warn">Ver limitaciones</td></tr>
+    <tr><td>Bloqueo de «Finalizar orden»</td><td>Deshabilitado mientras hay pendientes</td><td class="ok">Correcto</td></tr>
+    <tr><td>Menú de acciones (gerente)</td><td>Cancelar cuenta y Reimprimir COPIA 1; sin «Revertir venta»</td><td class="ok">Correcto</td></tr>
+  </tbody>
+</table>
+
+<h2>Funcionalidades conectadas verificadas</h2>
+<table>
+  <thead><tr><th style="width:26%">Funcionalidad</th><th style="width:58%">Efecto comprobado</th><th style="width:16%">Estado</th></tr></thead>
+  <tbody>
+    <tr><td>Preparación (F05)</td><td>El pedido aparece en la cola con las líneas enviadas y su tiempo de espera; las canceladas desaparecen</td><td class="ok">Correcto</td></tr>
+    <tr><td>Impresión (F15)</td><td>Comanda, segunda comanda de lote, copia e incidencia de cancelación se generan con el formato térmico configurado</td><td class="ok">Correcto</td></tr>
+    <tr><td>Sincronización (F16)</td><td>Cada cambio encola una operación; el contador de pendientes subió de 6 a 12 durante la prueba</td><td class="ok">Correcto</td></tr>
+    <tr><td>Nuevo pedido (F02)</td><td>Variante cobrada a su precio ($90, no $80), fusión de líneas idénticas, línea aparte al cambiar extras, folio correlativo #1045</td><td class="ok">Correcto</td></tr>
+  </tbody>
+</table>
+
+<h2>Correcciones aplicadas durante la revisión</h2>
+<div class="alert">
+  <p style="margin:0 0 8px"><b>1. Los extras no llegaban a la barra (el más grave).</b> La comanda de cocina imprimía cantidad, nombre, variante y nota, pero <b>omitía los extras</b>. El ticket del cliente sí los imprime. Es decir: se cobraba «Bebida vegetal» +$15, salía en el ticket del cliente, y la barra recibía un papel que sólo decía «2 × Matcha · Frío / frappé». La bebida se habría preparado con leche normal.</p>
+  <pre>Antes:  2 × Matcha
+        Frío / frappé
+
+Ahora:  2 × Matcha
+        Frío / frappé
+        + Bebida vegetal</pre>
+  <p style="margin:0 0 8px"><b>2. La barra tampoco los veía en pantalla.</b> La cola de Preparación mostraba únicamente nombre y variante: ni extras ni la <b>nota de preparación</b>. La indicación «sin azúcar, poco hielo» que captura quien toma el pedido no llegaba al barista por ninguna vía en pantalla.</p>
+  <p style="margin:0"><b>3. El motivo de cancelación se guardaba pero no se mostraba.</b> Ni en la línea cancelada ni en la incidencia impresa. Siendo requisito que toda cancelación quede registrada, el papel que llega a la barra debía decir por qué. Ahora se imprime <code>MOTIVO: …</code> y la línea lo muestra en rojo.</p>
+</div>
+<table>
+  <thead><tr><th style="width:34%">Archivo</th><th style="width:66%">Cambio</th></tr></thead>
+  <tbody>
+    <tr><td><code>src/lib/printing.ts:41</code></td><td>La comanda imprime los extras de cada línea y el motivo cuando el artículo está cancelado</td></tr>
+    <tr><td><code>src/pages/PreparationPage.tsx</code></td><td>La cola de la barra muestra extras y nota de preparación</td></tr>
+    <tr><td><code>src/pages/SalePage.tsx</code></td><td>La línea cancelada muestra su motivo</td></tr>
+  </tbody>
+</table>
+
+<h2>Funcionalidad añadida: cancelación parcial</h2>
+<div class="box">
+  <p style="margin:0 0 6px">Antes sólo se podía anular la línea completa. Ahora se elige cuántas unidades se anulan.</p>
+  <p style="margin:0 0 6px"><b>Cómo funciona por dentro:</b> al anular una parte, la línea se parte en dos. La original se queda con lo que sí se prepara y la parte anulada nace como un artículo con identificador propio, que conserva variante, extras y el lote de la comanda en que salió, y suma su motivo y su lote de cancelación. Al anular la línea entera se conserva su identificador original, igual que antes.</p>
+  <p style="margin:0"><b>Por qué así:</b> cada anulación tiene entonces su propio importe y su propio registro, de modo que el servidor genera una incidencia por cada una — con el importe parcial correcto — y una misma línea puede anularse varias veces por motivos distintos sin que una borre a la otra. Las unidades anuladas dejan de sumar a la cuenta y desaparecen de la cola de la barra; las demás siguen su curso.</p>
+</div>
+
+<h2>Pruebas automatizadas</h2>
+<ul>
+  <li><code>src/lib/printing.test.ts</code>: se añadieron <b>7 casos de comanda</b>. El archivo sólo probaba tickets de cliente, nunca la comanda de cocina — por eso el defecto de los extras pasó inadvertido. Cubren: cantidad, variante, extras y nota; varios extras en una línea; línea sin extras; motivo en la comanda de cancelación; marcas de COPIA y CANCELACIÓN; y escapado de nombres con HTML.</li>
+  <li><code>src/domain/orderItem.test.ts</code>: <b>11 casos de cancelación parcial</b>. Cubren el reparto de la línea, la conservación de variante, extras y lote de origen, el descuento exacto en la cuenta, la anulación total sin duplicar el artículo, dos anulaciones sucesivas con motivos distintos, y el rechazo de cantidades fuera de rango, decimales, motivo vacío y artículos que aún no salieron a la barra.</li>
+  <li>Suite completa: <b>89 pruebas en verde</b> (64 al iniciar la revisión). Estilo y compilación sin errores.</li>
+</ul>
+
+<h2>Limitaciones y observaciones</h2>
+<div class="box">
+  <ul>
+    <li><b>Si la impresora falla, nadie se entera.</b> El envío queda registrado aunque el papel no salga y no hay reintento automático; la salida es reimprimir a mano desde el menú de acciones. Conviene enseñárselo al personal.</li>
+    <li><b>La comanda lleva la hora de impresión, no la del envío.</b> En una reimpresión aparece la hora en que se reimprimió, lo que puede confundir al comparar papeles.</li>
+    <li><b>El botón dice «Enviar 2 a preparación» contando líneas, no unidades.</b> Con 3 cafés en una línea sigue diciendo «Enviar 1».</li>
+    <li><b>El importe con que se registra una cancelación no incluye los extras.</b> Verificado en la base real: una línea de 2 Matcha con Bebida vegetal, que en la cuenta vale $210, quedó anotada como $180. El servidor calcula precio base × cantidad e ignora los modificadores. Afecta también a la cancelación de cuenta completa. <b>Es un defecto de origen del servidor</b>, presente desde la primera migración, no algo que introduzca la cancelación parcial; corregirlo exige una migración nueva.</li>
+    <li><b>Las cancelaciones de artículo no se consultan desde ninguna pantalla.</b> Quedan registradas y son auditables en la base de datos, pero Reportes sólo muestra cancelaciones de cuenta completa.</li>
+    <li><b>Anular después de marcar «listo» no corrige el consumo de insumos.</b> El consumo teórico se registra cuando el artículo se marca preparado; si se anula después, ese consumo ya quedó anotado. Es un comportamiento que ya existía y que se revisa en F12.</li>
+    <li><b>Sin verificar con impresora física.</b> Todo se comprobó leyendo el documento que la aplicación manda a imprimir. La salida real en papel térmico de 58 mm queda pendiente de probar con el equipo (F15).</li>
+  </ul>
+</div>
+
+<footer>Documento generado durante la revisión previa a la entrega · Vereda Café POS · pruebas en modo demostración sobre Chrome.</footer>
+</body>
+</html>

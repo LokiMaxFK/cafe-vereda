@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>F07 · Cobro, descuento, propina y ticket</title>
+<style>
+  @page { size: Letter; margin: 16mm 14mm; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; color: #1b1b1f; font-size: 10.5pt; line-height: 1.45; margin: 0; }
+  header { border-bottom: 3px solid #6b4423; padding-bottom: 10px; margin-bottom: 18px; }
+  .eyebrow { font-size: 8pt; letter-spacing: .12em; text-transform: uppercase; color: #6b4423; font-weight: 700; margin: 0; }
+  h1 { font-size: 19pt; margin: 4px 0 6px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 8.5pt; color: #55525a; }
+  .meta b { color: #1b1b1f; }
+  h2 { font-size: 11.5pt; margin: 20px 0 8px; padding-bottom: 4px; border-bottom: 1px solid #dcd7d1; }
+  ul { margin: 0 0 0 16px; padding: 0; }
+  li { margin-bottom: 4px; }
+  table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-top: 6px; }
+  th { background: #f4efe9; text-align: left; font-size: 8pt; letter-spacing: .06em; text-transform: uppercase; color: #55525a; }
+  th, td { border: 1px solid #dcd7d1; padding: 6px 8px; vertical-align: top; }
+  .ok { color: #1b6b3a; font-weight: 700; }
+  .fail { color: #b3261e; font-weight: 700; }
+  .warn { color: #8a5a00; font-weight: 700; }
+  .box { background: #f7f4f0; border-left: 4px solid #6b4423; padding: 10px 12px; margin-top: 8px; }
+  .alert { background: #fdf0ef; border-left: 4px solid #b3261e; padding: 10px 12px; margin-top: 8px; }
+  code { font-size: 9pt; background: #f4efe9; padding: 1px 4px; border-radius: 3px; }
+  pre { background: #f4efe9; padding: 8px 10px; font-size: 8.5pt; margin: 6px 0; white-space: pre-wrap; }
+  footer { margin-top: 24px; padding-top: 8px; border-top: 1px solid #dcd7d1; font-size: 8pt; color: #7a767e; }
+</style>
+</head>
+<body>
+<header>
+  <p class="eyebrow">Vereda Café · Punto de venta · Ficha de funcionalidad</p>
+  <h1>F07 · Cobro, descuento, propina y ticket</h1>
+  <div class="meta">
+    <span><b>Rutas:</b> /cobros, /venta/:orden</span>
+    <span><b>Roles:</b> Gerente y Barista (descuento sólo Gerente)</span>
+    <span><b>Modo revisado:</b> Demostración</span>
+    <span><b>Fecha:</b> 18/08/2026</span>
+    <span><b>Versión:</b> commit afaed6f + cambios previos de QA</span>
+  </div>
+</header>
+
+<h2>Qué hace</h2>
+<ul>
+  <li><b>Lista en Cobros las órdenes servidas</b>, ordenadas por última actualización, con folio, destino, estado y total.</li>
+  <li><b>Registra pagos separados</b> en efectivo, tarjeta o transferencia. Cada pago conserva método, importe, propina y fecha.</li>
+  <li><b>Permite dividir la cuenta.</b> Un pago parcial reduce el saldo sin cerrar; al cubrir el total habilita «Cerrar e imprimir ticket».</li>
+  <li><b>Separa propina de venta.</b> La propina queda en el pago, pero no aumenta subtotal, total ni el importe pagado contra la cuenta.</li>
+  <li><b>Protege el cierre.</b> La orden sólo pasa a cerrada si la suma de importes pagados alcanza el total; la comparación incluye diferencias de un centavo.</li>
+  <li><b>Aplica descuentos gerenciales con motivo obligatorio.</b> El importe se topa entre cero y el subtotal, así que nunca genera un total negativo.</li>
+  <li><b>Restringe el descuento por rol.</b> Para Barista la acción queda deshabilitada/oculta y el contexto vuelve a validar el rol aunque se intente forzar.</li>
+  <li><b>Bloquea cambios después de finalizar.</b> Una orden servida o cerrada ya no muestra selector de productos ni controles de cantidad.</li>
+  <li><b>Genera y reimprime el ticket</b> con el formato térmico configurado: ancho, margen, escala, campos de línea, imagen, QR y pie.</li>
+</ul>
+
+<h2>Qué NO hace</h2>
+<ul>
+  <li><b>No calcula ni muestra cambio.</b> Además permite registrar efectivo mayor al saldo sin separar el importe entregado del aplicado a la venta.</li>
+  <li><b>No muestra centavos en ninguna cifra MXN.</b> Los cálculos conservan decimales, pero el formateador redondea toda presentación a pesos completos.</li>
+  <li><b>No imprime el motivo del descuento ni la propina en el ticket.</b> Los datos se guardan, pero el documento para el cliente los omite.</li>
+  <li><b>No identifica claramente una reimpresión.</b> En una venta cerrada el botón sigue diciendo «Ticket» y el documento no incorpora marca de copia.</li>
+  <li><b>No opera el arqueo de Caja sin Supabase.</b> En demostración sólo puede comprobarse que el pago queda correctamente tipado en la orden.</li>
+</ul>
+
+<h2>Resultado de las pruebas</h2>
+<table>
+  <thead><tr><th style="width:36%">Caso probado</th><th style="width:48%">Resultado obtenido</th><th style="width:16%">Estado</th></tr></thead>
+  <tbody>
+    <tr><td>F07-P1 · Lista de órdenes por cobrar</td><td>Filtra exactamente estado <code>served</code> y calcula el total; $100.01 se muestra como $100 por el formateador global</td><td class="fail">Hallazgo F07-02</td></tr>
+    <tr><td>F07-P2 · Efectivo exacto</td><td><code>addPayment</code> registra el importe y <code>closeOrder</code> cierra cuando pagado ≥ total</td><td class="warn">Verificado por lectura de código</td></tr>
+    <tr><td>F07-P3 · Pago parcial</td><td>Mientras saldo &gt; 0 conserva estado servido, muestra el saldo y no ofrece cerrar; la visualización de centavos tiene la salvedad F07-02</td><td class="warn">Verificado por lectura de código</td></tr>
+    <tr><td>F07-P4 · Segundo pago con tarjeta</td><td>Los pagos se agregan sin sustituirse, cada uno mantiene su método y al cubrir el saldo se habilita el cierre</td><td class="warn">Verificado por lectura de código</td></tr>
+    <tr><td>F07-P5 · Importe 0 o negativo</td><td>El manejador y el contexto rechazan <code>amount &lt;= 0</code>; no se persiste el pago</td><td class="warn">Verificado por lectura de código</td></tr>
+    <tr><td>F07-P6 · Propina separada</td><td>Se guarda en <code>payment.tip</code>; <code>paidTotal</code> suma únicamente <code>payment.amount</code></td><td class="warn">Verificado por lectura de código</td></tr>
+    <tr><td>F07-P7 · Efectivo superior al saldo</td><td>No hay cálculo de cambio; se guarda todo el importe y Caja lo suma completo al esperado</td><td class="fail">Hallazgo F07-01</td></tr>
+    <tr><td>F07-P8 · Descuento gerencial</td><td>Motivo obligatorio; se descuenta del subtotal y queda guardado</td><td class="warn">Verificado por lectura de código</td></tr>
+    <tr><td>F07-P9 · Descuento mayor al subtotal</td><td>Se topa al subtotal y el total queda en $0, nunca negativo</td><td class="warn">Verificado por lectura de código</td></tr>
+    <tr><td>F07-P10 · Descuento negativo</td><td>Se topa a cero mediante <code>Math.max(0, amount)</code></td><td class="warn">Verificado por lectura de código</td></tr>
+    <tr><td>F07-P11 · Barista intenta descuento</td><td>Acción deshabilitada/oculta; el guard lanza «Sólo gerencia puede aplicar descuentos.»</td><td class="warn">Verificado por lectura de código</td></tr>
+    <tr><td>F07-P12 · Contenido del ticket</td><td>Incluye folio, líneas, importe de descuento, total y métodos; omite motivo y propinas</td><td class="fail">Hallazgo F07-03</td></tr>
+    <tr><td>F07-P13 · Reimprimir venta cerrada</td><td>La acción sí llama de nuevo a impresión, pero el botón dice «Ticket», no «Reimprimir»</td><td class="fail">Hallazgo F07-04</td></tr>
+    <tr><td>F07-P14 · Orden cerrada inmutable</td><td>No renderiza selector de productos ni controles de cantidad fuera de abierta/en preparación/lista</td><td class="warn">Verificado por lectura de código</td></tr>
+  </tbody>
+</table>
+
+<h2>Funcionalidades conectadas verificadas</h2>
+<table>
+  <thead><tr><th style="width:26%">Funcionalidad</th><th style="width:58%">Efecto comprobado</th><th style="width:16%">Estado</th></tr></thead>
+  <tbody>
+    <tr><td>Salón (F03)</td><td>Las órdenes cerradas salen de <code>isTracked</code>; dejan de asociarse con la mesa y ésta vuelve a libre</td><td class="warn">Verificado por lectura de código</td></tr>
+    <tr><td>Caja (F09)</td><td>El efectivo exacto queda tipado correctamente. En demo Caja no opera, como estaba previsto; en sobrepagos el esperado incluiría el cambio devuelto (F07-01)</td><td class="fail">Hallazgo F07-01</td></tr>
+    <tr><td>Reportes (F13)</td><td>En demo usa órdenes locales. El dominio calcula bruta, descuento, neta y propina por separado, y limita la contribución de pagos al total</td><td class="warn">Verificado por lectura de código</td></tr>
+    <tr><td>Impresión (F15)</td><td>El ticket carga y aplica configuración local/universal de ancho, margen, escala, campos, imagen, QR y pie</td><td class="warn">Verificado por lectura de código</td></tr>
+  </tbody>
+</table>
+
+<h2>Pruebas automatizadas</h2>
+<ul>
+  <li><code>src/domain/money.test.ts</code> pasó de <b>4 a 12 casos</b>. Los ocho casos añadidos cubren: total con descuento, descuento topado al subtotal, líneas canceladas, suma de pagos parciales, propina excluida del total, precisión a centavos y la regla de cierre a un centavo por debajo y por encima.</li>
+  <li>No se extrajo ni refactorizó <code>closeOrder</code>: el umbral se prueba contra las mismas funciones exportadas que usa el contexto, <code>orderTotal</code> y <code>paidTotal</code>.</li>
+  <li>Suite completa: <b>97 pruebas en verde</b> (89 antes de F07), en 9 archivos. Lint y compilación sin errores.</li>
+</ul>
+
+<h2>Hallazgos pendientes de decisión</h2>
+<div class="alert">
+  <p style="margin:0 0 8px"><b>F07-01 · Alta — sobrepago sin cambio y arqueo inflado.</b> Un total de $100 puede recibir un pago efectivo de $120. No se informa «Cambio $20» ni se registra cuánto se aplica a la venta: se guardan $120. Caja suma pagos efectivos en bruto; después de devolver $20, el cajón aumentó $100 pero el sistema esperará $120. <b>No se corrigió a propósito en esta pasada.</b></p>
+  <p style="margin:0 0 8px"><b>F07-02 · Alta — los centavos desaparecen visualmente.</b> El formateador global usa cero decimales. Una cuenta de $100.01 aparece como $100 y, tras pagar $100, el saldo restante de $0.01 aparece como $0 aunque el cierre siga bloqueado. También afecta Salón, Caja, Reportes y tickets. <b>No se corrigió a propósito en esta pasada.</b></p>
+  <p style="margin:0 0 8px"><b>F07-03 · Alta — ticket incompleto.</b> El constructor recibe una orden que sí contiene <code>discountReason</code> y <code>payment.tip</code>, pero no imprime ninguno. El cliente no puede ver por qué se descontó ni qué propina dejó. <b>No se corrigió a propósito en esta pasada.</b></p>
+  <p style="margin:0"><b>F07-04 · Baja — reimpresión sin etiqueta clara.</b> La acción funciona, pero el botón de una venta cerrada dice «Ticket» y el documento tampoco marca COPIA; no queda claro para el operador ni en papel que es una reimpresión. <b>No se corrigió a propósito en esta pasada.</b></p>
+</div>
+
+<h2>Limitaciones y observaciones</h2>
+<div class="box">
+  <ul>
+    <li><b>Sin ejecución interactiva de navegador.</b> Se intentó Playwright y Chrome headless real, pero el entorno restringido bloqueó la descarga del controlador y Chrome abortó al iniciar. Por honestidad, los casos de interfaz se marcan «Verificado por lectura de código» y no «Correcto». Las reglas de dinero sí se ejecutaron en Vitest.</li>
+    <li><b>Pasada A únicamente.</b> Caja requiere Supabase real; aquí sólo se revisó la forma en que registra y consulta pagos. El arqueo completo se ejecuta en F09.</li>
+    <li><b>Reportes en demostración usan el historial local.</b> La consulta y persistencia contra Supabase se dejan para F13; aquí se verificaron las funciones de cálculo y el camino demo.</li>
+    <li><b>Sin impresora física.</b> Se revisó el HTML que construye el ticket y la carga de su configuración. La salida real en papel térmico de 58/80 mm queda para F15.</li>
+    <li><b>Sin correcciones de producto.</b> Los cuatro hallazgos se dejaron pendientes por instrucción expresa del responsable de entrega.</li>
+  </ul>
+</div>
+
+<footer>Documento generado durante la revisión previa a la entrega · Vereda Café POS · pasada A · hallazgos sin corregir por decisión de revisión.</footer>
+</body>
+</html>

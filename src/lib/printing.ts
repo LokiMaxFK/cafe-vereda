@@ -38,7 +38,7 @@ export function createCommandDocument(order: Order, items: OrderItem[], copyNumb
     <div class="center"><h1>VEREDA CAFÉ</h1><h2>COMANDA #${order.folio}</h2></div>
     <div class="row"><strong>${context}</strong><span>${new Date().toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}</span></div>
     <div class="line"></div>
-    ${items.map((item) => `<div class="item"><strong>${item.quantity} × ${escapeHtml(item.name)}</strong>${item.variant ? `<p>${escapeHtml(item.variant)}</p>` : ""}${item.notes ? `<p>NOTA: ${escapeHtml(item.notes)}</p>` : ""}</div>`).join("")}
+    ${items.map((item) => `<div class="item"><strong>${item.quantity} × ${escapeHtml(item.name)}</strong>${item.variant ? `<p>${escapeHtml(item.variant)}</p>` : ""}${item.modifiers.length ? `<p>${item.modifiers.map((modifier) => `+ ${escapeHtml(modifier.name)}`).join(" · ")}</p>` : ""}${item.notes ? `<p>NOTA: ${escapeHtml(item.notes)}</p>` : ""}${item.cancellationReason ? `<p>MOTIVO: ${escapeHtml(item.cancellationReason)}</p>` : ""}</div>`).join("")}
     <div class="line"></div><p class="center muted">Lote inmutable · ${items[0]?.dispatchBatchId?.slice(0, 8) || "nuevo"}</p>
   `, paper, options);
 }
@@ -57,8 +57,8 @@ export function createTicketDocument(order: Order, paper: PrintPaper = "80", opt
     <div class="row"><span>${order.type === "table" ? `Mesa ${order.tableId?.replace("t", "")}` : escapeHtml(order.customerName || "Para llevar")}</span><span>${new Date(order.openedAt).toLocaleString("es-MX")}</span></div>
     <div class="line"></div>
     ${order.items.filter((item) => item.status !== "cancelled").map((item) => ticketItem(item, settings)).join("")}
-    <div class="line"></div>${order.discount ? `<div class="row"><span>Descuento</span><span>-${mxn.format(order.discount)}</span></div>` : ""}<div class="row"><strong>TOTAL</strong><strong>${mxn.format(orderTotal(order))}</strong></div>
-    ${order.payments.map((payment) => `<div class="row muted"><span>${payment.method.toUpperCase()}</span><span>${mxn.format(payment.amount)}</span></div>`).join("")}
+    <div class="line"></div>${order.discount > 0 ? `<div class="row"><span>Descuento${order.discountReason ? ` · ${escapeHtml(order.discountReason)}` : ""}</span><span>-${mxn.format(order.discount)}</span></div>` : ""}<div class="row"><strong>TOTAL</strong><strong>${mxn.format(orderTotal(order))}</strong></div>
+    ${order.payments.map((payment) => `<div class="row muted"><span>${payment.method.toUpperCase()}</span><span>${mxn.format(payment.amount)}${payment.tip > 0 ? ` + ${mxn.format(payment.tip)} propina` : ""}</span></div>`).join("")}
     ${qr}${footer}
   `, paper, settings);
 }

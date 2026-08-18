@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>F01 · Acceso, roles y sesión</title>
+<style>
+  @page { size: Letter; margin: 16mm 14mm; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; color: #1b1b1f; font-size: 10.5pt; line-height: 1.45; margin: 0; }
+  header { border-bottom: 3px solid #6b4423; padding-bottom: 10px; margin-bottom: 18px; }
+  .eyebrow { font-size: 8pt; letter-spacing: .12em; text-transform: uppercase; color: #6b4423; font-weight: 700; margin: 0; }
+  h1 { font-size: 19pt; margin: 4px 0 6px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 8.5pt; color: #55525a; }
+  .meta b { color: #1b1b1f; }
+  h2 { font-size: 11.5pt; margin: 20px 0 8px; padding-bottom: 4px; border-bottom: 1px solid #dcd7d1; }
+  ul { margin: 0 0 0 16px; padding: 0; }
+  li { margin-bottom: 4px; }
+  table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-top: 6px; }
+  th { background: #f4efe9; text-align: left; font-size: 8pt; letter-spacing: .06em; text-transform: uppercase; color: #55525a; }
+  th, td { border: 1px solid #dcd7d1; padding: 6px 8px; vertical-align: top; }
+  .ok { color: #1b6b3a; font-weight: 700; }
+  .fail { color: #b3261e; font-weight: 700; }
+  .warn { color: #8a5a00; font-weight: 700; }
+  .box { background: #f7f4f0; border-left: 4px solid #6b4423; padding: 10px 12px; margin-top: 8px; }
+  .alert { background: #fdf0ef; border-left: 4px solid #b3261e; padding: 10px 12px; margin-top: 8px; }
+  code { font-size: 9pt; background: #f4efe9; padding: 1px 4px; border-radius: 3px; }
+  footer { margin-top: 24px; padding-top: 8px; border-top: 1px solid #dcd7d1; font-size: 8pt; color: #7a767e; }
+</style>
+</head>
+<body>
+<header>
+  <p class="eyebrow">Vereda Café · Punto de venta · Ficha de funcionalidad</p>
+  <h1>F01 · Acceso, roles y sesión</h1>
+  <div class="meta">
+    <span><b>Rutas:</b> / (login), guard en todas las demás</span>
+    <span><b>Roles:</b> Gerente y Barista</span>
+    <span><b>Modo probado:</b> Demostración</span>
+    <span><b>Fecha:</b> 18/08/2026</span>
+    <span><b>Versión:</b> commit afaed6f</span>
+  </div>
+</header>
+
+<h2>Qué hace</h2>
+<ul>
+  <li><b>Autentica por usuario y PIN.</b> No hay registro público: las cuentas se crean desde Personal (F14). En modo demostración funcionan <code>gerente / 2468</code> y <code>ana / 1234</code>.</li>
+  <li><b>Rechaza credenciales inválidas con un mensaje genérico</b> («Usuario o PIN incorrectos.»), igual para PIN equivocado que para usuario inexistente, así que no revela qué usuarios existen.</li>
+  <li><b>Mantiene la sesión al recargar</b> la página: se rehidrata desde la base local del navegador (IndexedDB) sin volver a pedir el PIN.</li>
+  <li><b>Restringe el menú por rol.</b> El barista sólo ve Operación (Nuevo Pedido, Inicio, Salón, Preparación, Pedidos, Cobros, Caja). Gestión (Catálogo, Mesas, Insumos, Reportes) y Administración (Personal, Configuración) son exclusivas de gerencia.</li>
+  <li><b>Bloquea el acceso directo por URL.</b> Un barista que escriba a mano <code>/reportes</code>, <code>/catalogo</code>, <code>/mesas</code>, <code>/insumos</code>, <code>/personal</code>, <code>/configuracion</code> o <code>/configuracion/impresion</code> es devuelto a Inicio sin ver el contenido.</li>
+  <li><b>Recuerda a dónde ibas.</b> Si entras sin sesión a una ruta protegida, el sistema te lleva al login y, tras entrar, te deja en la pantalla que pediste.</li>
+  <li><b>Restringe acciones, no sólo el menú.</b> El descuento y la reversión de venta están reservados a gerencia también dentro de la pantalla de venta.</li>
+  <li><b>Sin conexión mantiene operando una sesión ya abierta</b>, pero impide cerrar sesión o cambiar de usuario, con el aviso «Necesitas conexión para cambiar de usuario.»</li>
+  <li><b>Fuera del modo demostración el formulario arranca vacío</b>, sin usuario ni PIN escritos y sin mostrar credenciales de ejemplo.</li>
+</ul>
+
+<h2>Qué NO hace</h2>
+<ul>
+  <li><b>No permite el primer acceso sin internet.</b> Si la tablet arranca sin conexión y no había sesión previa, nadie puede entrar. El botón «Entrar» aparece deshabilitado.</li>
+  <li><b>No cierra la sesión sola por inactividad</b>: no hay caducidad ni bloqueo por tiempo. La sesión sigue abierta hasta que alguien la cierre a mano.</li>
+  <li><b>No limita los intentos fallidos</b>: no hay bloqueo tras N PIN incorrectos ni retardo progresivo.</li>
+  <li><b>No distingue sesiones por dispositivo</b>: en cada navegador se guarda una sola sesión y entrar con otro usuario reemplaza la anterior.</li>
+  <li><b>No exige gerencia para cancelar una cuenta.</b> Un barista puede cancelar una cuenta abierta o en preparación (sólo se le exige un motivo). Es una decisión de negocio a confirmar con el cliente, no un defecto técnico.</li>
+</ul>
+
+<h2>Resultado de las pruebas</h2>
+<table>
+  <thead><tr><th style="width:40%">Caso probado</th><th style="width:44%">Resultado obtenido</th><th style="width:16%">Estado</th></tr></thead>
+  <tbody>
+    <tr><td>Pantalla de acceso sin sesión</td><td>Formulario visible; la ayuda de credenciales de demostración sólo aparece en modo demostración</td><td class="ok">Correcto</td></tr>
+    <tr><td>Acceso con gerente / 2468</td><td>Entra a Inicio como Jordan Cruz · Gerente, con los tres grupos de menú</td><td class="ok">Correcto</td></tr>
+    <tr><td>PIN incorrecto (gerente / 0000)</td><td>«Usuario o PIN incorrectos.», no entra</td><td class="ok">Correcto</td></tr>
+    <tr><td>Usuario inexistente (pedro / 1234)</td><td>Mismo mensaje genérico; sin errores en consola</td><td class="ok">Correcto</td></tr>
+    <tr><td>Recargar con sesión activa</td><td>La sesión se conserva; no vuelve al login</td><td class="ok">Correcto</td></tr>
+    <tr><td>Acceso con ana / 1234 (barista)</td><td>Sólo el grupo Operación; además la tarjeta «Venta del día» se sustituye por «Tu turno», así que no se le expone la venta</td><td class="ok">Correcto</td></tr>
+    <tr><td>Barista entra por URL a 7 rutas de gerencia</td><td>Las 7 redirigen a Inicio sin mostrar contenido</td><td class="ok">Correcto</td></tr>
+    <tr><td>Ruta inexistente</td><td>Muestra la pantalla de «no encontrado» dentro del sistema, sin sacar al usuario</td><td class="ok">Correcto</td></tr>
+    <tr><td>Sin sesión, entrar a /caja por URL</td><td>Va al login y, tras entrar, aterriza en Caja</td><td class="ok">Correcto</td></tr>
+    <tr><td>Cerrar sesión sin conexión</td><td>No cierra la sesión y avisa «Necesitas conexión para cambiar de usuario.»; el aviso se retira solo a los 6 s</td><td class="ok">Correcto</td></tr>
+    <tr><td>Campos de acceso con Supabase configurado</td><td>Usuario y PIN arrancan vacíos y la ayuda de demostración no se muestra <i>(verificado tras la corrección)</i></td><td class="ok">Correcto</td></tr>
+  </tbody>
+</table>
+
+<h2>Funcionalidades conectadas verificadas</h2>
+<table>
+  <thead><tr><th style="width:26%">Funcionalidad</th><th style="width:58%">Efecto comprobado</th><th style="width:16%">Estado</th></tr></thead>
+  <tbody>
+    <tr><td>Indicador de sincronización (F16)</td><td>Con conexión muestra «Todo sincronizado»; al perderla, «0 cambios · Sin conexión» en rojo</td><td class="ok">Correcto</td></tr>
+    <tr><td>Venta · descuento (F07)</td><td>El botón de descuento se deshabilita para barista y el bloque de descuento del cobro no se le muestra</td><td class="ok">Correcto</td></tr>
+    <tr><td>Venta · reversión (F08)</td><td>«Revertir venta» sólo aparece para gerencia y sólo en ventas cerradas</td><td class="ok">Correcto</td></tr>
+    <tr><td>Caja (F09)</td><td>En modo demostración, Caja muestra «Caja no disponible»: el arqueo exige Supabase</td><td class="ok">Esperado</td></tr>
+  </tbody>
+</table>
+
+<h2>Pruebas automatizadas</h2>
+<ul>
+  <li><code>src/lib/supabase.test.ts</code> (nuevo, 7 casos): conversión del usuario visible al email interno de autenticación — normalización de mayúsculas y espacios, caracteres permitidos, neutralización de un usuario que intente colar otro dominio, e idempotencia sobre los usuarios ya guardados (si esto se rompiera, nadie podría entrar).</li>
+  <li>Suite completa tras los cambios: <b>71 pruebas en verde</b> (antes 64). Revisión de estilo y compilación sin errores.</li>
+</ul>
+
+<h2>Correcciones aplicadas durante la revisión</h2>
+<table>
+  <thead><tr><th style="width:30%">Problema detectado</th><th style="width:40%">Corrección</th><th style="width:30%">Verificación</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><b>El acceso venía precargado con <code>gerente</code> / <code>2468</code> también en producción.</b> El recuadro de ayuda sí se ocultaba fuera de demostración, pero los valores escritos en los campos no.</td>
+      <td>Los campos arrancan vacíos cuando hay Supabase configurado y sólo se precargan en modo demostración. <code>LoginPage.tsx:12-15</code></td>
+      <td>Con Supabase configurado, Usuario y PIN aparecen vacíos y sin ayuda de demostración; en modo demostración siguen precargados</td>
+    </tr>
+    <tr>
+      <td><b>El aviso «Necesitas conexión para cambiar de usuario» nunca se retiraba.</b> Una vez mostrado quedaba fijo en pantalla el resto de la sesión, incluso después de recuperar la conexión.</td>
+      <td>El aviso se limpia solo a los 6 segundos y se reinicia en cada intento. <code>ProtectedLayout.tsx:10-17,47</code></td>
+      <td>Aparece al intentar cerrar sesión sin conexión y desaparece a los 6 s</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>Limitaciones y observaciones</h2>
+<div class="box">
+  <ul>
+    <li><b>Cancelar una cuenta no exige gerencia.</b> Un barista puede cancelar una cuenta abierta o en preparación indicando un motivo. El descuento y la reversión sí están reservados a gerencia. <b>Es una decisión de negocio pendiente de confirmar con el cliente</b>, no un defecto técnico.</li>
+    <li><b>El aviso de conexión aparece arriba a la derecha</b>, en la esquina opuesta al botón de cerrar sesión (abajo a la izquierda). Se ve, pero no junto a la acción que lo provoca.</li>
+    <li><b>Al teclear el usuario se descartan acentos y espacios.</b> No genera conflictos entre personas: el alta de personal aplica exactamente el mismo filtro, así que ningún usuario guardado los contiene. Lo único que implica es que quien escriba «Ana López» en el acceso estará intentando entrar como «analpez».</li>
+    <li><b>Un usuario vacío no se valida en el frontend</b>; se delega en el servidor, que lo rechaza. Sin consecuencias prácticas.</li>
+    <li><b>Verificación limitada al modo demostración.</b> El acceso contra Supabase real (usuarios de <code>staff_profiles</code>, cuentas desactivadas, roles en <code>app_metadata</code>) se verifica en F14.</li>
+  </ul>
+</div>
+
+<footer>Documento generado durante la revisión previa a la entrega · Vereda Café POS · commit afaed6f · pruebas ejecutadas en modo demostración sobre Chrome.</footer>
+</body>
+</html>

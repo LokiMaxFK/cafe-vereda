@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { ArrowDownLeft, Banknote, Calculator, LockKeyhole, Plus, WalletCards } from "lucide-react";
 import { Button, EmptyState, FieldLabel, InlineAlert, LoadingState, MetricCard, Page, PageHeader, Panel, TextField } from "../../design-system/react";
+import { calculateCashDifference, calculateCashSummary } from "../domain/cash";
 import { mxn } from "../domain/money";
 import type { CashMovement, CashSession } from "../domain/types";
 import { Modal } from "../components/Modal";
@@ -122,14 +123,14 @@ function CloseSessionModal({ expected, onClose, onSubmit }: { expected: number; 
   }
 
   if (result) {
-    const difference = result.difference ?? 0;
+    const { difference, status } = calculateCashDifference(result.countedCash ?? 0, result.expectedCash ?? 0);
     return (
       <Modal title="Corte realizado" onClose={onClose}>
         <div className="space-y-4">
-          <InlineAlert tone={difference === 0 ? "success" : "error"}>
-            {difference === 0
+          <InlineAlert tone={status === "exact" ? "success" : "error"}>
+            {status === "exact"
               ? "El conteo coincide exactamente con lo esperado."
-              : difference > 0
+              : status === "surplus"
                 ? `Sobrante de ${mxn.format(difference)} respecto a lo esperado.`
                 : `Faltante de ${mxn.format(Math.abs(difference))} respecto a lo esperado.`}
           </InlineAlert>
@@ -248,10 +249,13 @@ export function CashPage() {
     );
   }
 
-  const withdrawalMovements = movements.filter((movement) => movement.type === "withdrawal" || movement.type === "adjustment");
-  const withdrawn = withdrawalMovements.reduce((sum, movement) => sum + movement.amount, 0);
   const cash = cashSalesCents / 100;
-  const expected = cashSession.openingFund + cash - withdrawn;
+  const { withdrawals: withdrawn, withdrawalCount, expected } = calculateCashSummary({
+    openingFund: cashSession.openingFund,
+    cashSales: cash,
+    movements
+  });
+  const withdrawalMovements = movements.filter((movement) => movement.type === "withdrawal" || movement.type === "adjustment");
   const openedByMe = cashSession.openedBy === session?.id;
 
   return (
@@ -266,9 +270,10 @@ export function CashPage() {
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard icon={<WalletCards />} label="Fondo inicial" value={mxn.format(cashSession.openingFund)} tone="primary" />
         <MetricCard icon={<Banknote />} label="Efectivo en ventas" value={mxn.format(cash)} detail="Desde la apertura del turno" tone="success" />
-        <MetricCard icon={<ArrowDownLeft />} label="Retiros" value={mxn.format(withdrawn)} detail={`${withdrawalMovements.length} movimientos`} tone="danger" />
-        <MetricCard icon={<Calculator />} label="Efectivo esperado" value={mxn.format(expected)} detail="Antes del conteo" />
+        <MetricCard icon={<ArrowDownLeft />} label="Retiros" value={mxn.format(withdrawn)} detail={`${withdrawalCount} movimientos`} tone="danger" />
+        <MetricCard icon={<Calculator />} label="Efectivo esperado" value={mxn.format(expected)} detail="Efectivo físico de este turno" />
       </div>
+      <p className="mt-2 text-xs text-on-surface-variant">Una reversión de una venta cobrada en un turno anterior no se descuenta aquí, aunque sí aparezca en Reportes del día.</p>
       <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_380px]">
         <Panel className="p-5">
           <h2 className="text-lg font-bold">Movimientos del turno</h2>

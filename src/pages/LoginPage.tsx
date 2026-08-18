@@ -9,8 +9,11 @@ export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const redirectTo = (location.state as { from?: string } | null)?.from ?? "/inicio";
-  const [username, setUsername] = useState("gerente");
-  const [pin, setPin] = useState("2468");
+  // En demostración se precargan las credenciales de ejemplo para entrar de un clic. Con Supabase
+  // configurado los campos arrancan vacíos: en la tablet del café nadie debe encontrar un acceso
+  // ya escrito.
+  const [username, setUsername] = useState(demoMode ? "gerente" : "");
+  const [pin, setPin] = useState(demoMode ? "2468" : "");
   const [showPin, setShowPin] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);

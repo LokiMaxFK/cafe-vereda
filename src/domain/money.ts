@@ -1,6 +1,6 @@
 import type { Order, OrderItem } from "./types";
 
-export const mxn = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 });
+export const mxn = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export function itemTotal(item: OrderItem) {
   return item.quantity * (item.unitPrice + item.modifiers.reduce((sum, modifier) => sum + modifier.price, 0));
@@ -16,4 +16,8 @@ export function orderTotal(order: Pick<Order, "items" | "discount">) {
 
 export function paidTotal(order: Pick<Order, "payments">) {
   return order.payments.reduce((sum, payment) => sum + payment.amount, 0);
+}
+
+export function applyPaymentCap(amount: number, balance: number) {
+  return Math.min(amount, Math.max(0, balance));
 }

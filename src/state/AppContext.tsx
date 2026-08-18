@@ -2,8 +2,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { categories as initialCategories, commonModifiers as initialExtras, products as initialProducts } from "../data/menu";
 import { initialTables } from "../data/tables";
 import { cancellableStatuses } from "../domain/order";
-import { orderSubtotal, orderTotal } from "../domain/money";
-import { mergeOrAddItem, type OrderItemInput } from "../domain/orderItem";
+import { applyPaymentCap, orderSubtotal, orderTotal, paidTotal } from "../domain/money";
+import { cancelItemUnits, mergeOrAddItem, type OrderItemInput } from "../domain/orderItem";
 import type { AppRole, CafeTable, CatalogExtra, Category, Order, OrderItem, PaymentMethod, Product, StaffSession, SyncStatus } from "../domain/types";
 import { db } from "../lib/db";
 import { queueOperation, syncPendingOperations } from "../lib/offline";
@@ -86,7 +86,7 @@ interface AppContextValue {
   startOrder: (type: "table" | "takeaway", target?: string, items?: OrderItem[]) => Promise<Order>;
   addItem: (orderId: string, input: OrderItemInput) => Promise<void>;
   changeQuantity: (orderId: string, itemId: string, delta: number) => Promise<void>;
-  cancelCommandedItem: (orderId: string, itemId: string, reason: string) => Promise<string | null>;
+  cancelCommandedItem: (orderId: string, itemId: string, reason: string, quantity?: number) => Promise<{ batchId: string; item: OrderItem } | null>;
   dispatchPending: (orderId: string) => Promise<string | null>;
   markOrderReady: (orderId: string) => Promise<void>;
   finalizeOrder: (orderId: string) => Promise<void>;
@@ -334,12 +334,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await persistOrder({ ...order, items: mergeOrAddItem(order.items, input) }, "add_order_item");
   }, [orders, persistOrder]);
 
-  const cancelCommandedItem = useCallback(async (orderId: string, itemId: string, reason: string) => {
-    const order = orders.find((item) => item.id === orderId); if (!order || !reason.trim()) return null;
-    const item = order.items.find((candidate) => candidate.id === itemId); if (!item || !["dispatched", "prepared"].includes(item.status)) return null;
+  const cancelCommandedItem = useCallback(async (orderId: string, itemId: string, reason: string, quantity?: number) => {
+    const order = orders.find((item) => item.id === orderId); if (!order) return null;
+    const target = order.items.find((candidate) => candidate.id === itemId); if (!target) return null;
     const batchId = crypto.randomUUID();
-    await persistOrder({ ...order, items: order.items.map((candidate) => candidate.id === itemId ? { ...candidate, status: "cancelled", cancellationReason: reason.trim(), cancellationBatchId: batchId } : candidate) }, "cancel_dispatched_item");
-    return batchId;
+    const result = cancelItemUnits(order.items, itemId, quantity ?? target.quantity, reason, batchId, crypto.randomUUID());
+    if (!result) return null;
+    await persistOrder({ ...order, items: result.items }, "cancel_dispatched_item");
+    return { batchId, item: result.cancelled };
   }, [orders, persistOrder]);
 
   const changeQuantity = useCallback(async (orderId: string, itemId: string, delta: number) => {
@@ -369,7 +371,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const addPayment = useCallback(async (orderId: string, method: PaymentMethod, amount: number, tip: number) => {
     const order = orders.find((item) => item.id === orderId); if (!order || amount <= 0) return;
-    await persistOrder({ ...order, payments: [...order.payments, { id: crypto.randomUUID(), method, amount, tip, createdAt: new Date().toISOString() }] }, "record_payment");
+    const balance = orderTotal(order) - paidTotal(order);
+    if (balance <= 0) return;
+    const appliedAmount = applyPaymentCap(amount, balance);
+    await persistOrder({ ...order, payments: [...order.payments, { id: crypto.randomUUID(), method, amount: appliedAmount, tip, createdAt: new Date().toISOString() }] }, "record_payment");
   }, [orders, persistOrder]);
 
   const closeOrder = useCallback(async (orderId: string) => {
