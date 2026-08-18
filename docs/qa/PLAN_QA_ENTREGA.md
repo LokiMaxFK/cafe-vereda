@@ -400,7 +400,8 @@ Antes sólo podía anularse la línea completa. Ahora se elige cuántas unidades
 - [x] F04-N6. **Verificado contra Supabase real** el 18/08: la línea partida sincroniza, cada
       anulación genera su incidencia y dos anulaciones sobre la misma línea no se pisan. Detalle en
       F08-P13 a F08-P18. La única salvedad es el importe de la incidencia, que excluye los extras —
-      defecto de origen del servidor, no de esta funcionalidad (hallazgo **F08-01**).
+      defecto de origen del servidor, no de esta funcionalidad (hallazgo **F08-01**, ya corregido
+      y aplicado a producción, ver bitácora §0.7).
 
 ### Pruebas unitarias
 
@@ -593,7 +594,7 @@ Los commits recientes tocaron precisamente esto (`Corrige reversión de ventas`,
       `order_items`, no la caché local.
 - [x] F08-P14. Cada anulación genera **su propia fila en `incidents`** con el importe de las
       unidades anuladas ($48 por 1 unidad, no $144 por la línea). **Pero** el importe excluye los
-      extras → hallazgo **F08-01**.
+      extras → hallazgo **F08-01**, corregido el 18/08 con migración aplicada a producción.
 - [x] F08-P15. Segunda anulación sobre la misma línea con motivo distinto: la línea bajó de 2 a 1 y
       quedaron **4 incidencias independientes**; ninguna pisó a la anterior. Es exactamente lo que
       la división de la línea pretendía garantizar.
