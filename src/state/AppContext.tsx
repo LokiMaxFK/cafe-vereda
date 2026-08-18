@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { categories as initialCategories, commonModifiers as initialExtras, products as initialProducts } from "../data/menu";
 import { initialTables } from "../data/tables";
+import { cancellableStatuses } from "../domain/order";
 import { orderSubtotal, orderTotal } from "../domain/money";
 import { mergeOrAddItem, type OrderItemInput } from "../domain/orderItem";
 import type { AppRole, CafeTable, CatalogExtra, Category, Order, OrderItem, PaymentMethod, Product, StaffSession, SyncStatus } from "../domain/types";
@@ -110,6 +111,20 @@ interface AppContextValue {
 
 const AppContext = createContext<AppContextValue | null>(null);
 
+/**
+ * Primer hueco libre del croquis, para que las mesas nuevas no se apilen todas en el centro.
+ * Las tolerancias aproximan el tamaño de una mesa sobre el plano (~12 % de ancho, ~24 % de alto).
+ */
+function nextFreeSlot(tables: CafeTable[]) {
+  const taken = tables.filter((table) => table.active);
+  for (let y = 12; y <= 88; y += 4) {
+    for (let x = 8; x <= 88; x += 3) {
+      if (!taken.some((table) => Math.abs(table.x - x) < 12 && Math.abs(table.y - y) < 24)) return { x, y };
+    }
+  }
+  return { x: 50, y: 50 };
+}
+
 function demoIdentity(username: string): StaffSession | null {
   const normalized = username.trim().toLowerCase();
   if (["gerente", "demo", "jordan"].includes(normalized)) {
@@ -179,6 +194,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         status: row.status as Order["status"],
         discount: Number(row.discount_cents ?? 0) / 100,
         discountReason: row.discount_reason ? String(row.discount_reason) : undefined,
+        cancellationReason: row.cancellation_reason ? String(row.cancellation_reason) : undefined,
         openedBy: String(row.opened_by),
         openedAt: String(row.opened_at),
         updatedAt: String(row.updated_at),
@@ -382,8 +398,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [orders, persistOrder, session]);
 
   const cancelOrder = useCallback(async (orderId: string, reason: string) => {
-    const order = orders.find((item) => item.id === orderId); if (!order || !reason.trim() || !["open", "preparing", "ready", "served"].includes(order.status)) return;
-    await persistOrder({ ...order, status: "cancelled", discountReason: `Cancelación: ${reason.trim()}` }, "cancel_order");
+    const order = orders.find((item) => item.id === orderId); if (!order || !reason.trim() || !cancellableStatuses.includes(order.status)) return;
+    await persistOrder({ ...order, status: "cancelled", cancellationReason: reason.trim() }, "cancel_order");
   }, [orders, persistOrder]);
 
   const reverseSale = useCallback(async (orderId: string, reason: string) => {
@@ -395,7 +411,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const addTable = useCallback(async () => {
     if (session?.role !== "manager") throw new Error("Sólo gerencia puede editar mesas.");
     const nextNumber = Math.max(0, ...tables.map((table) => table.number)) + 1;
-    const table: CafeTable = { id: `t${nextNumber}`, number: nextNumber, seats: 2, shape: "square", x: 50, y: 50, active: true };
+    const slot = nextFreeSlot(tables);
+    const table: CafeTable = { id: `t${nextNumber}`, number: nextNumber, seats: 2, shape: "square", x: slot.x, y: slot.y, active: true };
     if (supabase && navigator.onLine) {
       const { error } = await supabase.from("cafe_tables").insert({ number: table.number, seats: table.seats, shape: table.shape, x: table.x, y: table.y, active: true });
       if (error) throw new Error(error.message);
@@ -583,6 +600,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components -- hook del Context, se exporta junto al Provider a propósito
 export function useApp() {
   const context = useContext(AppContext);
   if (!context) throw new Error("useApp debe usarse dentro de AppProvider");

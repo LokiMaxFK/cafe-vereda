@@ -5,6 +5,7 @@ import { Badge, Button, SegmentedControl, TextField } from "../../design-system/
 import { Modal } from "../components/Modal";
 import { ProductPicker, type ProductPickerSelection } from "../components/ProductPicker";
 import { TableFloorPlan } from "../components/TableFloorPlan";
+import { isTracked } from "../domain/order";
 import { mergeOrAddItem } from "../domain/orderItem";
 import { itemTotal, mxn, orderSubtotal } from "../domain/money";
 import type { OrderItem } from "../domain/types";
@@ -25,8 +26,8 @@ export function NewOrderPage() {
   const [creating, setCreating] = useState(false);
 
   const activeTables = useMemo(() => tables.filter((table) => table.active), [tables]);
-  const activeOrders = orders.filter((order) => !["served", "closed", "cancelled", "reversed"].includes(order.status));
-  const occupiedTableIds = useMemo(() => new Set(activeOrders.filter((order) => order.tableId).map((order) => order.tableId as string)), [activeOrders]);
+  // Incluye las cuentas ya finalizadas pero sin cobrar: esa mesa sigue ocupada aunque no admita más comandas.
+  const occupiedTableIds = useMemo(() => new Set(orders.filter(isTracked).filter((order) => order.tableId).map((order) => order.tableId as string)), [orders]);
 
   const subtotal = orderSubtotal({ items: cartItems });
   const visibleItems = cartItems.filter((item) => item.status !== "cancelled");

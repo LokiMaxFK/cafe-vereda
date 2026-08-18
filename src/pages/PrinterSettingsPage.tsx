@@ -147,7 +147,7 @@ export function PrinterSettingsPage() {
     reader.readAsDataURL(file);
   }
 
-  async function useCafeVeredaLogo() {
+  async function applyCafeVeredaLogo() {
     try {
       const response = await fetch("/logo-termico.png");
       if (!response.ok) throw new Error();
@@ -233,7 +233,7 @@ export function PrinterSettingsPage() {
               <FieldLabel label="Imagen superior" hint="PNG o JPG de máximo 500 KB. Al guardar se comparte con todas las estaciones.">
                 <input ref={imageInputRef} className="mt-1 block w-full text-sm text-on-surface-variant file:mr-3 file:rounded-lg file:border-0 file:bg-primary-fixed file:px-3 file:py-2 file:font-semibold file:text-primary" type="file" accept="image/png,image/jpeg" onChange={(event) => selectTicketImage(event.target.files?.[0])} />
               </FieldLabel>
-              <Button size="sm" variant="secondary" onClick={() => void useCafeVeredaLogo()}><ImagePlus size={16} /> Usar logo Café Vereda</Button>
+              <Button size="sm" variant="secondary" onClick={() => void applyCafeVeredaLogo()}><ImagePlus size={16} /> Usar logo Café Vereda</Button>
               {settings.ticketImageDataUrl && <div className="flex items-center gap-3 rounded-xl bg-surface-container-low p-3"><img src={settings.ticketImageDataUrl} alt="Imagen configurada para ticket" className="h-16 w-24 rounded-lg object-contain" /><Button size="sm" variant="danger" onClick={() => { updateSettings({ ticketImageDataUrl: "" }); if (imageInputRef.current) imageInputRef.current.value = ""; }}><Trash2 size={16} /> Quitar</Button></div>}
               <FieldLabel label="Texto al final del ticket" hint="Máximo 240 caracteres."><TextField maxLength={240} value={settings.ticketFooterText} onChange={(event) => updateSettings({ ticketFooterText: event.target.value })} placeholder="Ej. Gracias por tu visita" /></FieldLabel>
               <FieldLabel label="URL para código QR" hint="Usa una dirección http:// o https://. El QR se genera y se guarda dentro del ticket.">
