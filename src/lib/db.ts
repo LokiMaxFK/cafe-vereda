@@ -1,5 +1,5 @@
 import Dexie, { type EntityTable } from "dexie";
-import type { CafeTable, CatalogExtra, Category, Order, PendingOperation, Product, StaffSession } from "../domain/types";
+import type { CafeTable, CatalogExtra, Category, InventoryCount, InventoryItem, InventoryMovement, Order, PendingOperation, Product, StaffSession } from "../domain/types";
 
 class VeredaDatabase extends Dexie {
   orders!: EntityTable<Order, "id">;
@@ -9,6 +9,9 @@ class VeredaDatabase extends Dexie {
   catalogExtras!: EntityTable<CatalogExtra, "id">;
   cafeTables!: EntityTable<CafeTable, "id">;
   sessions!: EntityTable<StaffSession, "id">;
+  inventoryItems!: EntityTable<InventoryItem, "id">;
+  inventoryCounts!: EntityTable<InventoryCount, "id">;
+  inventoryMovements!: EntityTable<InventoryMovement, "id">;
 
   constructor() {
     super("vereda-pos");
@@ -27,6 +30,18 @@ class VeredaDatabase extends Dexie {
       catalogExtras: "id, active, *productIds",
       cafeTables: "id, number",
       sessions: "id, username, validatedAt"
+    });
+    this.version(3).stores({
+      orders: "id, folio, status, tableId, openedBy, updatedAt, syncStatus",
+      pendingOperations: "id, idempotencyKey, deviceId, entityId, createdAt, status",
+      catalog: "id, categoryId, available",
+      catalogCategories: "id, name",
+      catalogExtras: "id, active, *productIds",
+      cafeTables: "id, number",
+      sessions: "id, username, validatedAt",
+      inventoryItems: "id, name, active",
+      inventoryCounts: "id, countedAt",
+      inventoryMovements: "id, itemId, recordedAt"
     });
   }
 }

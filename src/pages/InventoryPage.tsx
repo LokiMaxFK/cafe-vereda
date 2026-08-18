@@ -1,20 +1,138 @@
-import { useState } from "react";
-import { AlertTriangle, ArrowDown, ArrowUp, Boxes, History, Plus } from "lucide-react";
-import { Badge, Button, MetricCard, Page, PageHeader, Panel, SelectField, TextField } from "../../design-system/react";
+import { useEffect, useMemo, useState } from "react";
+import { AlertTriangle, ArrowDown, ArrowUp, Boxes, ClipboardCheck, History, Plus, Scale } from "lucide-react";
+import { Badge, Button, InlineAlert, LoadingState, MetricCard, Page, PageHeader, Panel, SelectField, TextField } from "../../design-system/react";
+import { createInventoryAnalysis, INVENTORY_UNITS, isInventoryVarianceAlert } from "../domain/inventory";
+import type { InventoryCount, InventoryItem, InventoryMovement, InventoryUnit } from "../domain/types";
 import { Modal } from "../components/Modal";
+import { db } from "../lib/db";
+import { queueOperation } from "../lib/offline";
+import { supabase } from "../lib/supabase";
+import { useApp } from "../state/AppContext";
 
-const seed = [
-  { id: "coffee", name: "Café en grano", unit: "kg", stock: 8.4, minimum: 3 },
-  { id: "milk", name: "Leche entera", unit: "L", stock: 14, minimum: 8 },
-  { id: "almond", name: "Bebida de almendra", unit: "L", stock: 4, minimum: 5 },
-  { id: "ice", name: "Hielo", unit: "bolsa", stock: 2, minimum: 3 },
-  { id: "cups", name: "Vasos 12 oz", unit: "pza", stock: 86, minimum: 40 },
-  { id: "napkins", name: "Servilletas", unit: "paquete", stock: 6, minimum: 4 }
+const demoItems: InventoryItem[] = [
+  { id: "coffee", name: "Café en grano", unit: "kg", minimum: 3, tolerance: 0.15, active: true },
+  { id: "milk", name: "Leche entera", unit: "L", minimum: 8, tolerance: 0.5, active: true },
+  { id: "almond", name: "Bebida de almendra", unit: "L", minimum: 5, tolerance: 0.25, active: true },
+  { id: "ice", name: "Hielo", unit: "bolsa", minimum: 3, tolerance: 1, active: true }
 ];
+const demoCounts: InventoryCount[] = [
+  { id: "base", countedAt: new Date(Date.now() - 86_400_000).toISOString(), lines: [{ itemId: "coffee", quantity: 8.4 }, { itemId: "milk", quantity: 14 }, { itemId: "almond", quantity: 4 }, { itemId: "ice", quantity: 2 }] },
+  { id: "today", countedAt: new Date().toISOString(), lines: [{ itemId: "coffee", quantity: 7.9 }, { itemId: "milk", quantity: 12.5 }] }
+];
+const demoMovements: InventoryMovement[] = [{ id: "entry", itemId: "coffee", type: "entry", quantity: 1, note: "Recepción", recordedAt: new Date(Date.now() - 43_200_000).toISOString() }];
+
+function remoteItem(row: Record<string, unknown>): InventoryItem {
+  return { id: String(row.id), name: String(row.name), unit: String(row.unit) as InventoryUnit, minimum: Number(row.minimum_quantity), tolerance: Number(row.tolerance_quantity ?? 0), active: Boolean(row.active), updatedAt: String(row.updated_at ?? "") };
+}
+function remoteCount(row: Record<string, unknown>): InventoryCount {
+  const lines = (row.inventory_count_lines as Array<Record<string, unknown>> | null) ?? [];
+  return { id: String(row.id), countedAt: String(row.counted_at), note: row.note ? String(row.note) : undefined, recordedBy: row.recorded_by ? String(row.recorded_by) : undefined, lines: lines.map((line) => ({ itemId: String(line.inventory_item_id), quantity: Number(line.quantity) })) };
+}
+function remoteMovement(row: Record<string, unknown>): InventoryMovement {
+  return { id: String(row.id), itemId: String(row.inventory_item_id), type: row.movement_type as "entry" | "waste", quantity: Number(row.quantity), note: String(row.note), recordedAt: String(row.created_at), recordedBy: row.recorded_by ? String(row.recorded_by) : undefined };
+}
+const amount = (value: number, unit: string) => `${Number(value.toFixed(3))} ${unit}`;
 
 export function InventoryPage() {
-  const [items, setItems] = useState(seed); const [movementOpen, setMovementOpen] = useState(false); const [selected, setSelected] = useState(seed[0].id); const [type, setType] = useState("entry"); const [quantity, setQuantity] = useState(""); const [note, setNote] = useState(""); const [movements, setMovements] = useState([{ item: "Café en grano", type: "Entrada", quantity: "+5 kg", time: "Hoy, 08:14" }, { item: "Leche entera", type: "Consumo diario", quantity: "-6 L", time: "Ayer, 19:46" }]);
-  const low = items.filter((item) => item.stock <= item.minimum);
-  function record() { const value = Number(quantity); if (!value || !note.trim()) return; const target = items.find((item) => item.id === selected)!; const positive = type === "entry" || type === "adjustment"; setItems((current) => current.map((item) => item.id === selected ? { ...item, stock: Math.max(0, item.stock + (positive ? value : -value)) } : item)); setMovements((current) => [{ item: target.name, type: ({ entry: "Entrada", daily_consumption: "Consumo diario", waste: "Merma", withdrawal: "Retiro", adjustment: "Ajuste" } as Record<string, string>)[type], quantity: `${positive ? "+" : "-"}${value} ${target.unit}`, time: "Ahora" }, ...current]); setMovementOpen(false); setQuantity(""); setNote(""); }
-  return <Page size="wide"><PageHeader eyebrow="CONTROL INDEPENDIENTE" title="Insumos" description="Existencias y movimientos sin afectar automáticamente el menú." action={<Button variant="primary" onClick={() => setMovementOpen(true)}><Plus size={18} /> Registrar movimiento</Button>} /><div className="grid gap-4 sm:grid-cols-3"><MetricCard icon={<Boxes />} label="Insumos activos" value={items.length} detail="Unidades configuradas" tone="primary" /><MetricCard icon={<AlertTriangle />} label="Bajo mínimo" value={low.length} detail={low.map((item) => item.name).join(", ")} tone={low.length ? "danger" : "success"} /><MetricCard icon={<History />} label="Movimientos hoy" value={movements.filter((item) => item.time.startsWith("Hoy") || item.time === "Ahora").length} detail="Kardex actualizado" /></div><div className="mt-6 grid gap-6 lg:grid-cols-[1fr_400px]"><Panel className="overflow-hidden"><div className="border-b border-outline-variant/30 p-5"><h2 className="text-lg font-bold">Existencias</h2></div><div className="divide-y divide-outline-variant/25">{items.map((item) => { const alert = item.stock <= item.minimum; return <div key={item.id} className="flex items-center justify-between gap-4 px-5 py-4"><div><div className="flex items-center gap-2"><p className="font-semibold">{item.name}</p>{alert && <Badge tone="danger">Reponer</Badge>}</div><p className="text-xs text-on-surface-variant">Mínimo {item.minimum} {item.unit}</p></div><p className={`text-xl font-bold ${alert ? "text-error" : "text-on-surface"}`}>{item.stock} <span className="text-xs font-semibold text-on-surface-variant">{item.unit}</span></p></div>; })}</div></Panel><Panel className="p-5"><h2 className="text-lg font-bold">Últimos movimientos</h2><div className="mt-4 space-y-4">{movements.map((movement, index) => <div key={`${movement.item}-${index}`} className="flex gap-3"><span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${movement.quantity.startsWith("+") ? "bg-tertiary-fixed text-tertiary" : "bg-error-container text-error"}`}>{movement.quantity.startsWith("+") ? <ArrowUp size={17} /> : <ArrowDown size={17} />}</span><div className="min-w-0 flex-1"><div className="flex justify-between gap-3"><p className="truncate font-semibold">{movement.item}</p><strong className="shrink-0 text-sm">{movement.quantity}</strong></div><p className="text-xs text-on-surface-variant">{movement.type} · {movement.time}</p></div></div>)}</div></Panel></div>{movementOpen && <Modal title="Movimiento de insumo" description="Cada registro se agrega al kardex y no se elimina." onClose={() => setMovementOpen(false)}><div className="space-y-4"><label className="block text-sm font-semibold">Insumo<SelectField value={selected} onChange={(event) => setSelected(event.target.value)}>{items.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</SelectField></label><label className="block text-sm font-semibold">Tipo<SelectField value={type} onChange={(event) => setType(event.target.value)}><option value="entry">Entrada</option><option value="daily_consumption">Consumo diario</option><option value="waste">Merma</option><option value="withdrawal">Retiro</option><option value="adjustment">Ajuste positivo</option></SelectField></label><label className="block text-sm font-semibold">Cantidad<TextField type="number" min="0.01" step="0.01" value={quantity} onChange={(event) => setQuantity(event.target.value)} /></label><label className="block text-sm font-semibold">Nota<TextField value={note} onChange={(event) => setNote(event.target.value)} placeholder="Motivo del movimiento" /></label><Button variant="primary" className="w-full" disabled={!Number(quantity) || !note.trim()} onClick={record}>Guardar en kardex</Button></div></Modal>}</Page>;
+  const { session, forceSync } = useApp();
+  const [items, setItems] = useState<InventoryItem[]>(demoItems);
+  const [counts, setCounts] = useState<InventoryCount[]>(demoCounts);
+  const [movements, setMovements] = useState<InventoryMovement[]>(demoMovements);
+  const [expected, setExpected] = useState<Record<string, number>>({});
+  const [loading, setLoading] = useState(Boolean(supabase));
+  const [error, setError] = useState("");
+  const [modal, setModal] = useState<"count" | "movement" | "item" | null>(null);
+  const [selected, setSelected] = useState("");
+  const [quantity, setQuantity] = useState("");
+  const [note, setNote] = useState("");
+  const [movementType, setMovementType] = useState<"entry" | "waste">("entry");
+  const [itemName, setItemName] = useState("");
+  const [unit, setUnit] = useState<InventoryUnit | "">("");
+  const [minimum, setMinimum] = useState("");
+  const [tolerance, setTolerance] = useState("");
+
+  const load = async () => {
+    if (!supabase) return;
+    setLoading(true); setError("");
+    const since = new Date(Date.now() - 31 * 86_400_000).toISOString();
+    const [itemResult, countResult, movementResult, usageResult] = await Promise.all([
+      supabase.from("inventory_items").select("id,name,unit,minimum_quantity,tolerance_quantity,active,updated_at").order("name"),
+      supabase.from("inventory_counts").select("id,counted_at,note,recorded_by,inventory_count_lines(inventory_item_id,quantity)").order("counted_at", { ascending: false }).limit(500),
+      supabase.from("inventory_movements").select("id,inventory_item_id,movement_type,quantity,note,created_at,recorded_by").in("movement_type", ["entry", "waste"]).gte("created_at", since).order("created_at", { ascending: false }).limit(500),
+      supabase.from("inventory_usage_events").select("occurred_at,inventory_usage_lines(inventory_item_id,quantity)").gte("occurred_at", since)
+    ]);
+    const resultError = itemResult.error || countResult.error || movementResult.error || usageResult.error;
+    if (resultError) setError(resultError.message);
+    else {
+      const nextItems = (itemResult.data ?? []).map((row) => remoteItem(row as Record<string, unknown>));
+      const nextCounts = (countResult.data ?? []).map((row) => remoteCount(row as Record<string, unknown>));
+      const nextMovements = (movementResult.data ?? []).map((row) => remoteMovement(row as Record<string, unknown>));
+      setItems(nextItems); setCounts(nextCounts); setMovements(nextMovements);
+      await Promise.all([db.inventoryItems.bulkPut(nextItems), db.inventoryCounts.bulkPut(nextCounts), db.inventoryMovements.bulkPut(nextMovements)]);
+      const totals: Record<string, number> = {};
+      for (const event of usageResult.data ?? []) for (const line of (event.inventory_usage_lines ?? []) as Array<{ inventory_item_id: string; quantity: number }>) totals[line.inventory_item_id] = (totals[line.inventory_item_id] ?? 0) + Number(line.quantity);
+      setExpected(totals);
+    }
+    setLoading(false);
+  };
+  useEffect(() => { if (supabase) void Promise.all([db.inventoryItems.toArray(), db.inventoryCounts.toArray(), db.inventoryMovements.toArray()]).then(([savedItems, savedCounts, savedMovements]) => { if (savedItems.length) setItems(savedItems); if (savedCounts.length) setCounts(savedCounts); if (savedMovements.length) setMovements(savedMovements); }); void load(); }, []);
+  useEffect(() => { if (!selected && items.length) setSelected(items[0].id); }, [items, selected]);
+
+  const range = useMemo(() => ({ start: new Date(Date.now() - 30 * 86_400_000).toISOString(), end: new Date().toISOString() }), []);
+  const analysis = useMemo(() => createInventoryAnalysis(items, counts, movements, expected, range.start, range.end), [items, counts, movements, expected, range]);
+  const latestFor = (id: string) => counts.filter((count) => count.lines.some((line) => line.itemId === id)).sort((a, b) => b.countedAt.localeCompare(a.countedAt))[0];
+  const low = items.filter((item) => { const value = latestFor(item.id)?.lines.find((line) => line.itemId === item.id)?.quantity; return value !== undefined && value <= item.minimum; });
+  const close = () => { setModal(null); setQuantity(""); setNote(""); setItemName(""); setUnit(""); setMinimum(""); setTolerance(""); };
+
+  async function saveCount() {
+    const value = Number(quantity); if (!selected || !Number.isFinite(value) || value < 0) return;
+    const count: InventoryCount = { id: crypto.randomUUID(), countedAt: new Date().toISOString(), note: note.trim() || undefined, recordedBy: session?.id, lines: [{ itemId: selected, quantity: value }] };
+    setError("");
+    try {
+      if (supabase) { await db.inventoryCounts.put(count); await queueOperation("record_inventory_count", count.id, count); void forceSync(); }
+      setCounts((current) => [count, ...current]); close();
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "No se pudo guardar el conteo."); }
+  }
+  async function saveMovement() {
+    const value = Number(quantity); if (!selected || !Number.isFinite(value) || value <= 0 || !note.trim()) return;
+    const movement: InventoryMovement = { id: crypto.randomUUID(), itemId: selected, type: movementType, quantity: value, note: note.trim(), recordedAt: new Date().toISOString(), recordedBy: session?.id };
+    setError("");
+    try {
+      if (supabase) { await db.inventoryMovements.put(movement); await queueOperation("record_inventory_movement", movement.id, movement); void forceSync(); }
+      setMovements((current) => [movement, ...current]); close();
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "No se pudo guardar el movimiento."); }
+  }
+  async function saveItem() {
+    if (!itemName.trim() || !unit || Number(minimum) < 0 || Number(tolerance) < 0) return;
+    const next: InventoryItem = { id: crypto.randomUUID(), name: itemName.trim(), unit, minimum: Number(minimum), tolerance: Number(tolerance), active: true };
+    try {
+      if (supabase) {
+        const { error: insertError } = await supabase.from("inventory_items").insert({ id: next.id, name: next.name, unit: next.unit, minimum_quantity: next.minimum, tolerance_quantity: next.tolerance, active: true });
+        if (insertError) throw insertError;
+      }
+      if (supabase) await db.inventoryItems.put(next);
+      setItems((current) => [...current, next].sort((a, b) => a.name.localeCompare(b.name, "es"))); close();
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "No se pudo crear el insumo."); }
+  }
+
+  return <Page size="wide">
+    <PageHeader eyebrow="CONTEO Y CONSUMO" title="Insumos" description="Los conteos son la existencia física. Las recetas sólo generan indicadores y nunca descuentan stock." action={<div className="flex flex-wrap gap-2"><Button onClick={() => setModal("item")}><Plus size={18} /> Nuevo insumo</Button><Button variant="primary" onClick={() => setModal("count")}><ClipboardCheck size={18} /> Registrar conteo</Button></div>} />
+    {error && <div className="mb-5"><InlineAlert>{error}</InlineAlert></div>}
+    {loading ? <LoadingState label="Cargando conteos e indicadores…" /> : <>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard icon={<Boxes />} label="Insumos activos" value={items.filter((item) => item.active).length} detail="Con unidad, mínimo y tolerancia" tone="primary" />
+        <MetricCard icon={<AlertTriangle />} label="Bajo mínimo" value={low.length} detail={low.length ? low.map((item) => item.name).join(", ") : "Sin alertas de reposición"} tone={low.length ? "danger" : "success"} />
+        <MetricCard icon={<Scale />} label="Variaciones" value={analysis.filter(isInventoryVarianceAlert).length} detail="Fuera de su tolerancia" tone={analysis.some(isInventoryVarianceAlert) ? "danger" : "success"} />
+        <MetricCard icon={<History />} label="Conteos registrados" value={counts.length} detail="Cada lectura permanece auditable" />
+      </div>
+      <div className="mt-6 grid gap-6 xl:grid-cols-[1fr_380px]">
+        <Panel className="overflow-hidden"><div className="flex items-center justify-between gap-3 border-b border-outline-variant/30 p-5"><div><h2 className="text-lg font-bold">Existencia contada</h2><p className="text-sm text-on-surface-variant">Última lectura física por insumo.</p></div><Button size="sm" onClick={() => setModal("movement")}><Plus size={16} /> Entrada o merma</Button></div><div className="divide-y divide-outline-variant/25">{items.map((item) => { const latest = latestFor(item.id); const value = latest?.lines.find((line) => line.itemId === item.id)?.quantity; const alert = value !== undefined && value <= item.minimum; return <div key={item.id} className="flex items-center justify-between gap-4 px-5 py-4"><div><div className="flex items-center gap-2"><p className="font-semibold">{item.name}</p>{alert && <Badge tone="danger">Reponer</Badge>}</div><p className="text-xs text-on-surface-variant">Mínimo {amount(item.minimum, item.unit)} · tolerancia ±{amount(item.tolerance, item.unit)}{latest ? ` · contado ${new Intl.DateTimeFormat("es-MX", { dateStyle: "short", timeStyle: "short" }).format(new Date(latest.countedAt))}` : " · pendiente de línea base"}</p></div><p className={`text-xl font-bold ${alert ? "text-error" : "text-on-surface"}`}>{value === undefined ? "—" : amount(value, item.unit)}</p></div>; })}</div></Panel>
+        <Panel className="p-5"><h2 className="text-lg font-bold">Últimos registros</h2><div className="mt-4 space-y-4">{[...movements].slice(0, 6).map((movement) => { const item = items.find((current) => current.id === movement.itemId); const positive = movement.type === "entry"; return <div key={movement.id} className="flex gap-3"><span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${positive ? "bg-tertiary-fixed text-tertiary" : "bg-error-container text-error"}`}>{positive ? <ArrowUp size={17} /> : <ArrowDown size={17} />}</span><div><div className="flex gap-2"><p className="font-semibold">{item?.name ?? "Insumo"}</p><strong>{positive ? "+" : "−"}{amount(movement.quantity, item?.unit ?? "")}</strong></div><p className="text-xs text-on-surface-variant">{positive ? "Entrada" : "Merma"} · {movement.note}</p></div></div>; })}{!movements.length && <p className="text-sm text-on-surface-variant">Aún no hay entradas ni mermas.</p>}</div></Panel>
+      </div>
+      <Panel className="mt-6 overflow-hidden"><div className="border-b border-outline-variant/30 p-5"><p className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Indicador de los últimos 30 días</p><h2 className="mt-1 text-lg font-bold">Consumo contado vs. receta teórica</h2></div><div className="overflow-x-auto"><table className="w-full min-w-[900px] text-left text-sm"><thead className="bg-surface-container-low text-xs uppercase tracking-wider text-on-surface-variant"><tr><th className="px-5 py-3">Insumo</th><th className="px-5 py-3 text-right">Entradas</th><th className="px-5 py-3 text-right">Mermas</th><th className="px-5 py-3 text-right">Físico</th><th className="px-5 py-3 text-right">Teórico</th><th className="px-5 py-3 text-right">Diferencia</th></tr></thead><tbody className="divide-y divide-outline-variant/25">{analysis.map((row) => <tr key={row.item.id}><td className="px-5 py-4"><p className="font-semibold">{row.item.name}</p><p className="text-xs text-on-surface-variant">{row.openingAt && row.closingAt ? "Con dos conteos comparables" : "Falta línea base o segundo conteo"}</p></td><td className="px-5 py-4 text-right">{amount(row.entries, row.item.unit)}</td><td className="px-5 py-4 text-right">{amount(row.waste, row.item.unit)}</td><td className="px-5 py-4 text-right font-semibold">{row.physical === undefined ? "—" : amount(row.physical, row.item.unit)}</td><td className="px-5 py-4 text-right">{amount(row.theoretical, row.item.unit)}</td><td className={`px-5 py-4 text-right font-bold ${isInventoryVarianceAlert(row) ? "text-error" : ""}`}>{row.variance === undefined ? "—" : `${row.variance > 0 ? "+" : ""}${amount(row.variance, row.item.unit)}`}</td></tr>)}</tbody></table></div></Panel>
+    </>}
+    {modal === "count" && <Modal title="Conteo parcial" description="Registra la lectura física de un insumo. No modifica un stock calculado." onClose={close}><div className="space-y-4"><label className="block text-sm font-semibold">Insumo<SelectField value={selected} onChange={(event) => setSelected(event.target.value)}>{items.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</SelectField></label><label className="block text-sm font-semibold">Cantidad contada<TextField type="number" min="0" step="0.001" value={quantity} onChange={(event) => setQuantity(event.target.value)} /></label><label className="block text-sm font-semibold">Nota (opcional)<TextField value={note} onChange={(event) => setNote(event.target.value)} placeholder="Ej. cierre de turno" /></label><Button variant="primary" className="w-full" onClick={() => void saveCount()} disabled={!selected || quantity === ""}>Guardar conteo</Button></div></Modal>}
+    {modal === "movement" && <Modal title="Entrada o merma" description="Este registro explica el cambio entre conteos; no altera el último conteo." onClose={close}><div className="space-y-4"><label className="block text-sm font-semibold">Insumo<SelectField value={selected} onChange={(event) => setSelected(event.target.value)}>{items.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</SelectField></label><label className="block text-sm font-semibold">Tipo<SelectField value={movementType} onChange={(event) => setMovementType(event.target.value as "entry" | "waste")}><option value="entry">Entrada</option><option value="waste">Merma</option></SelectField></label><label className="block text-sm font-semibold">Cantidad<TextField type="number" min="0.001" step="0.001" value={quantity} onChange={(event) => setQuantity(event.target.value)} /></label><label className="block text-sm font-semibold">Nota<TextField value={note} onChange={(event) => setNote(event.target.value)} placeholder="Proveedor o motivo" /></label><Button variant="primary" className="w-full" onClick={() => void saveMovement()} disabled={!selected || !Number(quantity) || !note.trim()}>Guardar registro</Button></div></Modal>}
+    {modal === "item" && <Modal title="Nuevo insumo" description="Configura una unidad estándar para los conteos y el margen aceptable de variación." onClose={close}><div className="space-y-4"><label className="block text-sm font-semibold">Nombre<TextField value={itemName} onChange={(event) => setItemName(event.target.value)} placeholder="Ej. Café en grano" /></label><label className="block text-sm font-semibold">Unidad<SelectField value={unit} onChange={(event) => setUnit(event.target.value as InventoryUnit)}><option value="">Selecciona una unidad</option>{INVENTORY_UNITS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</SelectField></label><label className="block text-sm font-semibold">Mínimo<TextField type="number" min="0" step="0.001" value={minimum} onChange={(event) => setMinimum(event.target.value)} /></label><label className="block text-sm font-semibold">Tolerancia<TextField type="number" min="0" step="0.001" value={tolerance} onChange={(event) => setTolerance(event.target.value)} /></label><Button variant="primary" className="w-full" onClick={() => void saveItem()} disabled={!itemName.trim() || !unit || minimum === "" || tolerance === ""}>Crear insumo</Button></div></Modal>}
+  </Page>;
 }

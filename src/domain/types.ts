@@ -5,6 +5,7 @@ export type OrderItemStatus = "pending" | "dispatched" | "prepared" | "cancelled
 export type PaymentMethod = "cash" | "card" | "transfer";
 export type CashMovementType = "opening" | "withdrawal" | "adjustment" | "closing";
 export type InventoryMovementType = "entry" | "daily_consumption" | "waste" | "withdrawal" | "adjustment";
+export type InventoryUnit = "g" | "kg" | "ml" | "L" | "pza" | "paquete" | "bolsa";
 export type SyncStatus = "pending" | "syncing" | "synced" | "review_required";
 
 export interface StaffSession {
@@ -92,6 +93,40 @@ export interface CashSession {
   countedCash?: number;
   expectedCash?: number;
   difference?: number;
+}
+export interface InventoryItem {
+  id: string;
+  name: string;
+  unit: InventoryUnit;
+  minimum: number;
+  tolerance: number;
+  active: boolean;
+  updatedAt?: string;
+}
+export interface InventoryMovement {
+  id: string;
+  itemId: string;
+  type: "entry" | "waste";
+  quantity: number;
+  note: string;
+  recordedAt: string;
+  recordedBy?: string;
+}
+export interface InventoryCountLine { itemId: string; quantity: number; }
+export interface InventoryCount {
+  id: string;
+  countedAt: string;
+  note?: string;
+  recordedBy?: string;
+  lines: InventoryCountLine[];
+}
+export interface RecipeLine { inventoryItemId: string; quantity: number; }
+export interface InventoryRecipe {
+  id: string;
+  productId: string;
+  variantName?: string;
+  active: boolean;
+  lines: RecipeLine[];
 }
 export interface PendingOperation {
   id: string;
