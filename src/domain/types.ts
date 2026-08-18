@@ -25,13 +25,12 @@ export interface Product {
   price: number;
   variants?: ProductVariant[];
   available: boolean;
-  schedule?: string;
-  modifierIds?: string[];
+  seasonal: boolean;
+  imageUrl?: string;
 }
 export interface OrderModifier { id: string; name: string; price: number; }
 export interface CatalogExtra extends OrderModifier {
   active: boolean;
-  productIds: string[];
 }
 export interface OrderItem {
   id: string;

@@ -10,16 +10,8 @@ import { isSupabaseConfigured, supabase, usernameToInternalEmail } from "../lib/
 
 const now = new Date();
 const minutesAgo = (minutes: number) => new Date(now.getTime() - minutes * 60_000).toISOString();
-const initialExtraIds = initialExtras.map((extra) => extra.id);
-const demoProducts: Product[] = initialProducts.map((product) => ({
-  ...product,
-  modifierIds: product.categoryId === "coffee" ? initialExtraIds : []
-}));
-const demoExtras: CatalogExtra[] = initialExtras.map((extra) => ({
-  ...extra,
-  active: true,
-  productIds: demoProducts.filter((product) => product.modifierIds?.includes(extra.id)).map((product) => product.id)
-}));
+const demoProducts: Product[] = initialProducts.map((product) => ({ ...product, seasonal: false }));
+const demoExtras: CatalogExtra[] = initialExtras.map((extra) => ({ ...extra, active: true }));
 
 const sampleOrders: Order[] = [
   {
@@ -76,8 +68,14 @@ interface AppContextValue {
   updateTable: (tableId: string, patch: Partial<Pick<CafeTable, "seats" | "shape" | "x" | "y" | "active">>) => Promise<void>;
   createProduct: (product: Omit<Product, "id">) => Promise<Product>;
   updateProduct: (productId: string, patch: Partial<Omit<Product, "id">>) => Promise<void>;
+  deleteProduct: (productId: string) => Promise<void>;
   createExtra: (extra: Omit<CatalogExtra, "id" | "active">) => Promise<CatalogExtra>;
   updateExtra: (extraId: string, patch: Partial<Omit<CatalogExtra, "id">>) => Promise<void>;
+  deleteExtra: (extraId: string) => Promise<void>;
+  createCategory: (name: string) => Promise<Category>;
+  updateCategory: (categoryId: string, name: string) => Promise<void>;
+  deleteCategory: (categoryId: string) => Promise<void>;
+  uploadProductImage: (file: File) => Promise<string>;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -183,16 +181,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const pullRemoteCatalog = useCallback(async () => {
     if (!supabase || !navigator.onLine) return;
-    const [categoryResult, productResult, variantResult, extraResult, assignmentResult] = await Promise.all([
+    const [categoryResult, productResult, variantResult, extraResult] = await Promise.all([
       supabase.from("categories").select("id, name").eq("active", true).order("position"),
-      supabase.from("products").select("id, category_id, name, description, price_cents, available, schedule_label").eq("active", true).order("name"),
+      supabase.from("products").select("id, category_id, name, description, price_cents, available, seasonal, image_url").eq("active", true).order("name"),
       supabase.from("product_variants").select("id, product_id, name, price_cents").eq("active", true),
-      supabase.from("modifiers").select("id, name, price_cents, active").eq("active", true).order("name"),
-      supabase.from("product_modifiers").select("product_id, modifier_id")
+      supabase.from("modifiers").select("id, name, price_cents, active").eq("active", true).order("name")
     ]);
-    const error = categoryResult.error || productResult.error || variantResult.error || extraResult.error || assignmentResult.error;
+    const error = categoryResult.error || productResult.error || variantResult.error || extraResult.error;
     if (error) throw new Error(error.message);
-    const assignments = assignmentResult.data ?? [];
     const remoteCategories: Category[] = (categoryResult.data ?? []).map((row) => ({ id: row.id, name: row.name }));
     const remoteProducts: Product[] = (productResult.data ?? []).map((row) => ({
       id: row.id,
@@ -201,16 +197,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
       description: row.description ?? undefined,
       price: Number(row.price_cents) / 100,
       available: row.available,
-      schedule: row.schedule_label ?? undefined,
-      variants: (variantResult.data ?? []).filter((variant) => variant.product_id === row.id).map((variant) => ({ id: variant.id, name: variant.name, price: Number(variant.price_cents) / 100 })),
-      modifierIds: assignments.filter((assignment) => assignment.product_id === row.id).map((assignment) => assignment.modifier_id)
+      seasonal: row.seasonal,
+      imageUrl: row.image_url ?? undefined,
+      variants: (variantResult.data ?? []).filter((variant) => variant.product_id === row.id).map((variant) => ({ id: variant.id, name: variant.name, price: Number(variant.price_cents) / 100 }))
     }));
     const remoteExtras: CatalogExtra[] = (extraResult.data ?? []).map((row) => ({
       id: row.id,
       name: row.name,
       price: Number(row.price_cents) / 100,
-      active: row.active,
-      productIds: assignments.filter((assignment) => assignment.modifier_id === row.id).map((assignment) => assignment.product_id)
+      active: row.active
     }));
     await Promise.all([
       db.catalog.clear().then(() => db.catalog.bulkPut(remoteProducts)),
@@ -399,24 +394,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (supabase) {
       const { error } = await supabase.from("products").insert({
         id: product.id, category_id: product.categoryId, name: product.name, description: product.description ?? null,
-        price_cents: Math.round(product.price * 100), available: product.available, schedule_label: product.schedule ?? null, active: true
+        price_cents: Math.round(product.price * 100), available: product.available, seasonal: product.seasonal, image_url: product.imageUrl ?? null, active: true
       });
       if (error) throw new Error(error.message);
       if (product.variants?.length) {
         const { error: variantError } = await supabase.from("product_variants").insert(product.variants.map((variant) => ({ id: variant.id, product_id: product.id, name: variant.name, price_cents: Math.round(variant.price * 100), active: true })));
         if (variantError) throw new Error(variantError.message);
       }
-      if (product.modifierIds?.length) {
-        const { error: assignmentError } = await supabase.from("product_modifiers").insert(product.modifierIds.map((modifierId) => ({ product_id: product.id, modifier_id: modifierId })));
-        if (assignmentError) throw new Error(assignmentError.message);
-      }
     }
     await db.catalog.put(product);
     setProducts((current) => [...current, product].sort((a, b) => a.name.localeCompare(b.name, "es")));
-    setExtras((current) => current.map((extra) => product.modifierIds?.includes(extra.id) ? { ...extra, productIds: [...extra.productIds, product.id] } : extra));
-    await db.catalogExtras.bulkPut(extras.map((extra) => product.modifierIds?.includes(extra.id) ? { ...extra, productIds: [...extra.productIds, product.id] } : extra));
     return product;
-  }, [session, extras]);
+  }, [session]);
 
   const updateProduct = useCallback(async (productId: string, patch: Partial<Omit<Product, "id">>) => {
     if (session?.role !== "manager") throw new Error("Sólo gerencia puede editar el catálogo.");
@@ -427,30 +416,35 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (supabase) {
       const { error } = await supabase.from("products").update({
         category_id: next.categoryId, name: next.name, description: next.description ?? null,
-        price_cents: Math.round(next.price * 100), available: next.available, schedule_label: next.schedule ?? null
+        price_cents: Math.round(next.price * 100), available: next.available, seasonal: next.seasonal, image_url: next.imageUrl ?? null
       }).eq("id", productId);
       if (error) throw new Error(error.message);
-      if (next.variants?.length) {
-        const { error: variantError } = await supabase.from("product_variants").upsert(next.variants.map((variant) => ({ id: variant.id, product_id: productId, name: variant.name, price_cents: Math.round(variant.price * 100), active: true })));
-        if (variantError) throw new Error(variantError.message);
-      }
-      if (patch.modifierIds) {
-        const { error: clearError } = await supabase.from("product_modifiers").delete().eq("product_id", productId);
-        if (clearError) throw new Error(clearError.message);
-        if (next.modifierIds?.length) {
-          const { error: assignmentError } = await supabase.from("product_modifiers").insert(next.modifierIds.map((modifierId) => ({ product_id: productId, modifier_id: modifierId })));
-          if (assignmentError) throw new Error(assignmentError.message);
+      if (patch.variants) {
+        const removedVariantIds = (current.variants ?? []).map((variant) => variant.id).filter((id) => !next.variants?.some((variant) => variant.id === id));
+        if (removedVariantIds.length) {
+          const { error: removeError } = await supabase.from("product_variants").delete().in("id", removedVariantIds);
+          if (removeError) throw new Error(removeError.message);
+        }
+        if (next.variants?.length) {
+          const { error: variantError } = await supabase.from("product_variants").upsert(next.variants.map((variant) => ({ id: variant.id, product_id: productId, name: variant.name, price_cents: Math.round(variant.price * 100), active: true })));
+          if (variantError) throw new Error(variantError.message);
         }
       }
     }
     await db.catalog.put(next);
-    const nextExtras = extras.map((extra) => next.modifierIds?.includes(extra.id)
-      ? { ...extra, productIds: Array.from(new Set([...extra.productIds, productId])) }
-      : { ...extra, productIds: extra.productIds.filter((id) => id !== productId) });
-    await db.catalogExtras.bulkPut(nextExtras);
     setProducts((items) => items.map((product) => product.id === productId ? next : product).sort((a, b) => a.name.localeCompare(b.name, "es")));
-    setExtras(nextExtras);
-  }, [session, products, extras]);
+  }, [session, products]);
+
+  const deleteProduct = useCallback(async (productId: string) => {
+    if (session?.role !== "manager") throw new Error("Sólo gerencia puede editar el catálogo.");
+    if (isSupabaseConfigured && !navigator.onLine) throw new Error("Necesitas conexión para modificar el catálogo.");
+    if (supabase) {
+      const { error } = await supabase.from("products").update({ active: false }).eq("id", productId);
+      if (error) throw new Error(error.message);
+    }
+    await db.catalog.delete(productId);
+    setProducts((items) => items.filter((product) => product.id !== productId));
+  }, [session]);
 
   const createExtra = useCallback(async (input: Omit<CatalogExtra, "id" | "active">) => {
     if (session?.role !== "manager") throw new Error("Sólo gerencia puede editar los extras.");
@@ -459,17 +453,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (supabase) {
       const { error } = await supabase.from("modifiers").insert({ id: extra.id, name: extra.name, price_cents: Math.round(extra.price * 100), active: true });
       if (error) throw new Error(error.message);
-      if (extra.productIds.length) {
-        const { error: assignmentError } = await supabase.from("product_modifiers").insert(extra.productIds.map((productId) => ({ product_id: productId, modifier_id: extra.id })));
-        if (assignmentError) throw new Error(assignmentError.message);
-      }
     }
-    const nextProducts = products.map((product) => extra.productIds.includes(product.id) ? { ...product, modifierIds: [...(product.modifierIds ?? []), extra.id] } : product);
-    await Promise.all([db.catalogExtras.put(extra), db.catalog.bulkPut(nextProducts)]);
+    await db.catalogExtras.put(extra);
     setExtras((current) => [...current, extra].sort((a, b) => a.name.localeCompare(b.name, "es")));
-    setProducts(nextProducts);
     return extra;
-  }, [session, products]);
+  }, [session]);
 
   const updateExtra = useCallback(async (extraId: string, patch: Partial<Omit<CatalogExtra, "id">>) => {
     if (session?.role !== "manager") throw new Error("Sólo gerencia puede editar los extras.");
@@ -480,24 +468,88 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (supabase) {
       const { error } = await supabase.from("modifiers").update({ name: next.name, price_cents: Math.round(next.price * 100), active: next.active }).eq("id", extraId);
       if (error) throw new Error(error.message);
-      if (patch.productIds) {
-        const { error: clearError } = await supabase.from("product_modifiers").delete().eq("modifier_id", extraId);
-        if (clearError) throw new Error(clearError.message);
-        if (next.productIds.length) {
-          const { error: assignmentError } = await supabase.from("product_modifiers").insert(next.productIds.map((productId) => ({ product_id: productId, modifier_id: extraId })));
-          if (assignmentError) throw new Error(assignmentError.message);
-        }
-      }
     }
-    const nextProducts = products.map((product) => next.productIds.includes(product.id)
-      ? { ...product, modifierIds: Array.from(new Set([...(product.modifierIds ?? []), extraId])) }
-      : { ...product, modifierIds: (product.modifierIds ?? []).filter((id) => id !== extraId) });
-    await Promise.all([db.catalogExtras.put(next), db.catalog.bulkPut(nextProducts)]);
+    await db.catalogExtras.put(next);
     setExtras((items) => items.map((extra) => extra.id === extraId ? next : extra).sort((a, b) => a.name.localeCompare(b.name, "es")));
-    setProducts(nextProducts);
-  }, [session, extras, products]);
+  }, [session, extras]);
 
-  const value = useMemo(() => ({ session, hydrated, orders, tables, products, categories, extras, online, syncStatus, pendingCount, demoMode: !isSupabaseConfigured, login, logout, startOrder, addItem, changeQuantity, cancelCommandedItem, dispatchPending, markOrderReady, finalizeOrder, addPayment, closeOrder, setDiscount, cancelOrder, reverseSale, forceSync, addTable, updateTable, createProduct, updateProduct, createExtra, updateExtra }), [session, hydrated, orders, tables, products, categories, extras, online, syncStatus, pendingCount, login, logout, startOrder, addItem, changeQuantity, cancelCommandedItem, dispatchPending, markOrderReady, finalizeOrder, addPayment, closeOrder, setDiscount, cancelOrder, reverseSale, forceSync, addTable, updateTable, createProduct, updateProduct, createExtra, updateExtra]);
+  const deleteExtra = useCallback(async (extraId: string) => {
+    if (session?.role !== "manager") throw new Error("Sólo gerencia puede editar los extras.");
+    if (isSupabaseConfigured && !navigator.onLine) throw new Error("Necesitas conexión para modificar los extras.");
+    if (supabase) {
+      const { error } = await supabase.from("modifiers").update({ active: false }).eq("id", extraId);
+      if (error) throw new Error(error.message);
+    }
+    await db.catalogExtras.delete(extraId);
+    setExtras((items) => items.filter((extra) => extra.id !== extraId));
+  }, [session]);
+
+  const createCategory = useCallback(async (name: string) => {
+    if (session?.role !== "manager") throw new Error("Sólo gerencia puede editar las categorías.");
+    if (isSupabaseConfigured && !navigator.onLine) throw new Error("Necesitas conexión para modificar las categorías.");
+    const category: Category = { id: crypto.randomUUID(), name };
+    if (supabase) {
+      const { error } = await supabase.from("categories").insert({ id: category.id, name, position: categories.length, active: true, published: true });
+      if (error) throw new Error(error.message);
+    }
+    await db.catalogCategories.put(category);
+    setCategories((current) => [...current, category]);
+    return category;
+  }, [session, categories]);
+
+  const updateCategory = useCallback(async (categoryId: string, name: string) => {
+    if (session?.role !== "manager") throw new Error("Sólo gerencia puede editar las categorías.");
+    if (isSupabaseConfigured && !navigator.onLine) throw new Error("Necesitas conexión para modificar las categorías.");
+    if (supabase) {
+      const { error } = await supabase.from("categories").update({ name }).eq("id", categoryId);
+      if (error) throw new Error(error.message);
+    }
+    await db.catalogCategories.put({ id: categoryId, name });
+    setCategories((items) => items.map((category) => category.id === categoryId ? { ...category, name } : category));
+  }, [session]);
+
+  const deleteCategory = useCallback(async (categoryId: string) => {
+    if (session?.role !== "manager") throw new Error("Sólo gerencia puede editar las categorías.");
+    if (isSupabaseConfigured && !navigator.onLine) throw new Error("Necesitas conexión para modificar las categorías.");
+    const productsInCategory = products.filter((product) => product.categoryId === categoryId).length;
+    if (productsInCategory > 0) throw new Error(`Hay ${productsInCategory} producto(s) en esta categoría. Muévelos o elimínalos antes de borrarla.`);
+    if (supabase) {
+      const { error } = await supabase.from("categories").delete().eq("id", categoryId);
+      if (error) throw new Error(error.message);
+    }
+    await db.catalogCategories.delete(categoryId);
+    setCategories((items) => items.filter((category) => category.id !== categoryId));
+  }, [session, products]);
+
+  const uploadProductImage = useCallback(async (file: File) => {
+    if (session?.role !== "manager") throw new Error("Sólo gerencia puede editar el catálogo.");
+    if (!/image\/(png|jpeg)/.test(file.type)) throw new Error("La imagen debe ser PNG o JPEG.");
+    if (file.size > 2_000_000) throw new Error("La imagen no debe pesar más de 2 MB.");
+    if (supabase) {
+      const path = `${crypto.randomUUID()}-${file.name}`;
+      const { error } = await supabase.storage.from("product-images").upload(path, file);
+      if (error) throw new Error(error.message);
+      return supabase.storage.from("product-images").getPublicUrl(path).data.publicUrl;
+    }
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(new Error("No se pudo leer la imagen."));
+      reader.readAsDataURL(file);
+    });
+  }, [session]);
+
+  const value = useMemo(() => ({
+    session, hydrated, orders, tables, products, categories, extras, online, syncStatus, pendingCount, demoMode: !isSupabaseConfigured,
+    login, logout, startOrder, addItem, changeQuantity, cancelCommandedItem, dispatchPending, markOrderReady, finalizeOrder, addPayment,
+    closeOrder, setDiscount, cancelOrder, reverseSale, forceSync, addTable, updateTable,
+    createProduct, updateProduct, deleteProduct, createExtra, updateExtra, deleteExtra, createCategory, updateCategory, deleteCategory, uploadProductImage
+  }), [
+    session, hydrated, orders, tables, products, categories, extras, online, syncStatus, pendingCount,
+    login, logout, startOrder, addItem, changeQuantity, cancelCommandedItem, dispatchPending, markOrderReady, finalizeOrder, addPayment,
+    closeOrder, setDiscount, cancelOrder, reverseSale, forceSync, addTable, updateTable,
+    createProduct, updateProduct, deleteProduct, createExtra, updateExtra, deleteExtra, createCategory, updateCategory, deleteCategory, uploadProductImage
+  ]);
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }
 

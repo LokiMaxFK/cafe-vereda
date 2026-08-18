@@ -15,7 +15,7 @@ const hotCold = (hot: number, cold: number) => [
   { id: "cold", name: "Frío / frappé", price: cold }
 ];
 
-export const products: Product[] = [
+export const products: Array<Omit<Product, "seasonal">> = [
   { id: "espresso", categoryId: "coffee", name: "Espresso", price: 48, available: true },
   { id: "americano", categoryId: "coffee", name: "Americano", price: 55, variants: hotCold(55, 60), available: true },
   { id: "flat-white", categoryId: "coffee", name: "Flat White", price: 65, available: true },
@@ -30,11 +30,11 @@ export const products: Product[] = [
   { id: "jugo-verde", categoryId: "cold", name: "Jugo verde", description: "Espinaca, apio, mango y piña", price: 70, available: true },
   { id: "smoothie-frutos", categoryId: "cold", name: "Smoothie frutos", description: "Frutos rojos y avena", price: 85, available: true },
   { id: "licuado-choplatano", categoryId: "cold", name: "Licuado choplátano", description: "Plátano y chocolate amargo", price: 80, available: true },
-  { id: "chilaquiles", categoryId: "breakfast", name: "Chilaquiles", description: "Salsa verde o roja, huevo y aguacate", price: 120, available: true, schedule: "Hasta 1:30 pm" },
-  { id: "chilaquiles-vereda", categoryId: "breakfast", name: "Chilaquiles Vereda", description: "Con pollo, res, machacado o pastor", price: 130, available: true, schedule: "Hasta 1:30 pm" },
-  { id: "huevos-divorciados", categoryId: "breakfast", name: "Huevos divorciados", price: 115, available: true, schedule: "Hasta 1:30 pm" },
-  { id: "omelette", categoryId: "breakfast", name: "Omelette al gusto", price: 130, available: true, schedule: "Hasta 1:30 pm" },
-  { id: "nortenito", categoryId: "breakfast", name: "Norteñito", description: "Burrito de huevo con machacado", price: 145, available: true, schedule: "Hasta 1:30 pm" },
+  { id: "chilaquiles", categoryId: "breakfast", name: "Chilaquiles", description: "Salsa verde o roja, huevo y aguacate", price: 120, available: true },
+  { id: "chilaquiles-vereda", categoryId: "breakfast", name: "Chilaquiles Vereda", description: "Con pollo, res, machacado o pastor", price: 130, available: true },
+  { id: "huevos-divorciados", categoryId: "breakfast", name: "Huevos divorciados", price: 115, available: true },
+  { id: "omelette", categoryId: "breakfast", name: "Omelette al gusto", price: 130, available: true },
+  { id: "nortenito", categoryId: "breakfast", name: "Norteñito", description: "Burrito de huevo con machacado", price: 145, available: true },
   { id: "sandwich-pavo", categoryId: "sandwiches", name: "Sándwich de pavo", price: 100, available: true },
   { id: "bagel-serrano", categoryId: "sandwiches", name: "Bagel serrano", description: "Jamón serrano y ensalada dulce", price: 145, available: true },
   { id: "chapata-pollo", categoryId: "sandwiches", name: "Chapata pollo naranja", price: 125, available: true },

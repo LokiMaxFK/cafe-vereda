@@ -28,6 +28,15 @@ class VeredaDatabase extends Dexie {
       cafeTables: "id, number",
       sessions: "id, username, validatedAt"
     });
+    this.version(3).stores({
+      orders: "id, folio, status, tableId, openedBy, updatedAt, syncStatus",
+      pendingOperations: "id, idempotencyKey, deviceId, entityId, createdAt, status",
+      catalog: "id, categoryId, available",
+      catalogCategories: "id, name",
+      catalogExtras: "id, active",
+      cafeTables: "id, number",
+      sessions: "id, username, validatedAt"
+    });
   }
 }
 
