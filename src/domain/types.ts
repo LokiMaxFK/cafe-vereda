@@ -60,6 +60,7 @@ export interface Order {
   payments: Payment[];
   discount: number;
   discountReason?: string;
+  cancellationReason?: string;
   openedBy: string;
   openedAt: string;
   updatedAt: string;
