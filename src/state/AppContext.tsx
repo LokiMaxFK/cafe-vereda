@@ -42,6 +42,36 @@ const sampleOrders: Order[] = [
     id: "demo-takeaway", folio: 1044, type: "takeaway", customerName: "Mariana", status: "open", openedBy: "demo-manager",
     openedAt: minutesAgo(6), updatedAt: minutesAgo(2), syncStatus: "pending", payments: [], discount: 0,
     items: [{ id: "i-5", productId: "matcha", name: "Matcha", quantity: 1, unitPrice: 90, variant: "Frío / frappé", modifiers: [], status: "pending" }]
+  },
+  {
+    id: "demo-closed-1", folio: 1041, type: "takeaway", customerName: "Luis", status: "closed", openedBy: "demo-manager",
+    openedAt: minutesAgo(160), updatedAt: minutesAgo(120), syncStatus: "synced", discount: 10,
+    items: [
+      { id: "i-6", productId: "latte", name: "Latte", quantity: 2, unitPrice: 75, modifiers: [], status: "prepared" },
+      { id: "i-7", productId: "croissant", name: "Croissant", quantity: 1, unitPrice: 48, modifiers: [], status: "prepared" }
+    ],
+    payments: [{ id: "p-1", method: "card", amount: 188, tip: 20, createdAt: minutesAgo(121) }]
+  },
+  {
+    id: "demo-closed-2", folio: 1040, type: "table", tableId: "t2", status: "closed", openedBy: "demo-barista",
+    openedAt: minutesAgo(250), updatedAt: minutesAgo(205), syncStatus: "synced", discount: 0,
+    items: [
+      { id: "i-8", productId: "americano", name: "Americano", quantity: 2, unitPrice: 55, modifiers: [], status: "prepared" },
+      { id: "i-9", productId: "panini", name: "Panini", quantity: 1, unitPrice: 110, modifiers: [], status: "prepared" }
+    ],
+    payments: [{ id: "p-2", method: "cash", amount: 120, tip: 0, createdAt: minutesAgo(206) }, { id: "p-3", method: "transfer", amount: 100, tip: 0, createdAt: minutesAgo(205) }]
+  },
+  {
+    id: "demo-reversed", folio: 1039, type: "takeaway", customerName: "Rosa", status: "reversed", openedBy: "demo-manager",
+    openedAt: minutesAgo(420), updatedAt: minutesAgo(65), syncStatus: "synced", discount: 0,
+    items: [{ id: "i-10", productId: "cappuccino", name: "Cappuccino", quantity: 1, unitPrice: 90, modifiers: [], status: "prepared" }],
+    payments: [{ id: "p-4", method: "cash", amount: 90, tip: 10, createdAt: minutesAgo(300) }]
+  },
+  {
+    id: "demo-cancelled", folio: 1038, type: "table", tableId: "t4", status: "cancelled", openedBy: "demo-barista",
+    openedAt: minutesAgo(100), updatedAt: minutesAgo(50), syncStatus: "synced", discount: 0,
+    items: [{ id: "i-11", productId: "matcha", name: "Matcha", quantity: 1, unitPrice: 90, modifiers: [], status: "cancelled", cancellationReason: "Error de captura" }],
+    payments: []
   }
 ];
 

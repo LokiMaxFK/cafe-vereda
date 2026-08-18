@@ -10,7 +10,7 @@ a { color: inherit; text-decoration: none; }
 }
 
 @media print {
-  aside, nav, header, button, .print\:hidden { display: none !important; }
+  aside, nav, header:not(.report-print-header), button, .print\:hidden { display: none !important; }
   body, main, [class*="bg-"] { background: #fff !important; color: #111 !important; }
   .shadow-panel { box-shadow: none !important; }
 }
