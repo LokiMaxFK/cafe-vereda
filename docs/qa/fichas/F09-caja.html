@@ -69,7 +69,7 @@
   <li><b>No funciona en modo demostración.</b> Sin Supabase muestra «Caja no disponible».</li>
   <li><b>No restringe Caja a gerencia.</b> La ruta y las RPC permiten operar a cualquier usuario autenticado.</li>
   <li><b>No garantiza conciliación exacta con Reportes.</b> Ambos módulos atribuyen el efectivo a marcas de tiempo distintas (hallazgo F09-01, ya aclarado en la interfaz).</li>
-  <li><b>No avisa cuando un retiro se rechaza.</b> El botón de registrar retiro no está realmente deshabilitado sin nota, y si el servidor rechaza la escritura no aparece ningún error (hallazgo F09-02).</li>
+  <li><b>No admite deshacer un cierre.</b> Una vez hecho el corte, el turno queda inmutable; corregir un error de conteo requiere ajustarlo en el siguiente turno.</li>
 </ul>
 
 <h2>Resultado de las pruebas</h2>
@@ -81,7 +81,7 @@
     <tr><td>F09-P3 · Abrir con fondo 0</td><td>Permitido; el botón no estaba deshabilitado y el turno se creó con Fondo $0.00</td><td class="ok">Correcto</td></tr>
     <tr><td>F09-P4 · Rechazo de segundo turno</td><td>Llamada directa a <code>open_cash_session</code> con un turno ya abierto → rechazada por la restricción única de la base de datos</td><td class="ok">Correcto</td></tr>
     <tr><td>F09-P5 · Retiro con nota</td><td>$50 con nota → aparece con <code>-$50.00</code>; esperado bajó de $1,000.00 a $950.00</td><td class="ok">Correcto</td></tr>
-    <tr><td>F09-P6 · Validación de retiro</td><td>El botón <b>no</b> está realmente deshabilitado sin nota; el rechazo del servidor es silencioso, sin aviso visible</td><td class="fail">Hallazgo F09-02</td></tr>
+    <tr><td>F09-P6 · Validación de retiro</td><td>El botón del modal está correctamente deshabilitado sin datos y con sólo importe; se habilita con importe y nota (primer intento dio falso positivo, ver nota abajo)</td><td class="ok">Correcto</td></tr>
     <tr><td>F09-P7 · Resumen del turno</td><td>Las cuatro métricas se actualizaron correctamente en cada paso de la pasada</td><td class="ok">Correcto</td></tr>
     <tr><td>F09-P8 · Venta efectiva aumenta esperado</td><td>Orden #1080 cobrada en efectivo por $48.00 → esperado subió a $998.00</td><td class="ok">Correcto</td></tr>
     <tr><td>F09-P9 · Reversión reduce esperado</td><td>Misma orden revertida por gerencia → esperado volvió exactamente a $950.00</td><td class="ok">Correcto</td></tr>
@@ -116,8 +116,8 @@
   <p style="margin:0"><b>Implicación de F07-01 — sobrepago y cambio no separado.</b> Era una consecuencia del hallazgo F07-01 (ya corregido): Caja sumaba íntegro el efectivo recibido, incluso por encima del saldo. Con F07-01 corregido, el pago se topa al saldo y el cambio ya no infla el esperado — verificado en vivo dentro de esta misma pasada.</p>
 </div>
 
-<div class="alert">
-  <p style="margin:0"><b>F09-02 · Media — El retiro se puede rechazar en silencio.</b> El botón «Registrar retiro» no queda realmente deshabilitado sin nota (sólo se ve apagado por el estilo del botón secundario). Si se hace clic con nota vacía, el servidor rechaza la escritura correctamente, pero la interfaz no muestra ningún error: el campo de importe se vacía y el cajero no tiene forma de saber si el retiro quedó registrado. Reproducido dos veces en producción el 18/08, sin efecto y sin aviso ninguna de las dos. <b>No se corrigió a propósito en esta pasada</b> — pendiente de decisión del responsable del proyecto.</p>
+<div class="box">
+  <p style="margin:0"><b>Hallazgo descartado — falso positivo de la primera prueba.</b> El primer intento de F09-P6 concluyó que «Registrar retiro» no estaba deshabilitado sin nota, apoyándose en <code>document.querySelectorAll('button')</code> sobre toda la página. Esa consulta encontró <b>dos</b> botones con el texto «Registrar retiro» — el del encabezado, que sólo abre el modal y nunca está deshabilitado, y el del propio modal, el que envía — y tomó el primero por error. Al acotar la consulta a <code>[role=dialog]</code> el botón real resultó estar correctamente deshabilitado sin importe, seguir deshabilitado con sólo importe, y habilitarse recién con importe y nota; se completó además un retiro real sin ningún error. El código en <code>src/pages/CashPage.tsx:102</code> estaba bien desde el principio.</p>
 </div>
 
 <h2>Limitaciones y observaciones</h2>
@@ -126,7 +126,7 @@
     <li><b>Los 14 casos se ejecutaron en producción real</b>, con un turno abierto desde el 17/08 que no era de esta revisión y que se cerró con corte administrativo tras confirmarlo con el responsable del proyecto (sin conteo físico, contado = esperado).</li>
     <li><b>Permisos de Barista verificados por base de datos, no en vivo.</b> <code>/caja</code> está fuera de <code>ManagerOnly</code>; las tres RPC vigentes sólo requieren autenticación, sin comprobación gerente/barista. El responsable del proyecto decidió que esta verificación bastaba, sin necesidad de una sesión real de Barista.</li>
     <li><b>Migración de reversión confirmada en vivo, no sólo por lectura.</b> <code>20260818120000_reverse_sale_and_cash_reversal_fix.sql</code> excluye pagos de órdenes revertidas/canceladas del esperado — se comprobó cobrando y revirtiendo una venta real (F09-P8/P9).</li>
-    <li><b>Datos de prueba dejados en el historial de auditoría</b>, con el prefijo <code>QA-F09</code>: un retiro de $50, una orden #1080 revertida y tres turnos cerrados (uno de ellos el turno preexistente cerrado administrativamente). No se borró nada — el rastro de auditoría de Caja no admite eliminar movimientos.</li>
+    <li><b>Datos de prueba dejados en el historial de auditoría</b>, con el prefijo <code>QA-F09</code>: dos retiros ($50 y $10), una orden #1080 revertida y cuatro turnos cerrados (el preexistente cerrado administrativamente, dos de las pruebas de faltante/sobrante, y uno más abierto después para reverificar F09-P6). No se borró nada — el rastro de auditoría de Caja no admite eliminar movimientos.</li>
   </ul>
 </div>
 
