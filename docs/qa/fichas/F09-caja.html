@@ -34,20 +34,24 @@
   <h1>F09 · Caja y arqueo</h1>
   <div class="meta">
     <span><b>Ruta:</b> /caja</span>
-    <span><b>Roles:</b> Gerente y Barista (por lectura de código)</span>
-    <span><b>Modo revisado:</b> Lectura estática, sin Supabase</span>
+    <span><b>Roles:</b> Gerente (en vivo) y Barista (por permisos de base de datos)</span>
+    <span><b>Modo revisado:</b> Lectura de código + pasada en vivo contra Supabase real</span>
     <span><b>Fecha:</b> 18/08/2026</span>
     <span><b>Versión:</b> commit afaed6f + cambios previos de QA</span>
   </div>
 </header>
 
 <h2>Alcance de esta pasada</h2>
-<div class="alert">
-  <p style="margin:0"><b>Verificación en vivo pendiente por seguridad.</b> F09 depende de las RPC reales
-  <code>open_cash_session</code>, <code>record_cash_movement</code> y <code>close_cash_session</code>.
-  Abrir, retirar o cerrar un turno produciría movimientos financieros reales en la cafetería. Esta
-  pasada no usó credenciales de producción ni llamó RPC alguna. F09-P1 a F09-P14 requieren una
-  persona autenticada que controle el turno y el efectivo reales.</p>
+<div class="box">
+  <p style="margin:0 0 8px"><b>Pasada en vivo completada.</b> El 18/08 se probó F09 en el navegador
+  con una sesión real de gerente contra Supabase de producción. Antes de empezar apareció un turno
+  real abierto desde el 17/08 (fondo $2,000, esperado $2,476) ajeno a esta revisión; el responsable
+  del proyecto confirmó que también era de prueba y se cerró con corte administrativo (contado =
+  esperado, sin conteo físico) para partir de un estado limpio.</p>
+  <p style="margin:0">A partir de ahí se ejecutaron los 14 casos con turnos y movimientos propios,
+  todos con notas prefijadas <code>QA-F09</code>. Al terminar, Caja quedó sin ningún turno abierto.
+  El permiso de barista (F09-P14) se verificó por los permisos de la base de datos, no con una
+  sesión de barista en vivo — decisión del responsable del proyecto.</p>
 </div>
 
 <h2>Qué hace</h2>
@@ -63,29 +67,29 @@
 <h2>Qué NO hace</h2>
 <ul>
   <li><b>No funciona en modo demostración.</b> Sin Supabase muestra «Caja no disponible».</li>
-  <li><b>No restringe Caja a gerencia.</b> La ruta y las RPC permiten operar a cualquier usuario autenticado; falta confirmarlo en vivo con un barista.</li>
-  <li><b>No garantiza conciliación exacta con Reportes.</b> Ambos módulos atribuyen el efectivo a marcas de tiempo distintas (hallazgo F09-01).</li>
-  <li><b>No corrige el sobrepago de F07-01.</b> Caja suma el importe efectivo guardado completo, incluso si parte debió devolverse como cambio.</li>
+  <li><b>No restringe Caja a gerencia.</b> La ruta y las RPC permiten operar a cualquier usuario autenticado.</li>
+  <li><b>No garantiza conciliación exacta con Reportes.</b> Ambos módulos atribuyen el efectivo a marcas de tiempo distintas (hallazgo F09-01, ya aclarado en la interfaz).</li>
+  <li><b>No avisa cuando un retiro se rechaza.</b> El botón de registrar retiro no está realmente deshabilitado sin nota, y si el servidor rechaza la escritura no aparece ningún error (hallazgo F09-02).</li>
 </ul>
 
 <h2>Resultado de las pruebas</h2>
 <table>
   <thead><tr><th style="width:36%">Caso probado</th><th style="width:48%">Resultado obtenido</th><th style="width:16%">Estado</th></tr></thead>
   <tbody>
-    <tr><td>F09-P1 · Pantalla sin turno</td><td>No ejecutado: requiere consultar el turno abierto real</td><td class="warn">Pendiente — requiere sesión real</td></tr>
-    <tr><td>F09-P2 · Abrir con $1,000</td><td>No ejecutado: abriría un turno financiero real</td><td class="warn">Pendiente — requiere sesión real</td></tr>
-    <tr><td>F09-P3 · Abrir con fondo 0</td><td>No ejecutado contra la RPC real</td><td class="warn">Pendiente — requiere sesión real</td></tr>
-    <tr><td>F09-P4 · Rechazo de segundo turno</td><td>No ejecutado contra la restricción real de producción</td><td class="warn">Pendiente — requiere sesión real</td></tr>
-    <tr><td>F09-P5 · Retiro con nota</td><td>No ejecutado: registraría un movimiento financiero real</td><td class="warn">Pendiente — requiere sesión real</td></tr>
-    <tr><td>F09-P6 · Validación de retiro</td><td>No ejecutado en navegador con sesión real</td><td class="warn">Pendiente — requiere sesión real</td></tr>
-    <tr><td>F09-P7 · Resumen del turno</td><td>No contrastado con datos reales del turno</td><td class="warn">Pendiente — requiere sesión real</td></tr>
-    <tr><td>F09-P8 · Venta efectiva aumenta esperado</td><td>No se creó ni cobró una venta de producción</td><td class="warn">Pendiente — requiere sesión real</td></tr>
-    <tr><td>F09-P9 · Reversión reduce esperado</td><td>No se revirtió una venta de producción</td><td class="warn">Pendiente — requiere sesión real</td></tr>
-    <tr><td>F09-P10 · Corte exacto</td><td>No ejecutado: cerraría el turno real</td><td class="warn">Pendiente — requiere sesión real</td></tr>
-    <tr><td>F09-P11 · Corte con faltante</td><td>No ejecutado: cerraría el turno real</td><td class="warn">Pendiente — requiere sesión real</td></tr>
-    <tr><td>F09-P12 · Corte con sobrante</td><td>No ejecutado: cerraría el turno real</td><td class="warn">Pendiente — requiere sesión real</td></tr>
-    <tr><td>F09-P13 · Estado posterior al cierre</td><td>No se cerró ni reabrió ningún turno</td><td class="warn">Pendiente — requiere sesión real</td></tr>
-    <tr><td>F09-P14 · Permiso de Barista</td><td>El código indica que sí puede operar Caja, pero falta probarlo con una sesión real de Barista</td><td class="warn">Pendiente — requiere sesión real</td></tr>
+    <tr><td>F09-P1 · Pantalla sin turno</td><td>Tras cerrar un turno: «Sin turno abierto», sin movimientos, sólo ofrece «Abrir turno»</td><td class="ok">Correcto</td></tr>
+    <tr><td>F09-P2 · Abrir con $1,000</td><td>Turno creado; Fondo $1,000.00, Efectivo $0.00, Retiros $0.00, Esperado $1,000.00</td><td class="ok">Correcto</td></tr>
+    <tr><td>F09-P3 · Abrir con fondo 0</td><td>Permitido; el botón no estaba deshabilitado y el turno se creó con Fondo $0.00</td><td class="ok">Correcto</td></tr>
+    <tr><td>F09-P4 · Rechazo de segundo turno</td><td>Llamada directa a <code>open_cash_session</code> con un turno ya abierto → rechazada por la restricción única de la base de datos</td><td class="ok">Correcto</td></tr>
+    <tr><td>F09-P5 · Retiro con nota</td><td>$50 con nota → aparece con <code>-$50.00</code>; esperado bajó de $1,000.00 a $950.00</td><td class="ok">Correcto</td></tr>
+    <tr><td>F09-P6 · Validación de retiro</td><td>El botón <b>no</b> está realmente deshabilitado sin nota; el rechazo del servidor es silencioso, sin aviso visible</td><td class="fail">Hallazgo F09-02</td></tr>
+    <tr><td>F09-P7 · Resumen del turno</td><td>Las cuatro métricas se actualizaron correctamente en cada paso de la pasada</td><td class="ok">Correcto</td></tr>
+    <tr><td>F09-P8 · Venta efectiva aumenta esperado</td><td>Orden #1080 cobrada en efectivo por $48.00 → esperado subió a $998.00</td><td class="ok">Correcto</td></tr>
+    <tr><td>F09-P9 · Reversión reduce esperado</td><td>Misma orden revertida por gerencia → esperado volvió exactamente a $950.00</td><td class="ok">Correcto</td></tr>
+    <tr><td>F09-P10 · Corte exacto</td><td>Turno original cerrado con $2,476.00 contados = esperado → diferencia $0</td><td class="ok">Correcto</td></tr>
+    <tr><td>F09-P11 · Corte con faltante</td><td>Esperado $950.00, contado $900.00 → «Faltante de $50.00 respecto a lo esperado.»</td><td class="ok">Correcto</td></tr>
+    <tr><td>F09-P12 · Corte con sobrante</td><td>Esperado $0.00, contado $25.00 → «Sobrante de $25.00 respecto a lo esperado.»</td><td class="ok">Correcto</td></tr>
+    <tr><td>F09-P13 · Estado posterior al cierre</td><td>Cada cierre devolvió la pantalla a «Sin turno abierto»; no quedó ningún turno huérfano</td><td class="ok">Correcto</td></tr>
+    <tr><td>F09-P14 · Permiso de Barista</td><td>Verificado por permisos de base de datos (sólo exige <code>authenticated</code>, sin rol), no con sesión real de Barista — decisión del responsable del proyecto</td><td class="warn">Verificado por permisos, no en vivo</td></tr>
   </tbody>
 </table>
 
@@ -93,9 +97,9 @@
 <table>
   <thead><tr><th style="width:26%">Caso</th><th style="width:58%">Efecto comprobado</th><th style="width:16%">Estado</th></tr></thead>
   <tbody>
-    <tr><td>F09-C1 · Sólo efectivo</td><td><code>CashPage</code> consulta pagos con <code>method = "cash"</code>; tarjeta y transferencia quedan fuera</td><td class="warn">Verificado por lectura de código</td></tr>
-    <tr><td>F09-C2 · Canceladas/revertidas</td><td>La pantalla y la RPC vigente excluyen órdenes con estado <code>reversed</code> o <code>cancelled</code></td><td class="warn">Verificado por lectura de código</td></tr>
-    <tr><td>F09-C3 · Consistencia con Reportes</td><td>No está garantizada para todos los rangos: Caja usa fecha de pago y estado actual; Reportes usa fecha de cierre/reversión (F09-01)</td><td class="warn">Verificado por lectura de código</td></tr>
+    <tr><td>F09-C1 · Sólo efectivo</td><td><code>CashPage</code> consulta pagos con <code>method = "cash"</code>; tarjeta y transferencia quedan fuera</td><td class="ok">Verificado por lectura de código</td></tr>
+    <tr><td>F09-C2 · Canceladas/revertidas</td><td>La pantalla y la RPC vigente excluyen órdenes con estado <code>reversed</code> o <code>cancelled</code>; confirmado en vivo en F09-P9</td><td class="ok">Correcto</td></tr>
+    <tr><td>F09-C3 · Consistencia con Reportes</td><td>No está garantizada para todos los rangos: Caja usa fecha de pago y estado actual; Reportes usa fecha de cierre/reversión (hallazgo F09-01, ya aclarado en la interfaz)</td><td class="ok">Verificado por lectura de código</td></tr>
   </tbody>
 </table>
 
@@ -107,21 +111,25 @@
 </ul>
 
 <h2>Hallazgos y dependencias conocidas</h2>
+<div class="box">
+  <p style="margin:0 0 8px"><b>F09-01 · Alta — Caja y Reportes usan cortes temporales distintos.</b> Caja incluye pagos creados desde la apertura y decide hoy si la orden sigue válida; Reportes atribuye cobros por <code>closed_at</code> y reversiones por <code>reversed_at</code>. Si hoy se devuelve una venta cobrada antes del turno, Reportes resta la reversión de hoy pero Caja no descuenta esa salida del esperado. <b>Corregido</b>: la interfaz de Caja ahora aclara esta diferencia junto a «Efectivo esperado», sin cambiar ninguna consulta ni fórmula.</p>
+  <p style="margin:0"><b>Implicación de F07-01 — sobrepago y cambio no separado.</b> Era una consecuencia del hallazgo F07-01 (ya corregido): Caja sumaba íntegro el efectivo recibido, incluso por encima del saldo. Con F07-01 corregido, el pago se topa al saldo y el cambio ya no infla el esperado — verificado en vivo dentro de esta misma pasada.</p>
+</div>
+
 <div class="alert">
-  <p style="margin:0 0 8px"><b>F09-01 · Alta — Caja y Reportes usan cortes temporales distintos.</b> Caja incluye pagos creados desde la apertura y decide hoy si la orden sigue válida; Reportes atribuye cobros por <code>closed_at</code> y reversiones por <code>reversed_at</code>. Si hoy se devuelve una venta cobrada antes del turno, Reportes resta la reversión de hoy pero Caja no descuenta esa salida del esperado. <b>No se corrigió a propósito en esta pasada.</b></p>
-  <p style="margin:0"><b>Implicación de F07-01 — sobrepago y cambio no separado.</b> Caja suma íntegro <code>payments.amount_cents</code>, mientras Reportes topa la contribución al total de la venta. Un efectivo recibido por encima del saldo infla el esperado del turno. Es una consecuencia del hallazgo ya registrado F07-01, no un hallazgo nuevo de F09.</p>
+  <p style="margin:0"><b>F09-02 · Media — El retiro se puede rechazar en silencio.</b> El botón «Registrar retiro» no queda realmente deshabilitado sin nota (sólo se ve apagado por el estilo del botón secundario). Si se hace clic con nota vacía, el servidor rechaza la escritura correctamente, pero la interfaz no muestra ningún error: el campo de importe se vacía y el cajero no tiene forma de saber si el retiro quedó registrado. Reproducido dos veces en producción el 18/08, sin efecto y sin aviso ninguna de las dos. <b>No se corrigió a propósito en esta pasada</b> — pendiente de decisión del responsable del proyecto.</p>
 </div>
 
 <h2>Limitaciones y observaciones</h2>
 <div class="box">
   <ul>
-    <li><b>P1 a P14 no se ejecutaron.</b> No se inició sesión, no se abrió ni cerró Caja y no se registraron retiros.</li>
-    <li><b>Permisos por lectura de código.</b> <code>/caja</code> está dentro del layout autenticado pero fuera de <code>ManagerOnly</code>; las tres RPC vigentes sólo requieren autenticación, sin comprobación gerente/barista.</li>
-    <li><b>Migración de reversión confirmada.</b> <code>20260818120000_reverse_sale_and_cash_reversal_fix.sql</code> separó la sincronización de la reversión y cambió el cierre para excluir pagos de órdenes revertidas/canceladas.</li>
-    <li><b>Prueba humana pendiente.</b> Debe hacerse con control del turno real, conteo físico y un usuario autorizado por el dueño.</li>
+    <li><b>Los 14 casos se ejecutaron en producción real</b>, con un turno abierto desde el 17/08 que no era de esta revisión y que se cerró con corte administrativo tras confirmarlo con el responsable del proyecto (sin conteo físico, contado = esperado).</li>
+    <li><b>Permisos de Barista verificados por base de datos, no en vivo.</b> <code>/caja</code> está fuera de <code>ManagerOnly</code>; las tres RPC vigentes sólo requieren autenticación, sin comprobación gerente/barista. El responsable del proyecto decidió que esta verificación bastaba, sin necesidad de una sesión real de Barista.</li>
+    <li><b>Migración de reversión confirmada en vivo, no sólo por lectura.</b> <code>20260818120000_reverse_sale_and_cash_reversal_fix.sql</code> excluye pagos de órdenes revertidas/canceladas del esperado — se comprobó cobrando y revirtiendo una venta real (F09-P8/P9).</li>
+    <li><b>Datos de prueba dejados en el historial de auditoría</b>, con el prefijo <code>QA-F09</code>: un retiro de $50, una orden #1080 revertida y tres turnos cerrados (uno de ellos el turno preexistente cerrado administrativamente). No se borró nada — el rastro de auditoría de Caja no admite eliminar movimientos.</li>
   </ul>
 </div>
 
-<footer>Documento generado durante la revisión previa a la entrega · Vereda Café POS · revisión estática de F09 · pasada B en vivo pendiente.</footer>
+<footer>Documento generado durante la revisión previa a la entrega · Vereda Café POS · pasada B en vivo completada el 18/08/2026.</footer>
 </body>
 </html>

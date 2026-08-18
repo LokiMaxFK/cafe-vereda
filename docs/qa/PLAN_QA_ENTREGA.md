@@ -121,7 +121,7 @@ con el nombre `FXX-NN-descripcion.png`.
 | F06 | Pedidos y entrega | `/pedidos` | A | ⬜ Pendiente | — |
 | F07 | Cobro, descuento y ticket | `/cobros`, `/venta/:id` | A | ⚠️ Completada con hallazgos | [F07](pdf/F07-cobro.pdf) |
 | F08 | Cancelación y reversión | `/venta/:id` | A + B | ⬜ Pendiente | — |
-| F09 | Caja y arqueo | `/caja` | B | 🟡 En curso — falta pasada B en vivo | [F09](pdf/F09-caja.pdf) |
+| F09 | Caja y arqueo | `/caja` | B | ⚠️ Completada con hallazgos | [F09](pdf/F09-caja.pdf) |
 | F10 | Catálogo | `/catalogo` | A + B | ⬜ Pendiente | — |
 | F11 | Mesas (gestión) | `/mesas` | A + B | ⬜ Pendiente | — |
 | F12 | Insumos | `/insumos` | B | ⬜ Pendiente | — |
@@ -155,6 +155,7 @@ Estados posibles: ⬜ Pendiente · 🟡 En curso · ✅ Completada · ⚠️ Com
 | F07-03 | **Alta** | El ticket de cobro omite el motivo del descuento y todas las propinas. Sólo imprime el importe del descuento y el importe de cada pago, aunque ambos datos sí quedan guardados en la orden. Incumple el contenido exigido para F07-P12. | `src/lib/printing.ts:51-63` | ✅ **Corregido** 18/08 (vía Codex): el ticket imprime el motivo escapado y las propinas positivas con la misma redacción de Cobro |
 | F07-04 | Baja | En una venta cerrada la acción de ticket sí reimprime, pero el botón dice sólo «Ticket»; no cambia a «Reimprimir» como pide F07-P13, por lo que no deja claro que se generará una segunda copia. | `src/pages/SalePage.tsx:131` | ✅ **Corregido** 18/08 (vía Codex): la acción visible de una venta cerrada ahora dice «Reimprimir» |
 | F09-01 | **Alta** | Caja y Reportes no delimitan el efectivo con el mismo evento: Caja suma pagos creados desde la apertura y excluye según el estado actual de la orden; Reportes atribuye cobros y reversiones por `closed_at` y `reversed_at`. Una reversión durante el turno actual de una venta cobrada antes de abrirlo resta en Reportes, pero no reduce el esperado de Caja. Por ello el corte no siempre puede conciliarse con Reportes para el mismo rango horario. | `src/pages/CashPage.tsx:186`, `src/pages/ReportsPage.tsx:74-109`, `src/domain/reports.ts:205-229,273-316`, `supabase/migrations/20260818120000_reverse_sale_and_cash_reversal_fix.sql:211-216` | ✅ **Corregido** 18/08 (vía Codex): Caja aclara que el esperado es efectivo físico del turno y explica la divergencia por reversiones de turnos anteriores; fórmulas intactas |
+| F09-02 | Media | **"Registrar retiro" no está realmente deshabilitado sin nota, y el rechazo es silencioso.** El botón sólo se ve apagado por el estilo visual del botón secundario (no tiene el atributo `disabled`). Con importe pero sin nota, al hacer clic el servidor rechaza la escritura (no se crea el movimiento), pero la interfaz no muestra ningún error: el campo de importe simplemente se vacía. Reproducido en producción el 18/08: dos intentos idénticos, ambos sin efecto y sin aviso visible. Un cajero puede creer que registró el retiro cuando no fue así. | `src/pages/CashPage.tsx` (modal de retiro, condición del botón "Registrar retiro") | Documentado 18/08. Pendiente de decisión del cliente — sin corregir en esta pasada |
 
 Severidades: **Bloqueante** (impide entregar) · **Alta** (rompe un flujo, hay rodeo) · **Media**
 (molesta pero no rompe) · **Baja** (cosmético).
@@ -648,33 +649,53 @@ Los commits recientes tocaron precisamente esto (`Corrige reversión de ventas`,
 **Rutas:** `/caja` · **Archivos:** `src/pages/CashPage.tsx`, RPC `open_cash_session`,
 `record_cash_movement`, `close_cash_session` · **Pasada:** B · **Rol:** ambos (verificar restricción)
 
-> **Nota de alcance (18/08, vía Codex).** Esta pasada cubrió sólo la parte verificable por lectura
-> de código. La verificación en vivo contra Supabase real (F09-P1 a F09-P14) requiere una sesión
-> humana autenticada y queda pendiente — no se puede automatizar sin exponer credenciales de
-> producción. Caja no funciona en modo demostración: depende por completo de RPC de Supabase.
+> **Pasada en vivo completada (18/08).** El 18/08 se hizo la pasada B en vivo contra Supabase real
+> con sesión de gerente. Antes de empezar apareció un turno real abierto desde el 17/08 (fondo
+> $2,000, esperado $2,476) que no era de esta revisión; el responsable del proyecto confirmó que
+> también era de prueba y se cerró con corte administrativo (contado = esperado, sin conteo físico)
+> para partir de un estado limpio. A partir de ahí se ejecutaron los 14 casos con turnos y
+> movimientos propios, todos con notas prefijadas `QA-F09`, y se dejó Caja sin ningún turno abierto
+> al terminar.
 
 ### Pruebas en navegador
 
-- [ ] F09-P1. Sin turno abierto: la pantalla ofrece **Abrir caja** y no muestra movimientos.
-- [ ] F09-P2. Abrir caja con fondo inicial $1,000 → se crea el turno; verificar en la pestaña Red
-      que `open_cash_session` respondió sin error.
-- [ ] F09-P3. Abrir caja con fondo `0` → permitido (el botón sólo se bloquea con el campo vacío).
-- [ ] F09-P4. Intentar abrir un **segundo** turno con uno ya abierto → debe rechazarse.
-- [ ] F09-P5. Registrar un **retiro de efectivo** con nota: exige importe y nota; aparece en
-      "Movimientos del turno" con signo negativo.
-- [ ] F09-P6. Retiro sin nota o con importe 0 → botón deshabilitado.
-- [ ] F09-P7. El resumen muestra fondo inicial, ventas en efectivo del turno, retiros y **esperado**.
-- [ ] F09-P8. Cobrar una venta en efectivo (F07) y volver a `/caja` → el esperado sube por ese
-      importe.
-- [ ] F09-P9. Revertir esa venta (F08) y volver → el esperado **baja** de nuevo. Este es el caso que
-      arregló el commit `20260818120000`; comprobarlo explícitamente.
-- [ ] F09-P10. Cerrar caja con efectivo contado **igual** al esperado → diferencia $0.
-- [ ] F09-P11. Cerrar caja con contado **menor** → faltante correctamente señalado.
-- [ ] F09-P12. Cerrar caja con contado **mayor** → sobrante correctamente señalado.
-- [ ] F09-P13. Tras cerrar, la pantalla vuelve a ofrecer abrir turno y el turno cerrado no se puede
-      modificar.
-- [ ] F09-P14. Verificar el rol: ¿un barista puede abrir/cerrar caja? Documentar el comportamiento
-      real (la ruta `/caja` **no** está dentro de `ManagerOnly`, así que se espera que sí).
+- [x] F09-P1. Tras cerrar un turno, la pantalla muestra "Sin turno abierto", sin movimientos, y sólo
+      ofrece "Abrir turno".
+- [x] F09-P2. Abierto con fondo $1,000.00 → turno creado; resumen muestra Fondo $1,000.00, Efectivo
+      en ventas $0.00, Retiros $0.00, Esperado $1,000.00.
+- [x] F09-P3. Abierto con fondo `0` → permitido; el botón "Abrir turno" no estaba deshabilitado y el
+      turno se creó con Fondo $0.00.
+- [x] F09-P4. Con un turno abierto, se llamó `open_cash_session` una segunda vez directamente contra
+      Supabase (no sólo la interfaz) → rechazado por la propia base de datos:
+      `duplicate key value violates unique constraint "one_open_cash_session"`.
+- [x] F09-P5. Retiro de $50 con nota "QA-F09 verificacion retiro" → apareció en "Movimientos del
+      turno" con `-$50.00` y el esperado bajó de $1,000.00 a $950.00.
+- [!] F09-P6. **No se comporta como se esperaba** → hallazgo nuevo **F09-02**: el botón "Registrar
+      retiro" no queda realmente deshabilitado sin nota (sólo se ve apagado por el estilo del botón
+      secundario); al hacer clic con nota vacía la escritura se rechaza en el servidor pero **no se
+      muestra ningún error** — el campo de importe se vacía en silencio y el cajero no sabe si el
+      retiro se registró o no. Con importe 0 no se probó por separado, pero el mismo defecto de
+      interfaz aplica: la validación real está sólo en el servidor.
+- [x] F09-P7. Confirmado en P2/P5/P8: las cuatro métricas (fondo, efectivo en ventas, retiros,
+      esperado) se actualizan correctamente en cada paso.
+- [x] F09-P8. Se cobró una orden real (#1080, para llevar "QA-F09-caja") por $48.00 en efectivo →
+      Efectivo en ventas subió a $48.00 y el esperado a $998.00 ($950 + $48).
+- [x] F09-P9. Se revirtió esa misma orden con gerencia → Efectivo en ventas volvió a $0.00 y el
+      esperado volvió exactamente a $950.00. El arreglo del commit `20260818120000` sigue vigente.
+- [x] F09-P10. Se cerró el turno original (17/08) con contado = esperado ($2,476.00 = $2,476.00) →
+      "El conteo coincide exactamente con lo esperado.", diferencia $0.
+- [x] F09-P11. Turno de $950.00 esperado cerrado con $900.00 contados → "Faltante de $50.00 respecto
+      a lo esperado."
+- [x] F09-P12. Turno de $0.00 esperado (abierto con fondo 0) cerrado con $25.00 contados → "Sobrante
+      de $25.00 respecto a lo esperado."
+- [x] F09-P13. Después de cada cierre la pantalla volvió a "Sin turno abierto" / "Abrir turno"; no
+      quedó ningún turno cerrado editable ni turno huérfano al terminar la pasada.
+- [x] F09-P14. **Verificado por permisos de base de datos, no por sesión de barista en vivo** (el
+      responsable del proyecto decidió que bastaba con esto): `open_cash_session`,
+      `record_cash_movement` y `close_cash_session` sólo exigen el rol `authenticated` de Supabase
+      (`grant execute ... to authenticated`), sin ninguna comprobación de rol manager/barista dentro
+      de las funciones ni RLS adicional. `/caja` está fuera de `ManagerOnly`. Todo indica que un
+      barista puede operar caja igual que gerencia.
 
 ### Funcionalidades conectadas a verificar
 
