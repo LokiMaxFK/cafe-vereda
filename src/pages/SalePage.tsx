@@ -60,6 +60,7 @@ export function SalePage() {
     if (batchId) {
       setMessage(`${commandItems.length} artículo${commandItems.length === 1 ? "" : "s"} enviado${commandItems.length === 1 ? "" : "s"} a preparación.`);
       try { await printCommand({ ...activeOrder, items: commandItems.map((item) => ({ ...item, dispatchBatchId: batchId })) }, commandItems.map((item) => ({ ...item, dispatchBatchId: batchId }))); } catch (reason) { setMessage(`Comanda enviada a preparación, pero no se pudo imprimir: ${printErrorMessage(reason)}`); }
+      navigate("/salon");
     }
   }
   async function finalize() {
