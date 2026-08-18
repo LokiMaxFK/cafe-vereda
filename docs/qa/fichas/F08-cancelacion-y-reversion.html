@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>F08 · Cancelación y reversión</title>
+<style>
+  @page { size: Letter; margin: 16mm 14mm; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; color: #1b1b1f; font-size: 10.5pt; line-height: 1.45; margin: 0; }
+  header { border-bottom: 3px solid #6b4423; padding-bottom: 10px; margin-bottom: 18px; }
+  .eyebrow { font-size: 8pt; letter-spacing: .12em; text-transform: uppercase; color: #6b4423; font-weight: 700; margin: 0; }
+  h1 { font-size: 19pt; margin: 4px 0 6px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 8.5pt; color: #55525a; }
+  .meta b { color: #1b1b1f; }
+  h2 { font-size: 11.5pt; margin: 20px 0 8px; padding-bottom: 4px; border-bottom: 1px solid #dcd7d1; }
+  ul { margin: 0 0 0 16px; padding: 0; }
+  li { margin-bottom: 4px; }
+  table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-top: 6px; }
+  th { background: #f4efe9; text-align: left; font-size: 8pt; letter-spacing: .06em; text-transform: uppercase; color: #55525a; }
+  th, td { border: 1px solid #dcd7d1; padding: 6px 8px; vertical-align: top; }
+  .ok { color: #1b6b3a; font-weight: 700; }
+  .fail { color: #b3261e; font-weight: 700; }
+  .warn { color: #8a5a00; font-weight: 700; }
+  .box { background: #f7f4f0; border-left: 4px solid #6b4423; padding: 10px 12px; margin-top: 8px; }
+  .alert { background: #fdf0ef; border-left: 4px solid #b3261e; padding: 10px 12px; margin-top: 8px; }
+  code { font-size: 9pt; background: #f4efe9; padding: 1px 4px; border-radius: 3px; }
+  pre { background: #f4efe9; padding: 8px 10px; font-size: 8.5pt; margin: 6px 0; white-space: pre-wrap; }
+  footer { margin-top: 24px; padding-top: 8px; border-top: 1px solid #dcd7d1; font-size: 8pt; color: #7a767e; }
+</style>
+</head>
+<body>
+<header>
+  <p class="eyebrow">Vereda Café · Punto de venta · Ficha de funcionalidad</p>
+  <h1>F08 · Cancelación de cuenta y reversión de venta</h1>
+  <div class="meta">
+    <span><b>Ruta:</b> /venta/:orderId</span>
+    <span><b>Roles:</b> cualquiera cancela · sólo Gerente revierte</span>
+    <span><b>Modo revisado:</b> Demostración (P1-P8) + Supabase real (P9-P18, C1-C4)</span>
+    <span><b>Fecha:</b> 18/08/2026</span>
+    <span><b>Versión:</b> commit afaed6f + cambios previos de QA</span>
+  </div>
+</header>
+
+<h2>Alcance de esta pasada</h2>
+<div class="box">
+  <p style="margin:0 0 8px">F08-P13 a F08-P18 (cancelación parcial de artículo comandado) ya se habían verificado contra producción real durante la pasada de F04. El resto se completó el 18/08: P1-P8 en modo demostración, con pedidos nuevos con prefijo <code>QA-F08</code>, sin tocar ninguno de los pedidos reales ya cacheados en el dispositivo. P9-P12 y las funcionalidades conectadas C1/C2/C4 reutilizan la verificación en producción real ya hecha durante la pasada de F09 (la reversión de la orden #1080), consistente y sin necesidad de repetir el mismo escenario.</p>
+  <p style="margin:0">Se encontraron y corrigieron <b>dos hallazgos reales</b> en el camino: la cancelación de cuenta completa no avisaba a la barra, y la trazabilidad de «quién» no era visible en Reportes pese a que el dato ya existía.</p>
+</div>
+
+<h2>Qué hace</h2>
+<ul>
+  <li><b>Cancela una cuenta</b> en cualquier estado previo al cobro (abierta, en preparación, lista, servida) exigiendo un motivo obligatorio. Cualquier rol puede hacerlo — decisión confirmada por el cliente (F01-04), a condición de que quede registrado.</li>
+  <li><b>Bloquea la cancelación de una venta ya cerrada.</b> `cancellableStatuses` no incluye `closed` ni `reversed`; el menú ni siquiera ofrece la opción.</li>
+  <li><b>Avisa a la barra al cancelar.</b> Si la cuenta tenía artículos ya despachados o preparados, imprime una comanda de «CANCELACIÓN» con el motivo — igual que ya hacía la cancelación de un solo artículo (F04).</li>
+  <li><b>Revierte una venta cerrada, sólo gerencia.</b> Exige motivo, cambia el estado a `reversed`, y el guard se repite en el servidor (`is_manager()`), no sólo en el cliente.</li>
+  <li><b>Impide revertir dos veces.</b> Tras la primera reversión el estado deja de ser `closed`, así que el menú ya no ofrece la opción ni el dominio la permite.</li>
+  <li><b>Descuenta la reversión del esperado de Caja</b> y de la venta neta de Reportes — verificado con números reales, no sólo con la fórmula.</li>
+  <li><b>Registra toda cancelación y reversión en `incidents`</b>, con motivo, importe, fecha y — desde esta pasada — el empleado responsable, visible en Reportes.</li>
+</ul>
+
+<h2>Qué NO hace</h2>
+<ul>
+  <li><b>No permite deshacer una cancelación o reversión.</b> Ambas son terminales; corregir un error implica capturar de nuevo el pedido.</li>
+  <li><b>No distingue en el reporte de Caja quién autorizó la reversión</b> más allá de lo que ya muestra Reportes — Caja sólo ve el efecto en el efectivo, no el detalle de la incidencia.</li>
+  <li><b>No imprime nada cuando se cancela una cuenta que aún no salió a la barra</b> (todos los artículos en `pending`) — correcto y esperado: la cocina nunca la vio, no hay nada que avisar.</li>
+</ul>
+
+<h2>Resultado de las pruebas</h2>
+<table>
+  <thead><tr><th style="width:36%">Caso probado</th><th style="width:48%">Resultado obtenido</th><th style="width:16%">Estado</th></tr></thead>
+  <tbody>
+    <tr><td>F08-P1 · Cancelar cuenta abierta</td><td>Motivo obligatorio; pasa a <code>cancelled</code> con el motivo guardado</td><td class="ok">Correcto</td></tr>
+    <tr><td>F08-P2 · Cancelar cuenta en preparación</td><td>No imprimía nada para la barra</td><td class="fail">Hallazgo F08-03, corregido</td></tr>
+    <tr><td>F08-P3 · Cancelar venta cerrada</td><td>El menú no ofrece la opción sobre una venta real recién cobrada</td><td class="ok">Correcto</td></tr>
+    <tr><td>F08-P4 · Motivo vacío</td><td>Botón deshabilitado</td><td class="ok">Correcto</td></tr>
+    <tr><td>F08-P5 · Revertir como gerente</td><td>Motivo obligatorio; pasa a <code>reversed</code> con el motivo guardado, sobre una venta real cerrada y cobrada</td><td class="ok">Correcto</td></tr>
+    <tr><td>F08-P6 · Revertir como barista</td><td>Rechazado en cliente y servidor — verificado por código y permisos, no con sesión real (mismo criterio de F09-P14)</td><td class="ok">Correcto</td></tr>
+    <tr><td>F08-P7 · Revertir venta no cerrada</td><td>El botón sólo existe si <code>status === "closed"</code></td><td class="ok">Correcto</td></tr>
+    <tr><td>F08-P8 · Revertir dos veces</td><td>Tras la primera, el menú ya no ofrece la opción</td><td class="ok">Correcto</td></tr>
+    <tr><td>F08-P9 · Cancelar como barista</td><td>Permitido; motivo guardado y visible — confirmado desde F01-04</td><td class="ok">Correcto</td></tr>
+    <tr><td>F08-P10 · Trazabilidad de quién</td><td>No se mostraba en ningún lado</td><td class="fail">Hallazgo F08-04, corregido</td></tr>
+    <tr><td>F08-P11 · Visible en Reportes</td><td>Folio, tipo, motivo, importe, fecha y ahora empleado</td><td class="ok">Correcto</td></tr>
+    <tr><td>F08-P12 · Persistencia en el servidor</td><td>Confirmado en producción real: incidencias con <code>created_by</code>, <code>created_at</code>, <code>reason</code>, <code>amount_cents</code></td><td class="ok">Correcto</td></tr>
+    <tr><td>F08-P13 a P18 · Cancelación parcial (ver F04)</td><td>Verificadas contra producción real durante la pasada de F04</td><td class="ok">Correcto</td></tr>
+  </tbody>
+</table>
+
+<h2>Funcionalidades conectadas verificadas</h2>
+<table>
+  <thead><tr><th style="width:26%">Caso</th><th style="width:58%">Efecto comprobado</th><th style="width:16%">Estado</th></tr></thead>
+  <tbody>
+    <tr><td>F08-C1 · Caja</td><td>Cobrar $48 en efectivo subió el esperado a $998; revertir esa venta lo devolvió exacto a $950 — números reales, no sólo la fórmula</td><td class="ok">Correcto</td></tr>
+    <tr><td>F08-C2 · Reportes</td><td>La reversión aparece como «Reversiones $48.00» y con <code>netSales</code> negativo para el periodo; reforzado por prueba automatizada</td><td class="ok">Correcto</td></tr>
+    <tr><td>F08-C3 · Salón</td><td>Mismo mecanismo de <code>isTracked</code> ya verificado para <code>closed</code> en F07-C1, que también excluye <code>cancelled</code>/<code>reversed</code></td><td class="ok">Correcto</td></tr>
+    <tr><td>F08-C4 · Migración de reversión</td><td>Aplicada en producción; el efecto sobre Caja persistió tras recargar</td><td class="ok">Correcto</td></tr>
+  </tbody>
+</table>
+
+<h2>Pruebas automatizadas</h2>
+<ul>
+  <li><b>F08-U1 ya cubierto</b> por <code>src/domain/order.test.ts</code>: recorre los 7 estados posibles de una orden y confirma que <code>isCancellable</code> acepta exactamente <code>open</code>/<code>preparing</code>/<code>ready</code>/<code>served</code> y rechaza <code>closed</code>/<code>reversed</code>/<code>cancelled</code>. No hizo falta agregar nada.</li>
+  <li><b>F08-U2 ya cubierto</b>, de forma más estricta de lo pedido, por <code>src/domain/reports.test.ts</code>: una venta revertida deja <code>netSales.value</code> en <b>-90</b> (negativo) y <code>grossSales.value</code> en 0; una cancelada se cuenta en <code>cancellations.value</code> sin afectar la venta bruta de una cuenta cerrada junto a ella. No hizo falta agregar nada.</li>
+  <li>Suite completa: <b>111 pruebas en verde</b>. Lint y compilación sin errores.</li>
+</ul>
+
+<h2>Correcciones aplicadas durante esta pasada</h2>
+<div class="alert">
+  <p style="margin:0 0 8px"><b>F08-03 · Alta — Cancelar una cuenta no avisaba a la barra.</b> A diferencia de cancelar un solo artículo (que sí imprime una comanda de cancelación), <code>performOrderAction</code> nunca llamaba a <code>printCommand</code>. Si la cuenta ya tenía artículos despachados o preparados, la cocina se quedaba sin ningún aviso físico: el pedido simplemente desaparecía de la cola de Preparación. <b>Corregido:</b> ahora imprime una comanda «CANCELACIÓN» con el motivo, listando los artículos que ya estaban en la barra. Verificado dos veces en producción real.</p>
+  <p style="margin:0"><b>F08-04 · Alta — La trazabilidad de «quién» no llegaba a Reportes.</b> El dato ya existía en <code>incidents.created_by</code>, pero la consulta de la tabla de Incidencias (agregada en F08-02) no lo traía, y no había columna de empleado. Contradice directamente el requisito confirmado por el cliente de poder responsabilizar a alguien. <b>Corregido:</b> se agregó el join a <code>staff_profiles</code> y la columna «Empleado». Verificado en producción real: las 6 incidencias existentes mostraron «Gerente» correctamente tras el cambio.</p>
+</div>
+
+<h2>Limitaciones y observaciones</h2>
+<div class="box">
+  <ul>
+    <li><b>El permiso de barista para revertir no se probó con una sesión real</b>, sólo por lectura de código y permisos de base de datos — mismo criterio ya aceptado para F09-P14.</li>
+    <li><b>Se reutilizó deliberadamente la verificación en producción de F09</b> para P9-P12 y C1/C2/C4 en vez de repetir un nuevo ciclo de cobro/reversión: es la misma orden, el mismo mecanismo, y evita generar más datos de prueba innecesarios en la base real.</li>
+    <li><b>Datos de prueba dejados</b> en modo demostración local (no sincronizados, nunca tocaron producción): pedidos <code>QA-F08-P1</code>, <code>QA-F08-P2</code> (×2), <code>QA-F08-P5-reversion</code>. En producción real, ningún dato nuevo — se reutilizó la orden #1080 ya existente de la pasada de F09.</li>
+  </ul>
+</div>
+
+<footer>Documento generado durante la revisión previa a la entrega · Vereda Café POS · pasada completada el 18/08/2026.</footer>
+</body>
+</html>

@@ -119,8 +119,19 @@ export function SalePage() {
   }
   async function performOrderAction() {
     if (!orderAction || !orderActionReason.trim()) return;
-    if (orderAction === "cancel") await cancelOrder(activeOrder.id, orderActionReason);
-    else await reverseSale(activeOrder.id, orderActionReason);
+    if (orderAction === "cancel") {
+      // Un artículo ya despachado o preparado sigue en la barra aunque se cancele toda la cuenta:
+      // sin este aviso la cocina no tiene forma física de enterarse de que debe detenerse.
+      const barraItems = activeOrder.items
+        .filter((item) => item.status === "dispatched" || item.status === "prepared")
+        .map((item) => ({ ...item, cancellationReason: orderActionReason.trim() }));
+      await cancelOrder(activeOrder.id, orderActionReason);
+      if (barraItems.length) {
+        try { await printCommand(activeOrder, barraItems, 0, true); } catch (reason) { setMessage(`Cuenta cancelada, pero no se pudo imprimir la incidencia: ${printErrorMessage(reason)}`); }
+      }
+    } else {
+      await reverseSale(activeOrder.id, orderActionReason);
+    }
     setOrderAction(null); setOrderActionReason(""); navigate("/pedidos");
   }
 

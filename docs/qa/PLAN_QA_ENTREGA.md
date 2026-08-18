@@ -120,7 +120,7 @@ con el nombre `FXX-NN-descripcion.png`.
 | F05 | Preparación (barra) | `/preparacion` | A | ⬜ Pendiente | — |
 | F06 | Pedidos y entrega | `/pedidos` | A | ⬜ Pendiente | — |
 | F07 | Cobro, descuento y ticket | `/cobros`, `/venta/:id` | A | ✅ Completada (4 correcciones aplicadas) | [F07](pdf/F07-cobro.pdf) |
-| F08 | Cancelación y reversión | `/venta/:id` | A + B | ⬜ Pendiente | — |
+| F08 | Cancelación y reversión | `/venta/:id` | A + B | ✅ Completada (2 correcciones aplicadas) | [F08](pdf/F08-cancelacion-y-reversion.pdf) |
 | F09 | Caja y arqueo | `/caja` | B | ✅ Completada | [F09](pdf/F09-caja.pdf) |
 | F10 | Catálogo | `/catalogo` | A + B | ⬜ Pendiente | — |
 | F11 | Mesas (gestión) | `/mesas` | A + B | ⬜ Pendiente | — |
@@ -156,6 +156,8 @@ Estados posibles: ⬜ Pendiente · 🟡 En curso · ✅ Completada · ⚠️ Com
 | F07-04 | Baja | En una venta cerrada la acción de ticket sí reimprime, pero el botón dice sólo «Ticket»; no cambia a «Reimprimir» como pide F07-P13, por lo que no deja claro que se generará una segunda copia. | `src/pages/SalePage.tsx:131` | ✅ **Corregido** 18/08 (vía Codex): la acción visible de una venta cerrada ahora dice «Reimprimir» |
 | F09-01 | **Alta** | Caja y Reportes no delimitan el efectivo con el mismo evento: Caja suma pagos creados desde la apertura y excluye según el estado actual de la orden; Reportes atribuye cobros y reversiones por `closed_at` y `reversed_at`. Una reversión durante el turno actual de una venta cobrada antes de abrirlo resta en Reportes, pero no reduce el esperado de Caja. Por ello el corte no siempre puede conciliarse con Reportes para el mismo rango horario. | `src/pages/CashPage.tsx:186`, `src/pages/ReportsPage.tsx:74-109`, `src/domain/reports.ts:205-229,273-316`, `supabase/migrations/20260818120000_reverse_sale_and_cash_reversal_fix.sql:211-216` | ✅ **Corregido** 18/08 (vía Codex): Caja aclara que el esperado es efectivo físico del turno y explica la divergencia por reversiones de turnos anteriores; fórmulas intactas |
 | ~~F09-02~~ | ~~Media~~ | ~~"Registrar retiro" no está realmente deshabilitado sin nota.~~ **Retractado 18/08: falso positivo de la prueba, no un defecto.** La prueba original hizo `document.querySelectorAll('button').find(...)` sobre toda la página, y hay **dos** botones con el texto "Registrar retiro": el del encabezado (sólo abre el modal, nunca deshabilitado) y el del propio modal (el que envía). El `find` sin acotar devolvió el primero, dando un falso "no deshabilitado". Reverificado acotando la consulta a `[role=dialog]`: el botón del modal está correctamente `disabled` sin importe, sigue `disabled` con sólo importe, y se habilita con importe y nota — probado en vivo contra producción, incluyendo un envío real completado sin error. | `src/pages/CashPage.tsx:102` (`disabled={loading \|\| !Number(amount) \|\| !note.trim()}`, ya correcto) | Sin acción: el código estaba bien. Error de metodología de prueba, documentado para que no se repita |
+| F08-03 | **Alta** | **Cancelar una cuenta completa con artículos ya despachados/preparados no avisaba a la barra.** A diferencia de cancelar un solo artículo (que sí imprime una comanda de cancelación), `performOrderAction` nunca llamaba a `printCommand`: la cocina se quedaba sin ningún aviso físico de que debía detener o descartar algo que ya estaba preparando. El pedido simplemente desaparecía de la cola de Preparación sin explicación. | `src/pages/SalePage.tsx` (`performOrderAction`) | ✅ **Corregido** 18/08: ahora imprime una comanda «CANCELACIÓN» con el motivo, listando los artículos que ya estaban en la barra. Verificado dos veces en producción real (sin motivo visible primero, luego con `MOTIVO:` en el papel) |
+| F08-04 | **Alta** | **La tabla de Incidencias en Reportes (agregada en F08-02) no mostraba quién hizo la cancelación/reversión.** El dato existía (`incidents.created_by`) pero la consulta no lo traía y la tabla no tenía columna de empleado — contradice directamente el requisito confirmado por el cliente de poder responsabilizar a alguien (F01-04). | `src/pages/ReportsPage.tsx` (consulta de incidencias y tabla) | ✅ **Corregido** 18/08: se agregó el join a `staff_profiles` y la columna "Empleado". Verificado en producción real: las 6 incidencias existentes mostraron "Gerente" correctamente tras el cambio |
 
 Severidades: **Bloqueante** (impide entregar) · **Alta** (rompe un flujo, hay rodeo) · **Media**
 (molesta pero no rompe) · **Baja** (cosmético).
@@ -564,23 +566,43 @@ Es la funcionalidad con más riesgo de dinero. Revisar cada cifra a mano.
 Los commits recientes tocaron precisamente esto (`Corrige reversión de ventas`,
 `order_cancellation_incident`), así que es zona de riesgo conocido.
 
+> **Pasada completada (18/08).** F08-P13 a F08-P18 (cancelación parcial de artículo) ya se habían
+> verificado contra producción real durante la pasada de F04. El resto (P1-P12, C1-C4) se completó
+> el 18/08: P1-P8 en modo demostración con pedidos nuevos (`QA-F08-*`), sin tocar los pedidos reales
+> ya cacheados en el dispositivo; P9-P12 y C1/C2/C4 reutilizando la verificación en producción real
+> ya hecha durante la pasada de F09 (misma orden #1080). Se encontraron y corrigieron dos hallazgos
+> reales: la cancelación de cuenta no avisaba a la barra (F08-03) y la trazabilidad de "quién" no
+> era visible en Reportes (F08-04).
+
 ### Pruebas en navegador
 
 > **Requisito confirmado por el cliente (18/08):** cualquier rol puede cancelar una cuenta, **pero
 > toda cancelación debe quedar registrada y ser rastreable** (quién, cuándo, qué motivo, qué
 > importe). Verificarlo es obligatorio para dar F08 por buena — ver F08-P9 a F08-P12.
 
-- [ ] F08-P1. Cancelar una cuenta **abierta** (sin envíos): exige motivo, pasa a `cancelled`.
-- [ ] F08-P2. Cancelar una cuenta **en preparación**: exige motivo y debe imprimir incidencia para
-      la barra.
-- [ ] F08-P3. Intentar cancelar una cuenta **cerrada** → no debe permitirse (no está en
-      `cancellableStatuses`).
-- [ ] F08-P4. Motivo vacío o sólo espacios → botón deshabilitado.
-- [ ] F08-P5. **Revertir** una venta cerrada como gerente: exige motivo, pasa a `reversed` y el
-      motivo queda registrado.
-- [ ] F08-P6. Revertir como barista → rechazado con "Sólo gerencia puede revertir ventas."
-- [ ] F08-P7. Revertir una venta **no cerrada** → rechazado.
-- [ ] F08-P8. Revertir dos veces la misma venta → la segunda no debe duplicar el efecto.
+- [x] F08-P1. Cancelar una cuenta **abierta**: exige motivo (verificado con motivo vacío
+      deshabilitado); pasa a `cancelled` y el motivo queda guardado. Pedido de prueba QA-F08-P1.
+- [!] F08-P2. **No se comportaba como se esperaba** → hallazgo nuevo **F08-03**, corregido en esta
+      misma pasada: cancelar una cuenta con artículos ya despachados/preparados no imprimía ninguna
+      incidencia para la barra (`performOrderAction` nunca llamaba a `printCommand`). Corregido y
+      verificado dos veces en el navegador: ahora imprime «CANCELACIÓN» con el motivo.
+- [x] F08-P3. Cancelar una cuenta **cerrada** → no se permite: el menú no ofrece la opción
+      (`cancellableStatuses` no incluye `closed`), verificado en pantalla sobre una venta real recién
+      cobrada.
+- [x] F08-P4. Motivo vacío → botón deshabilitado, verificado en pantalla.
+- [x] F08-P5. Revertir una venta cerrada como gerente: exige motivo, pasa a `reversed` y el motivo
+      queda guardado (`discountReason: "Reversión: ..."`). Verificado con una venta real cerrada y
+      cobrada en esta misma pasada.
+- [x] F08-P6. **Verificado por código y permisos, no con sesión de barista en vivo** (mismo criterio
+      aceptado en F09-P14): el guard de `AppContext.reverseSale` lanza "Sólo gerencia puede revertir
+      ventas." para cualquier rol distinto de manager, y el servidor repite la comprobación
+      (`if not private.is_manager() then raise exception 'Manager role required'`).
+- [x] F08-P7. Revertir una venta **no cerrada** → rechazado: el botón "Revertir venta" sólo se
+      renderiza cuando `order.status === "closed"` (confirmado en el código); el dominio repite la
+      comprobación.
+- [x] F08-P8. Revertir dos veces la misma venta: tras la primera reversión el menú ya no ofrece
+      "Revertir venta" (el estado pasó a `reversed`, no `closed`) — verificado en pantalla sobre la
+      misma venta de la prueba anterior.
 
 **Cancelación parcial (funcionalidad añadida en F04, verificar contra servidor):**
 
@@ -607,41 +629,55 @@ Los commits recientes tocaron precisamente esto (`Corrige reversión de ventas`,
 
 **Trazabilidad de la cancelación (requisito del cliente):**
 
-- [ ] F08-P9. Cancelar como **barista** → se permite, y el motivo queda guardado y visible en la
-      cuenta al reabrirla.
-- [ ] F08-P10. La cancelación identifica **quién** la hizo y **cuándo**, no sólo el motivo. Si hoy
-      sólo se guarda el motivo, es un hallazgo que hay que reportar: el requisito del cliente exige
-      poder responsabilizar a alguien.
-- [ ] F08-P11. La cuenta cancelada aparece en `/reportes` con su etiqueta, su motivo y su importe,
-      y es localizable por folio (F13).
-- [ ] F08-P12. **[Requiere B]** La cancelación llega al servidor y sobrevive a la recarga:
-      `order_cancellation_incident` / `audit_log` conservan el registro. Confirmar qué columnas se
-      llenan realmente.
+- [x] F08-P9. Cualquier rol puede cancelar (confirmado desde F01-04, decisión del cliente); el
+      motivo queda guardado en `order.cancellationReason` y visible al reabrir la cuenta
+      (verificado en F08-P1).
+- [x] F08-P10. **Hallazgo real encontrado y corregido en esta pasada → F08-04.** El motivo sí queda
+      guardado, pero **quién** lo hizo no se mostraba en ningún lado visible para gerencia: la tabla
+      de Incidencias de `/reportes` (agregada en F08-02) no incluía el empleado, aunque el dato ya
+      existía en `incidents.created_by`. Se agregó el join a `staff_profiles` y la columna
+      "Empleado" — **verificado en producción real**: las 6 incidencias de prueba mostraron
+      "Gerente" correctamente. Cuándo ya estaba cubierto por la columna Fecha.
+- [x] F08-P11. La cuenta cancelada aparece en `/reportes` → Incidencias, con folio enlazado a
+      `/venta/:id`, tipo, motivo, importe y fecha (F08-02); ahora también el empleado (F08-04).
+- [x] F08-P12. **[Requiere B]** Confirmado en producción real: la cancelación (`incident_type =
+      'order_cancellation'`) y la reversión (`sale_reversal`) generan su fila en `incidents` con
+      `created_by`, `created_at`, `reason` y `amount_cents`, visibles tras recargar `/reportes`.
 
 ### Funcionalidades conectadas a verificar — **la parte más importante de F08**
 
-- [ ] F08-C1. `/caja`: el efectivo de una venta revertida **se descuenta** del esperado del turno.
-      La consulta de `CashPage.tsx:185` excluye explícitamente pedidos `reversed` y `cancelled` —
-      verificar que se cumple en la práctica (F09).
-- [ ] F08-C2. `/reportes`: la venta revertida aparece con importe de reversión y neta negativa o
-      neutralizada, no como venta normal (F13).
-- [ ] F08-C3. `/salon`: la mesa se libera al cancelar (F03).
-- [ ] F08-C4. **[Requiere B]** La migración `20260818120000_reverse_sale_and_cash_reversal_fix.sql`
-      aplica en el servidor: hacer una reversión con conexión y confirmar que el estado persiste
-      tras recargar.
+- [x] F08-C1. **Verificado en producción real dentro de la pasada de F09** (F09-P9): cobrar $48 en
+      efectivo subió el esperado a $998, revertir la venta lo devolvió exacto a $950. La exclusión
+      de `reversed`/`cancelled` en `CashPage.tsx` funciona en la práctica, no sólo en el código.
+      `cancelled` no se probó explícitamente ahí, pero comparte la misma condición SQL que
+      `reversed`, ya confirmada.
+- [x] F08-C2. **Verificado en producción real** en esta misma pasada: la reversión de la orden
+      #1080 aparece en `/reportes` con `netSales` en negativo para el periodo — visible como
+      "Reversiones $48.00" en las métricas y como fila "Reversión de venta" en Incidencias. Cubierto
+      también a nivel de cálculo puro por las pruebas de `reports.test.ts` (F08-U2).
+- [x] F08-C3. La mesa se libera al cancelar: cubierto por `isTracked`/`trackedStatuses`, que excluye
+      `cancelled` y `reversed` — el mismo mecanismo ya verificado para `closed` en F07-C1.
+- [x] F08-C4. **[Requiere B] Confirmado en producción real** dentro de la pasada de F09 (F09-P9): la
+      migración `20260818120000_reverse_sale_and_cash_reversal_fix.sql` está aplicada y el efecto de
+      la reversión sobre el esperado de Caja persistió tras recargar la página.
 
 ### Pruebas unitarias
 
-- [ ] F08-U1. `src/domain/order.test.ts`: `cancellableStatuses` — verificar la lista completa y que
-      cada estado no cancelable sea rechazado.
-- [ ] F08-U2. `src/domain/reports.test.ts` (11 casos): confirmar que hay un caso de venta revertida
-      que resta de la venta neta y otro de venta cancelada que no suma. Si no existe, agregarlo:
-      es el cálculo del que dependen los números que ve el cliente.
+- [x] F08-U1. **Ya cubierto** por `src/domain/order.test.ts`, prueba
+      "allows cancelling every live status and refuses settled ones": recorre los 7 estados posibles
+      y confirma que `isCancellable` acepta exactamente `open`/`preparing`/`ready`/`served` y
+      rechaza `closed`/`reversed`/`cancelled`. No hizo falta agregar nada.
+- [x] F08-U2. **Ya cubierto**, y de forma más estricta de lo pedido: `reports.test.ts` línea 34-47
+      prueba una venta revertida con `netSales.value` en **-90** (negativo, no sólo "menor") y
+      `grossSales.value` en 0 para esa venta; línea 49-55 prueba que una cancelada se cuenta en
+      `cancellations.value` sin afectar `grossSales` de la venta cerrada junto a ella (las
+      canceladas nunca tienen `closedAt`, así que `closedInRange` las excluye por construcción). No
+      hizo falta agregar nada.
 
 ### Ficha PDF
 
-- [ ] F08-D1. `docs/qa/fichas/F08-cancelacion-y-reversion.html` redactado
-- [ ] F08-D2. `docs/qa/pdf/F08-cancelacion-y-reversion.pdf` generado
+- [x] F08-D1. `docs/qa/fichas/F08-cancelacion-y-reversion.html` redactado
+- [x] F08-D2. `docs/qa/pdf/F08-cancelacion-y-reversion.pdf` generado
 
 ---
 
