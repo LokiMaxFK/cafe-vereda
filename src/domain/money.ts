@@ -1,6 +1,12 @@
-import type { Order, OrderItem } from "./types";
+import type { Order, OrderItem, PaymentMethod } from "./types";
 
 export const mxn = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/**
+ * Nombre del método de pago en español. Reportes ya lo traducía por su cuenta, pero el ticket del
+ * cliente y el modal de cobro imprimían el valor crudo de la base ("CASH", "CARD", "TRANSFER").
+ */
+export const paymentMethodLabel: Record<PaymentMethod, string> = { cash: "Efectivo", card: "Tarjeta", transfer: "Transferencia" };
 
 export function itemTotal(item: OrderItem) {
   return item.quantity * (item.unitPrice + item.modifiers.reduce((sum, modifier) => sum + modifier.price, 0));

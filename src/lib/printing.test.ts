@@ -25,6 +25,17 @@ describe("ticket printing", () => {
     expect(document.html).not.toContain("Poco hielo");
   });
 
+  it("imprime el método de pago en español, no el valor crudo de la base", () => {
+    // El ticket que se entrega al cliente decía "CASH" / "CARD" / "TRANSFER".
+    expect(createTicketDocument(order).html).toContain("TARJETA");
+    expect(createTicketDocument(order).html).not.toContain("CARD");
+    const efectivo = createTicketDocument({ ...order, payments: [{ ...order.payments[0], method: "cash" }] }).html;
+    expect(efectivo).toContain("EFECTIVO");
+    expect(efectivo).not.toContain("CASH");
+    const transferencia = createTicketDocument({ ...order, payments: [{ ...order.payments[0], method: "transfer" }] }).html;
+    expect(transferencia).toContain("TRANSFERENCIA");
+  });
+
   it("includes an embedded QR image when configured", () => {
     const qr = "data:image/png;base64,aGVsbG8=";
     const document = createTicketDocument(order, "58", { ...defaultPrinterSettings, ticketQrUrl: "https://veredacafe.mx", ticketQrDataUrl: qr });
@@ -45,9 +56,52 @@ describe("ticket printing", () => {
     expect(html).not.toContain("undefined");
   });
 
-  it("includes a positive payment tip using the checkout wording", () => {
+  it("imprime la propina en su propio renglón, no pegada al importe", () => {
+    // A 58 mm el importe y la propina en la misma línea no caben: el nombre del método se partía
+    // letra por letra ("TA / RJ / ET / A"). La propina va ahora en un renglón aparte.
     const html = createTicketDocument({ ...order, payments: [{ ...order.payments[0], tip: 20 }] }).html;
-    expect(html).toContain(`${mxn.format(140)} + ${mxn.format(20)} propina`);
+    expect(html).toContain("Propina");
+    expect(html).toContain(mxn.format(20));
+    expect(html).not.toContain(`${mxn.format(140)} + ${mxn.format(20)} propina`);
+  });
+
+  it("no deja que el nombre del método de pago se parta a mitad de palabra", () => {
+    const html = createTicketDocument(order).html;
+    expect(html).toContain('class="pay-method"');
+    expect(html).toContain("white-space:nowrap");
+  });
+
+  it("deja que un nombre larguísimo se ajuste sin desbordar el papel", () => {
+    // 58 mm son 48 mm útiles: un nombre largo tiene que partirse, no salirse del ticket.
+    const largo = "Frappé de caramelo salado con doble carga de espresso y crema batida";
+    const html = createTicketDocument({ ...order, items: [{ ...order.items[0], name: largo }] }, "58", { ...defaultPrinterSettings, printableWidthMm: 48 }).html;
+    expect(html).toContain(largo);
+    // el contenedor del nombre permite el ajuste; el importe se queda fijo a la derecha
+    expect(html).toContain("overflow-wrap:anywhere");
+    expect(html).toContain(".row>span:last-child,.row>strong:last-child{flex:none;text-align:right}");
+  });
+
+  it("imprime juntos el descuento con motivo y la propina", () => {
+    const html = createTicketDocument({
+      ...order,
+      discount: 15,
+      discountReason: "Cortesía",
+      payments: [{ ...order.payments[0], tip: 25 }]
+    }, "58").html;
+    expect(html).toContain("Descuento · Cortesía");
+    expect(html).toContain(`-${mxn.format(15)}`);
+    expect(html).toContain("Propina");
+    expect(html).toContain(mxn.format(25));
+  });
+
+  it("usa los valores por defecto cuando no se le pasa configuración", () => {
+    const html = createTicketDocument(order).html;
+    expect(html).toContain(defaultPrinterSettings.ticketFooterText);
+    // Detalle a tener presente: la firma toma papel de 80 mm por defecto, pero la configuración
+    // por defecto fija 48 mm útiles (los de la impresora de 58 mm). Gana la configuración, que es
+    // la opción conservadora: nunca se imprime más ancho del que el papel real admite.
+    expect(html).toContain("@page{size:48mm auto;margin:0}");
+    expect(defaultPrinterSettings.printableWidthMm).toBe(48);
   });
 
   it("omits the tip wording when a payment tip is zero or absent", () => {
@@ -105,6 +159,18 @@ describe("command printing", () => {
     expect(createCommandDocument(order, order.items, 1, false, "58").html).toContain("COPIA 1");
     expect(createCommandDocument(order, order.items, 0, true, "58").html).toContain("CANCELACIÓN");
     expect(createCommandDocument(order, order.items, 0, false, "58").html).not.toContain("COPIA");
+  });
+
+  it("la comanda de cancelación lista sólo lo que se retira de la barra", () => {
+    const items = [
+      { ...order.items[0], name: "Latte", status: "cancelled" as const, cancellationReason: "Se derramó" }
+    ];
+    const html = createCommandDocument(order, items, 0, true, "58").html;
+    expect(html).toContain("CANCELACIÓN");
+    expect(html).toContain("2 × Latte");
+    expect(html).toContain("MOTIVO: Se derramó");
+    // la comanda nunca lleva precios: la barra no cobra
+    expect(html).not.toContain("$");
   });
 
   it("escapa el nombre del cliente y del producto", () => {

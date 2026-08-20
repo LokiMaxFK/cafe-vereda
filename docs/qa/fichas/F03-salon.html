@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>F03 · Salón y vista de mesas</title>
+<style>
+  @page { size: Letter; margin: 16mm 14mm; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; color: #1b1b1f; font-size: 10.5pt; line-height: 1.45; margin: 0; }
+  header { border-bottom: 3px solid #6b4423; padding-bottom: 10px; margin-bottom: 18px; }
+  .eyebrow { font-size: 8pt; letter-spacing: .12em; text-transform: uppercase; color: #6b4423; font-weight: 700; margin: 0; }
+  h1 { font-size: 19pt; margin: 4px 0 6px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 8.5pt; color: #55525a; }
+  .meta b { color: #1b1b1f; }
+  h2 { font-size: 11.5pt; margin: 20px 0 8px; padding-bottom: 4px; border-bottom: 1px solid #dcd7d1; }
+  ul { margin: 0 0 0 16px; padding: 0; }
+  li { margin-bottom: 4px; }
+  table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-top: 6px; }
+  th { background: #f4efe9; text-align: left; font-size: 8pt; letter-spacing: .06em; text-transform: uppercase; color: #55525a; }
+  th, td { border: 1px solid #dcd7d1; padding: 6px 8px; vertical-align: top; }
+  .ok { color: #1b6b3a; font-weight: 700; }
+  .fail { color: #b3261e; font-weight: 700; }
+  .warn { color: #8a5a00; font-weight: 700; }
+  .box { background: #f7f4f0; border-left: 4px solid #6b4423; padding: 10px 12px; margin-top: 8px; }
+  footer { margin-top: 24px; padding-top: 8px; border-top: 1px solid #dcd7d1; font-size: 8pt; color: #7a767e; }
+</style>
+</head>
+<body>
+<header>
+  <p class="eyebrow">Vereda Café · Punto de venta · Ficha de funcionalidad</p>
+  <h1>F03 · Salón y vista de mesas</h1>
+  <div class="meta">
+    <span><b>Rutas:</b> /salon</span>
+    <span><b>Rol requerido:</b> Gerente y Barista</span>
+    <span><b>Modo probado:</b> Demostración (pasada A)</span>
+    <span><b>Fecha:</b> 19-20/08/2026</span>
+    <span><b>Versión:</b> commit 8257fbb + correcciones de esta revisión</span>
+  </div>
+</header>
+
+<h2>Qué hace</h2>
+<ul>
+  <li>Dibuja el croquis del local con cada mesa en la posición y la forma configuradas en Mesas, sobre una rejilla que refleja la distribución real.</li>
+  <li>Colorea cada mesa según el estado de su cuenta, con cinco tonos distinguibles: libre, cuenta abierta, en preparación, lista para entregar y por cobrar.</li>
+  <li>Resume la operación en una tira de contadores: mesas libres, cuentas abiertas, en preparación, listas y por cobrar.</li>
+  <li>Muestra en cada mesa ocupada el número de comensales y el importe acumulado de la cuenta.</li>
+  <li>Al tocar una mesa <b>libre</b>, arranca un pedido nuevo ya asignado a esa mesa: el modal de destino llega con la mesa preseleccionada.</li>
+  <li>Al tocar una mesa <b>ocupada</b>, abre un resumen rápido —folio, tiempo transcurrido, líneas, subtotal y total— con acceso a la cuenta completa. Nunca crea una segunda cuenta sobre una mesa ocupada.</li>
+  <li>Mantiene un riel lateral con los pedidos para llevar en curso, con nombre, folio, minutos de espera e importe.</li>
+  <li>Libera la mesa sola en cuanto la cuenta se cobra o se cancela.</li>
+  <li>Ofrece una vista alterna en lista, además del croquis.</li>
+</ul>
+
+<h2>Qué NO hace</h2>
+<ul>
+  <li><b>No conserva la distribución del croquis en pantallas angostas.</b> Por debajo del punto de quiebre las mesas pasan a una rejilla de tarjetas: se siguen viendo todas, con su estado y su importe, pero se pierde la referencia espacial de dónde está cada una en el local.</li>
+  <li>No permite mover mesas desde aquí; la distribución se edita en la pantalla de Mesas.</li>
+  <li>No muestra las mesas dadas de baja, ni siquiera atenuadas.</li>
+  <li>No indica el tiempo transcurrido sobre el croquis: hay que abrir el resumen de la mesa para verlo.</li>
+  <li>No separa por zonas más allá del «Área principal» que trae la configuración actual.</li>
+</ul>
+
+<h2>Resultado de las pruebas</h2>
+<table>
+  <thead><tr><th style="width:36%">Caso probado</th><th style="width:40%">Resultado observado</th><th style="width:12%">Estado</th><th style="width:12%">Caso</th></tr></thead>
+  <tbody>
+    <tr><td>Dibujo del croquis</td><td>8 mesas activas en su posición y forma (4 redondas, 4 cuadradas)</td><td class="ok">Correcto</td><td>P1</td></tr>
+    <tr><td>Colores por estado</td><td>Coinciden con la configuración de tonos; los cinco se distinguen entre sí</td><td class="ok">Correcto</td><td>P2</td></tr>
+    <tr><td>Tocar una mesa libre</td><td>Abre pedido nuevo con esa mesa ya preseleccionada</td><td class="ok">Correcto</td><td>P3</td></tr>
+    <tr><td>Tocar una mesa ocupada</td><td>Abre el resumen y de ahí la cuenta existente; no crea otra</td><td class="ok">Correcto</td><td>P4</td></tr>
+    <tr><td>Estado y tiempo de una mesa en preparación</td><td>«En preparación · En mesa · abierta hace 38 min»</td><td class="ok">Correcto</td><td>P5</td></tr>
+    <tr><td>Riel de pedidos para llevar</td><td>Lista con nombre, folio, estado, minutos e importe; abre la cuenta</td><td class="ok">Correcto</td><td>P6</td></tr>
+    <tr><td>Cerradas, canceladas y revertidas</td><td>No ocupan mesa: las mesas 2 y 4 salen libres</td><td class="ok">Correcto</td><td>P7</td></tr>
+    <tr><td>Mesa dada de baja</td><td>Desaparece del croquis; el contador pasa a «3 de 7 mesas libres»</td><td class="ok">Correcto</td><td>P8</td></tr>
+    <tr><td>Pantalla angosta de 390 px</td><td>Sin desbordamiento horizontal; pasa a diseño móvil con tarjetas táctiles</td><td class="ok">Correcto</td><td>P9</td></tr>
+  </tbody>
+</table>
+
+<h2>Funcionalidades conectadas verificadas</h2>
+<table>
+  <thead><tr><th style="width:26%">Funcionalidad</th><th style="width:54%">Efecto comprobado</th><th style="width:20%">Estado</th></tr></thead>
+  <tbody>
+    <tr><td>F05 · Preparación</td><td>Marcar listo un pedido pinta la mesa de verde y mueve los contadores sin recargar la página</td><td class="ok">Correcto</td></tr>
+    <tr><td>F07 · Cobro</td><td>Al cobrar y cerrar, la mesa vuelve a libre («5 de 8 mesas libres»)</td><td class="ok">Correcto</td></tr>
+    <tr><td>F08 · Cancelación</td><td>Al cancelar la cuenta con motivo, la mesa vuelve a libre y no queda cuenta abierta</td><td class="ok">Correcto</td></tr>
+    <tr><td>F11 · Mesas</td><td>Alta y baja de mesas se reflejan de inmediato en el croquis</td><td class="ok">Correcto</td></tr>
+  </tbody>
+</table>
+
+<h2>Pruebas automatizadas</h2>
+<ul>
+  <li><code>src/domain/order.test.ts</code> — la traducción de estado de cuenta a estado de mesa está cubierta para los cinco casos visibles, más 2 casos nuevos para las cuentas ya liquidadas.</li>
+  <li>Aclaración de diseño encontrada al escribirlas: la función que asigna el color <b>no</b> distingue por sí sola una cuenta cerrada, cancelada o revertida. Lo que libera la mesa es el filtro que el salón aplica antes de pintar. Las pruebas nuevas ejercitan las dos piezas juntas, tal como las usa la pantalla, para que quede escrito cuál de las dos hace el trabajo.</li>
+</ul>
+
+<h2>Limitaciones conocidas y riesgos para la entrega</h2>
+<div class="box">
+  <ul>
+    <li><b>Uso en tablet:</b> la pantalla responde bien a un ancho de teléfono y no desborda, pero el croquis deja de ser un plano y pasa a ser una lista de tarjetas. Si el equipo va a trabajar sobre el plano, conviene usar la tablet en horizontal.</li>
+    <li>Un detalle menor de presentación: en pantalla angosta la métrica «Lista para entregar» se recorta a «Lista para entreg…».</li>
+    <li>El resumen rápido de una mesa ocupada ofrece «Cancelar pedido» sin pedir rol de gerencia. Es el comportamiento acordado con el cliente —cualquiera puede cancelar, siempre que quede registrado— y la trazabilidad está verificada en F08.</li>
+    <li><b>Nota de método:</b> la prueba de pantalla angosta se hizo cargando la aplicación en un marco de 390×844 px porque el redimensionado de la ventana estaba bloqueado en el equipo de pruebas. Es equivalente para efectos de diseño adaptable, pero no sustituye una prueba en un dispositivo físico.</li>
+  </ul>
+</div>
+
+<footer>Documento generado durante la revisión previa a la entrega. Refleja el estado del código en el commit indicado.</footer>
+</body>
+</html>

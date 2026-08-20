@@ -97,6 +97,23 @@ describe("mapRemoteOrder", () => {
     payments: [{ id: "cccccccc-1111-4111-8111-cccccccccccc", method: "cash", amount_cents: 18000, tip_cents: 0, created_at: "2026-08-18T10:05:00Z" }]
   };
 
+  it("conserva el estado servido en ambos sentidos, sin traducirlo", () => {
+    // `served` lo agregó la migración 20260817162350_order_served_status. El mapeo no traduce
+    // estados: los pasa tal cual, así que el literal del servidor y el del dominio deben coincidir.
+    expect(mapRemoteOrder({ ...row, status: "served" }).status).toBe("served");
+    const todos = ["open", "preparing", "ready", "served", "closed", "cancelled", "reversed"];
+    for (const status of todos) expect(mapRemoteOrder({ ...row, status }).status).toBe(status);
+  });
+
+  it("no revienta si el servidor manda un estado que la aplicación no conoce", () => {
+    // Contrato real a dejar por escrito: `mapRemoteOrder` hace un cast, no valida. Un estado nuevo
+    // del servidor entra al modelo sin error y sin avisar; el pedido simplemente no encajará en
+    // ningún filtro de pantalla. Es tolerante, no defensivo.
+    const order = mapRemoteOrder({ ...row, status: "on_hold" });
+    expect(order.status).toBe("on_hold");
+    expect(order.folio).toBe(1033);
+  });
+
   it("reconstruye el identificador local de mesa a partir del número", () => {
     expect(mapRemoteOrder(row).tableId).toBe("t7");
   });

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { BarChart3, CalendarDays, Download, FileText, RefreshCw, ReceiptText, RotateCcw, ShoppingBag, TrendingDown, TrendingUp, WalletCards, XCircle } from "lucide-react";
 import { Badge, Button, EmptyState, InlineAlert, LoadingState, MetricCard, Page, PageHeader, Panel, SegmentedControl, SelectField } from "../../design-system/react";
-import { mxn } from "../domain/money";
+import { mxn, paymentMethodLabel } from "../domain/money";
 import { createInventoryAnalysis, isInventoryVarianceAlert, type InventoryAnalysisRow } from "../domain/inventory";
 import {
   createDailySales,
@@ -26,7 +26,7 @@ import { isSupabaseConfigured, supabase } from "../lib/supabase";
 import { useApp } from "../state/AppContext";
 
 const PAGE_SIZE = 500;
-const PAYMENT_LABEL: Record<PaymentMethod, string> = { cash: "Efectivo", card: "Tarjeta", transfer: "Transferencia" };
+const PAYMENT_LABEL = paymentMethodLabel;
 const DEFAULT_FILTERS: ReportFilters = { employeeId: "", orderType: "all", paymentMethod: "all" };
 const INCIDENT_LABEL = {
   item_cancellation: "Cancelación de artículo",

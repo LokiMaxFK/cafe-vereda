@@ -1,13 +1,13 @@
 import type { Category, Product } from "../domain/types";
 
 export const categories: Category[] = [
-  { id: "coffee", name: "Café" },
-  { id: "cold", name: "Frías" },
-  { id: "breakfast", name: "Almuerzos" },
-  { id: "sandwiches", name: "Bagels y chapatas" },
-  { id: "salads", name: "Ensaladas" },
-  { id: "crepes", name: "Crepas" },
-  { id: "bakery", name: "Otros" }
+  { id: "coffee", name: "Café", position: 0 },
+  { id: "cold", name: "Frías", position: 1 },
+  { id: "breakfast", name: "Almuerzos", position: 2 },
+  { id: "sandwiches", name: "Bagels y chapatas", position: 3 },
+  { id: "salads", name: "Ensaladas", position: 4 },
+  { id: "crepes", name: "Crepas", position: 5 },
+  { id: "bakery", name: "Otros", position: 6 }
 ];
 
 const hotCold = (hot: number, cold: number) => [

@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>F15 · Configuración e impresión</title>
+<style>
+  @page { size: Letter; margin: 16mm 14mm; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; color: #1b1b1f; font-size: 10.5pt; line-height: 1.45; margin: 0; }
+  header { border-bottom: 3px solid #6b4423; padding-bottom: 10px; margin-bottom: 18px; }
+  .eyebrow { font-size: 8pt; letter-spacing: .12em; text-transform: uppercase; color: #6b4423; font-weight: 700; margin: 0; }
+  h1 { font-size: 19pt; margin: 4px 0 6px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 8.5pt; color: #55525a; }
+  .meta b { color: #1b1b1f; }
+  h2 { font-size: 11.5pt; margin: 20px 0 8px; padding-bottom: 4px; border-bottom: 1px solid #dcd7d1; }
+  ul { margin: 0 0 0 16px; padding: 0; }
+  li { margin-bottom: 4px; }
+  table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-top: 6px; }
+  th { background: #f4efe9; text-align: left; font-size: 8pt; letter-spacing: .06em; text-transform: uppercase; color: #55525a; }
+  th, td { border: 1px solid #dcd7d1; padding: 6px 8px; vertical-align: top; }
+  .ok { color: #1b6b3a; font-weight: 700; }
+  .fail { color: #b3261e; font-weight: 700; }
+  .warn { color: #8a5a00; font-weight: 700; }
+  .box { background: #f7f4f0; border-left: 4px solid #6b4423; padding: 10px 12px; margin-top: 8px; }
+  .danger { background: #fdf0ef; border-left-color: #b3261e; }
+  .ticket { font-family: ui-monospace, Menlo, monospace; font-size: 8.5pt; background: #fff; border: 1px solid #dcd7d1; padding: 8px 10px; white-space: pre; display: inline-block; margin-top: 4px; }
+  footer { margin-top: 24px; padding-top: 8px; border-top: 1px solid #dcd7d1; font-size: 8pt; color: #7a767e; }
+</style>
+</head>
+<body>
+<header>
+  <p class="eyebrow">Vereda Café · Punto de venta · Ficha de funcionalidad</p>
+  <h1>F15 · Configuración e impresión térmica</h1>
+  <div class="meta">
+    <span><b>Rutas:</b> /configuracion · /configuracion/impresion</span>
+    <span><b>Rol requerido:</b> Sólo gerente</span>
+    <span><b>Modo probado:</b> Demostración (pasada A)</span>
+    <span><b>Fecha:</b> 20/08/2026</span>
+    <span><b>Versión:</b> commit 8257fbb + correcciones de esta revisión</span>
+  </div>
+</header>
+
+<h2>Qué hace</h2>
+<ul>
+  <li><b>Imprime con el diálogo del propio navegador.</b> No hace falta instalar QZ Tray, certificados ni ningún servicio adicional: el ticket se arma en la computadora y Windows lo manda a la impresora.</li>
+  <li>Permite elegir el ancho de papel (58 u 80 mm) y ajustar el ancho útil, el margen superior y el tamaño del texto.</li>
+  <li>Muestra una <b>vista previa en vivo</b> con el aspecto exacto del ticket final; cualquier cambio se ve al instante.</li>
+  <li>Deja personalizar el contenido del ticket: imagen superior del negocio, texto del pie, código QR y qué datos se imprimen de cada artículo (cantidad, presentación, extras, notas, precio unitario y total de línea).</li>
+  <li>Guarda la configuración y la conserva al recargar; el diseño del ticket se comparte con las demás estaciones.</li>
+  <li>Ofrece botones para imprimir un <b>ticket de prueba</b> y una <b>comanda de prueba</b> sin necesidad de una venta real.</li>
+  <li>El mismo formato se usa en los tres documentos del negocio: el ticket de cobro, la comanda de cocina y la incidencia de cancelación.</li>
+</ul>
+
+<h2>Qué NO hace</h2>
+<ul>
+  <li><b>No elige la impresora por ti.</b> Cada vez que se imprime, hay que seleccionar la impresora correcta en el diálogo de Windows, con el tamaño de papel adecuado y sin encabezados ni pies de página. Chrome suele recordar la última elección.</li>
+  <li>No imprime en silencio: siempre aparece el diálogo del sistema.</li>
+  <li>No permite previsualizar la incidencia de cancelación desde esta pantalla; sólo el ticket y la comanda.</li>
+  <li>No valida que el ancho útil configurado coincida con el papel puesto en la impresora.</li>
+  <li>No admite abrir el cajón de dinero ni cortar el papel automáticamente.</li>
+</ul>
+
+<h2>Resultado de las pruebas</h2>
+<table>
+  <thead><tr><th style="width:36%">Caso probado</th><th style="width:40%">Resultado observado</th><th style="width:12%">Estado</th><th style="width:12%">Caso</th></tr></thead>
+  <tbody>
+    <tr><td>Acceso desde Configuración</td><td>Carga y enlaza a la estación de impresión</td><td class="ok">Correcto</td><td>P1</td></tr>
+    <tr><td>Cambiar el ancho de papel</td><td>58 mm → 48 útiles; 80 mm → 72 útiles; la vista previa se reajusta</td><td class="ok">Correcto</td><td>P2</td></tr>
+    <tr><td>Editar el pie del ticket</td><td>La vista previa lo refleja al instante</td><td class="ok">Correcto</td><td>P3</td></tr>
+    <tr><td>Guardar y recargar</td><td>Pie, ancho de papel y ancho útil persisten</td><td class="ok">Correcto</td><td>P4</td></tr>
+    <tr><td>Impresión sin servicios adicionales</td><td>«Lista para imprimir»; el ticket se genera sin errores</td><td class="ok">Correcto</td><td>P5</td></tr>
+    <tr><td>Respaldo por navegador</td><td>Genera el documento y lo manda al diálogo del sistema</td><td class="ok">Correcto</td><td>P6</td></tr>
+    <tr><td>Ticket a 58 mm con líneas largas y descuento</td><td>El contenido cabe; el método de pago se partía</td><td class="fail">Defecto</td><td>P7 / F15-01</td></tr>
+    <tr><td>Comanda de cocina</td><td>Formato propio, sin importes, con identificador de lote</td><td class="ok">Correcto</td><td>P8</td></tr>
+    <tr><td>Incidencia de cancelación</td><td>Verificada fuera de esta pantalla, en F05 y F08</td><td class="ok">Correcto</td><td>P9</td></tr>
+    <tr><td>Impresión en papel real</td><td><b>No hay impresora física disponible</b></td><td class="warn">No verificado</td><td>P10</td></tr>
+  </tbody>
+</table>
+
+<h2>Defecto encontrado y corregido</h2>
+<div class="box danger">
+  <p style="margin:0 0 6px"><b>F15-01 · En el ticket de 58 mm el método de pago se partía letra por letra.</b> (Severidad alta)</p>
+  <p style="margin:0 0 6px">Al llevar el importe y la propina en el mismo renglón, no quedaba espacio para el nombre del método, y el ticket lo cortaba por donde fuera. Esto es lo que aparecía en la vista previa, y es lo que habría salido impreso en el comprobante del cliente:</p>
+  <div class="ticket">TOTAL                  $270.00
+TA  $270.00 + $20.00 propina
+RJ
+ET
+A</div>
+  <p style="margin:6px 0 6px"><b>Corregido:</b> la propina pasa a su propio renglón y el nombre del método ya no se parte nunca:</p>
+  <div class="ticket">TOTAL                  $270.00
+TARJETA                $270.00
+ Propina                $20.00</div>
+  <p style="margin:6px 0 0"><b>Nota honesta sobre el origen:</b> el defecto se hizo visible al traducir los métodos de pago al español en esta misma revisión —«CARD» cabía, «TARJETA» ya no—, pero el problema estaba latente desde antes: «TRANSFER», el texto anterior, también se habría partido en cuanto hubiera propina.</p>
+</div>
+
+<h2>Pruebas automatizadas</h2>
+<ul>
+  <li><code>src/lib/printing.test.ts</code> — ampliado de 3 a <b>19 casos</b>. Los nuevos cubren: método de pago en español para los tres medios; propina en renglón propio; el nombre del método que no se parte; nombre de producto larguísimo que sí debe ajustarse sin desbordar; descuento con motivo y propina a la vez; comanda de cancelación con motivo y sin importes; y los valores por defecto sin configuración guardada.</li>
+  <li>Al escribir estas pruebas se documentó un detalle del diseño: los dos valores por defecto no concuerdan —la función asume papel de 80 mm, la configuración fija 48 mm útiles— y gana la configuración. Es la opción conservadora, así que se dejó como está.</li>
+</ul>
+
+<h2>Limitaciones conocidas y riesgos para la entrega</h2>
+<div class="box">
+  <ul>
+    <li><b>Riesgo principal: no se ha impreso en papel.</b> Todo lo verificado se hizo sobre el documento que se envía a la impresora, no sobre una impresión real. Antes de abrir al público conviene imprimir un ticket, una comanda y una incidencia en la impresora del café y comprobar tres cosas: que no se corte por la derecha, que la imagen del negocio salga legible en blanco y negro, y que el corte de papel quede donde debe.</li>
+    <li><b>Al imprimir hay que elegir bien en el diálogo de Windows:</b> la impresora correcta, el tamaño de papel correcto y <b>sin</b> encabezados ni pies de página. Si sale un ticket con la dirección web arriba, es esta opción.</li>
+    <li>Si se cambia el papel de 58 a 80 mm hay que actualizar también esta pantalla; la aplicación no lo detecta sola.</li>
+    <li>La impresión siempre pasa por el diálogo del sistema, así que cada ticket exige una confirmación. Es el compromiso a cambio de no depender de software adicional.</li>
+  </ul>
+</div>
+
+<footer>Documento generado durante la revisión previa a la entrega. Refleja el estado del código en el commit indicado.</footer>
+</body>
+</html>

@@ -4,6 +4,10 @@ dist
 .env.local
 .env.production
 .env.*.local
+# Copias de respaldo de las credenciales (p. ej. .env.local.bak durante las pruebas de QA):
+# los patrones de arriba no las cubren y contienen las claves reales de Supabase.
+.env.local.*
+.env*.bak
 *.log
 .DS_Store
 coverage

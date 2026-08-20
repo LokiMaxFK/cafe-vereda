@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>F02 · Nuevo pedido y folio</title>
+<style>
+  @page { size: Letter; margin: 16mm 14mm; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; color: #1b1b1f; font-size: 10.5pt; line-height: 1.45; margin: 0; }
+  header { border-bottom: 3px solid #6b4423; padding-bottom: 10px; margin-bottom: 18px; }
+  .eyebrow { font-size: 8pt; letter-spacing: .12em; text-transform: uppercase; color: #6b4423; font-weight: 700; margin: 0; }
+  h1 { font-size: 19pt; margin: 4px 0 6px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 8.5pt; color: #55525a; }
+  .meta b { color: #1b1b1f; }
+  h2 { font-size: 11.5pt; margin: 20px 0 8px; padding-bottom: 4px; border-bottom: 1px solid #dcd7d1; }
+  ul { margin: 0 0 0 16px; padding: 0; }
+  li { margin-bottom: 4px; }
+  table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-top: 6px; }
+  th { background: #f4efe9; text-align: left; font-size: 8pt; letter-spacing: .06em; text-transform: uppercase; color: #55525a; }
+  th, td { border: 1px solid #dcd7d1; padding: 6px 8px; vertical-align: top; }
+  .ok { color: #1b6b3a; font-weight: 700; }
+  .fail { color: #b3261e; font-weight: 700; }
+  .warn { color: #8a5a00; font-weight: 700; }
+  .box { background: #f7f4f0; border-left: 4px solid #6b4423; padding: 10px 12px; margin-top: 8px; }
+  footer { margin-top: 24px; padding-top: 8px; border-top: 1px solid #dcd7d1; font-size: 8pt; color: #7a767e; }
+</style>
+</head>
+<body>
+<header>
+  <p class="eyebrow">Vereda Café · Punto de venta · Ficha de funcionalidad</p>
+  <h1>F02 · Nuevo pedido y asignación de folio</h1>
+  <div class="meta">
+    <span><b>Rutas:</b> /venta/nueva</span>
+    <span><b>Rol requerido:</b> Gerente y Barista</span>
+    <span><b>Modo probado:</b> Demostración (pasada A)</span>
+    <span><b>Fecha:</b> 19/08/2026</span>
+    <span><b>Versión:</b> commit 8257fbb + correcciones de esta revisión</span>
+  </div>
+</header>
+
+<h2>Qué hace</h2>
+<ul>
+  <li>Abre una pantalla a cuerpo completo, sin la barra lateral, para armar el pedido antes de decidir su destino.</li>
+  <li>Muestra el catálogo por categorías y filtra por texto conforme se escribe.</li>
+  <li>Cobra el precio de la <b>variante</b> elegida, no el precio base (Cappuccino Frío/frappé se agrega a $90.00, no a $70.00).</li>
+  <li>Fusiona en una sola línea las selecciones idénticas —mismo producto, misma variante, mismos extras, misma nota— y separa en líneas distintas las que difieren en cualquiera de esos cuatro datos.</li>
+  <li>Suma correctamente líneas y extras: 2 × $90.00 más 1 × ($90.00 + $15.00) da $285.00.</li>
+  <li>Pide el destino antes de crear nada: mesa del croquis, o «para llevar» con un nombre opcional.</li>
+  <li>Bloquea las mesas ya ocupadas y el botón de confirmar mientras no haya destino elegido.</li>
+  <li>Asigna un folio correlativo. Sin conexión lo calcula el propio dispositivo, siempre por encima del folio más alto que conoce.</li>
+  <li>Deja salir sin efectos: la flecha de volver regresa al salón y descarta lo capturado sin crear el pedido.</li>
+</ul>
+
+<h2>Qué NO hace</h2>
+<ul>
+  <li><b>No permite elegir la cantidad al agregar:</b> cada toque suma una unidad. La cantidad se ajusta después, ya dentro de la cuenta.</li>
+  <li><b>No muestra los productos no disponibles</b>: desaparecen del selector en vez de aparecer atenuados, así que desde esta pantalla no hay forma de saber que existen.</li>
+  <li>No exige nombre en los pedidos para llevar; el campo es opcional y el pedido se crea sin él.</li>
+  <li>No reserva la mesa: la ocupación se hace efectiva al crear el pedido, no al abrir el modal.</li>
+  <li><b>No se ha verificado contra el servidor real.</b> El folio de la secuencia del servidor (<code>next_order_folio</code>) y el comportamiento sin conexión con Supabase configurado quedan pendientes de la pasada B (casos F02-P13 y F02-P14).</li>
+</ul>
+
+<h2>Resultado de las pruebas</h2>
+<table>
+  <thead><tr><th style="width:36%">Caso probado</th><th style="width:40%">Resultado observado</th><th style="width:12%">Estado</th><th style="width:12%">Caso</th></tr></thead>
+  <tbody>
+    <tr><td>Abrir Nuevo Pedido desde la barra lateral</td><td>Abre /venta/nueva sin barra lateral</td><td class="ok">Correcto</td><td>P1</td></tr>
+    <tr><td>Listado de categorías y filtro por texto</td><td>7 categorías; «capp» deja sólo Cappuccino</td><td class="ok">Correcto</td><td>P2</td></tr>
+    <tr><td>Agregar producto con variante</td><td>Se agrega a $90.00, el precio de la variante</td><td class="ok">Correcto</td><td>P3</td></tr>
+    <tr><td>Repetir la misma selección</td><td>Una sola línea con cantidad 2, $180.00</td><td class="ok">Correcto</td><td>P4</td></tr>
+    <tr><td>Mismo producto con un extra distinto</td><td>Línea aparte de $105.00</td><td class="ok">Correcto</td><td>P5</td></tr>
+    <tr><td>Total contra suma manual</td><td>$285.00 = 2×$90.00 + 1×$105.00</td><td class="ok">Correcto</td><td>P6</td></tr>
+    <tr><td>Continuar con el pedido vacío</td><td>Deshabilitado en encabezado y pie</td><td class="ok">Correcto</td><td>P7</td></tr>
+    <tr><td>Destino mesa</td><td>Crea el pedido y abre /venta/:id, «Mesa 1 · Orden #1045»</td><td class="ok">Correcto</td><td>P8</td></tr>
+    <tr><td>Destino para llevar con nombre</td><td>Pedido #1046 con «QA-19AGO-01» en la cabecera</td><td class="ok">Correcto</td><td>P9</td></tr>
+    <tr><td>Confirmar sin mesa seleccionada</td><td>Botón deshabilitado; mesas ocupadas también</td><td class="ok">Correcto</td><td>P10</td></tr>
+    <tr><td>Folio del pedido nuevo</td><td>1045, 1046 y 1047: creciente y sin repetir</td><td class="ok">Correcto</td><td>P11</td></tr>
+    <tr><td>Salir con la flecha de volver</td><td>Vuelve al salón sin crear pedido</td><td class="ok">Correcto</td><td>P12</td></tr>
+    <tr><td>Orden de las categorías del menú</td><td>Cambiaba al recargar y abría en una categoría al azar</td><td class="fail">Defecto</td><td>F02-01</td></tr>
+    <tr><td>Folio del servidor con conexión</td><td>Requiere Supabase real</td><td class="warn">Pendiente</td><td>P13</td></tr>
+    <tr><td>Creación sin conexión y reasignación de folio</td><td>Requiere Supabase real</td><td class="warn">Pendiente</td><td>P14</td></tr>
+  </tbody>
+</table>
+
+<h2>Funcionalidades conectadas verificadas</h2>
+<table>
+  <thead><tr><th style="width:26%">Funcionalidad</th><th style="width:54%">Efecto comprobado</th><th style="width:20%">Estado</th></tr></thead>
+  <tbody>
+    <tr><td>F03 · Salón</td><td>La mesa elegida queda ocupada de inmediato, con su total, y el modal de destino ya la muestra bloqueada para el pedido siguiente</td><td class="ok">Correcto</td></tr>
+    <tr><td>F03 · Riel para llevar</td><td>El pedido aparece con nombre, folio, minutos e importe</td><td class="ok">Correcto</td></tr>
+    <tr><td>F10 · Catálogo</td><td>Un producto marcado como no disponible deja de ofrecerse aquí</td><td class="ok">Correcto</td></tr>
+  </tbody>
+</table>
+
+<h2>Defecto encontrado y corregido</h2>
+<div class="box">
+  <p style="margin:0 0 6px"><b>F02-01 · El orden del menú se perdía y la pantalla abría en una categoría al azar.</b></p>
+  <p style="margin:0 0 6px">El servidor sí guarda el orden que define la gerencia (columna <code>position</code>) y la consulta lo respeta, pero al guardar el catálogo en el dispositivo esa columna se descartaba. Al recargar, las categorías volvían ordenadas por su identificador interno —invisible para cualquier usuario— y «Nuevo Pedido» abría en la que hubiera quedado primera.</p>
+  <p style="margin:0"><b>Es la causa de un problema ya observado en producción</b> (la pantalla abría en una categoría vacía). Corregido: el orden se conserva en el dispositivo y se aplica al dibujar el menú. Comprobado tras recargar: el menú abre en «Café», la primera categoría según la configuración.</p>
+</div>
+
+<h2>Pruebas automatizadas</h2>
+<ul>
+  <li><code>src/domain/catalog.test.ts</code> — 6 casos nuevos: orden por posición frente a orden por identificador, no mutación, categorías sin posición al final, desempate por nombre en español, lista ya ordenada y lista vacía.</li>
+  <li><code>src/domain/order.test.ts</code> — 5 casos nuevos sobre el folio local: lista vacía, lista desordenada, folios por debajo del mínimo, monotonía sobre cinco asignaciones seguidas y folios no numéricos.</li>
+  <li><code>src/domain/orderItem.test.ts</code> — ya cubría la fusión de líneas, incluidos los mismos extras en distinto orden. No hizo falta agregar casos.</li>
+</ul>
+
+<h2>Limitaciones conocidas y riesgos para la entrega</h2>
+<div class="box">
+  <ul>
+    <li><b>El folio del servidor no se ha probado en esta pasada.</b> Toda la verificación es en modo demostración; en producción el folio lo reparte la base de datos. Es el punto que más conviene confirmar antes de abrir el café.</li>
+    <li><b>Defecto latente corregido de paso:</b> el cálculo del folio local devolvía un valor inválido si algún pedido llegaba sin folio. Bastaba un solo registro mal formado para que el pedido nuevo naciera sin número. Ahora esos registros se ignoran.</li>
+    <li>Los productos no disponibles se ocultan en vez de mostrarse deshabilitados. Es una decisión razonable, pero conviene que el equipo lo sepa: si un producto «desaparece» del menú, hay que revisarlo en Catálogo.</li>
+  </ul>
+</div>
+
+<footer>Documento generado durante la revisión previa a la entrega. Refleja el estado del código en el commit indicado.</footer>
+</body>
+</html>

@@ -4,6 +4,7 @@ import { Button, InlineAlert, Page, PageHeader, Panel, TextField } from "../../d
 import { Modal } from "../components/Modal";
 import { TableFloorPlan } from "../components/TableFloorPlan";
 import type { CafeTable } from "../domain/types";
+import { isTracked, orderDestination } from "../domain/order";
 import { useApp } from "../state/AppContext";
 
 const shapeOptions: Array<{ value: CafeTable["shape"]; label: string; icon: typeof Circle }> = [
@@ -13,7 +14,7 @@ const shapeOptions: Array<{ value: CafeTable["shape"]; label: string; icon: type
 ];
 
 export function TablesPage() {
-  const { tables, online, addTable, updateTable } = useApp();
+  const { tables, orders, online, addTable, updateTable } = useApp();
   const [editing, setEditing] = useState<CafeTable | null>(null);
   const [seats, setSeats] = useState("2");
   const [shape, setShape] = useState<CafeTable["shape"]>("square");
@@ -29,6 +30,7 @@ export function TablesPage() {
   }
   async function toggleActive() {
     if (!editing) return;
+    if (editing.active && openOrder) return;
     await updateTable(editing.id, { active: !editing.active });
     setEditing(null);
   }
@@ -38,6 +40,10 @@ export function TablesPage() {
   async function handleReposition(table: CafeTable, x: number, y: number) {
     try { await updateTable(table.id, { x, y }); } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo mover la mesa."); }
   }
+
+  // Una mesa con cuenta viva no se puede dar de baja: el pedido desaparecería del salón sin aviso
+  // y sólo se recuperaría entrando a Pedidos, con el riesgo de que nadie llegue a cobrarlo.
+  const openOrder = editing ? orders.find((order) => order.tableId === editing.id && isTracked(order)) : undefined;
 
   return (
     <Page size="wide">
@@ -60,7 +66,8 @@ export function TablesPage() {
             <div className="grid grid-cols-3 gap-2">{shapeOptions.map((option) => { const Icon = option.icon; return <button key={option.value} type="button" onClick={() => setShape(option.value)} className={`flex min-h-16 flex-col items-center justify-center gap-1 rounded-xl border text-xs font-bold ${shape === option.value ? "border-primary bg-primary-fixed text-primary" : "border-outline-variant/40"}`}><Icon size={18} />{option.label}</button>; })}</div>
           </div>
           <Button variant="primary" className="w-full" onClick={() => void saveDetails()}>Guardar cambios</Button>
-          <Button variant={editing.active ? "danger" : "success"} className="w-full" onClick={() => void toggleActive()}>{editing.active ? <><Trash2 size={18} /> Quitar mesa</> : <><RotateCcw size={18} /> Reactivar mesa</>}</Button>
+          <Button variant={editing.active ? "danger" : "success"} className="w-full" disabled={editing.active && Boolean(openOrder)} onClick={() => void toggleActive()}>{editing.active ? <><Trash2 size={18} /> Quitar mesa</> : <><RotateCcw size={18} /> Reactivar mesa</>}</Button>
+          {editing.active && openOrder && <p className="text-center text-xs text-on-surface-variant">Tiene la cuenta #{openOrder.folio} abierta ({orderDestination(openOrder)}). Cóbrala o cancélala antes de dar la mesa de baja.</p>}
         </div>
       </Modal>}
     </Page>

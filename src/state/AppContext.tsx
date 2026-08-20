@@ -1,7 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { categories as initialCategories, commonModifiers as initialExtras, products as initialProducts } from "../data/menu";
 import { initialTables } from "../data/tables";
-import { cancellableStatuses } from "../domain/order";
+import { productImageError, sortCategories } from "../domain/catalog";
+import { cancellableStatuses, markItemsPrepared, nextLocalFolio } from "../domain/order";
+import { nextFreeSlot } from "../domain/tables";
 import { applyPaymentCap, orderSubtotal, orderTotal, paidTotal } from "../domain/money";
 import { cancelItemUnits, mergeOrAddItem, type OrderItemInput } from "../domain/orderItem";
 import type { AppRole, CafeTable, CatalogExtra, Category, Order, OrderItem, PaymentMethod, Product, StaffSession, SyncStatus } from "../domain/types";
@@ -112,20 +114,6 @@ interface AppContextValue {
 
 const AppContext = createContext<AppContextValue | null>(null);
 
-/**
- * Primer hueco libre del croquis, para que las mesas nuevas no se apilen todas en el centro.
- * Las tolerancias aproximan el tamaño de una mesa sobre el plano (~12 % de ancho, ~24 % de alto).
- */
-function nextFreeSlot(tables: CafeTable[]) {
-  const taken = tables.filter((table) => table.active);
-  for (let y = 12; y <= 88; y += 4) {
-    for (let x = 8; x <= 88; x += 3) {
-      if (!taken.some((table) => Math.abs(table.x - x) < 12 && Math.abs(table.y - y) < 24)) return { x, y };
-    }
-  }
-  return { x: 50, y: 50 };
-}
-
 function demoIdentity(username: string): StaffSession | null {
   const normalized = username.trim().toLowerCase();
   if (["gerente", "demo", "jordan"].includes(normalized)) {
@@ -164,8 +152,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (savedProducts.length) setProducts(savedProducts);
       else if (!isSupabaseConfigured) { await db.catalog.bulkPut(demoProducts); setProducts(demoProducts); }
       else setProducts([]);
-      if (savedCategories.length) setCategories(savedCategories);
-      else if (!isSupabaseConfigured) { await db.catalogCategories.bulkPut(initialCategories); setCategories(initialCategories); }
+      if (savedCategories.length) setCategories(sortCategories(savedCategories));
+      else if (!isSupabaseConfigured) { await db.catalogCategories.bulkPut(initialCategories); setCategories(sortCategories(initialCategories)); }
       else setCategories([]);
       if (savedExtras.length) setExtras(savedExtras);
       else if (!isSupabaseConfigured) { await db.catalogExtras.bulkPut(demoExtras); setExtras(demoExtras); }
@@ -202,14 +190,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const pullRemoteCatalog = useCallback(async () => {
     if (!supabase || !navigator.onLine) return;
     const [categoryResult, productResult, variantResult, extraResult] = await Promise.all([
-      supabase.from("categories").select("id, name").eq("active", true).order("position"),
+      supabase.from("categories").select("id, name, position").eq("active", true).order("position"),
       supabase.from("products").select("id, category_id, name, description, price_cents, available, seasonal, image_url").eq("active", true).order("name"),
       supabase.from("product_variants").select("id, product_id, name, price_cents").eq("active", true),
       supabase.from("modifiers").select("id, name, price_cents, active").eq("active", true).order("name")
     ]);
     const error = categoryResult.error || productResult.error || variantResult.error || extraResult.error;
     if (error) throw new Error(error.message);
-    const remoteCategories: Category[] = (categoryResult.data ?? []).map((row) => ({ id: row.id, name: row.name }));
+    const remoteCategories: Category[] = sortCategories((categoryResult.data ?? []).map((row, index) => ({ id: row.id, name: row.name, position: Number.isFinite(Number(row.position)) ? Number(row.position) : index })));
     const remoteProducts: Product[] = (productResult.data ?? []).map((row) => ({
       id: row.id,
       categoryId: row.category_id,
@@ -309,7 +297,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
    * respeta si sigue libre al sincronizar y, si no, le asigna uno de la secuencia.
    */
   const reserveFolio = useCallback(async () => {
-    const localFolio = Math.max(1044, ...orders.map((order) => order.folio)) + 1;
+    const localFolio = nextLocalFolio(orders.map((order) => order.folio));
     if (!supabase || !navigator.onLine) return localFolio;
     const { data, error } = await supabase.rpc("next_order_folio");
     return error || data == null ? localFolio : Number(data);
@@ -361,7 +349,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const markOrderReady = useCallback(async (orderId: string) => {
     const order = orders.find((item) => item.id === orderId); if (!order) return;
-    await persistOrder({ ...order, status: "ready", items: order.items.map((item) => item.status === "dispatched" ? { ...item, status: "prepared" } : item) }, "mark_order_ready");
+    await persistOrder({ ...order, status: "ready", items: markItemsPrepared(order.items) }, "mark_order_ready");
   }, [orders, persistOrder]);
 
   const finalizeOrder = useCallback(async (orderId: string) => {
@@ -525,9 +513,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const createCategory = useCallback(async (name: string) => {
     if (session?.role !== "manager") throw new Error("Sólo gerencia puede editar las categorías.");
     if (isSupabaseConfigured && !navigator.onLine) throw new Error("Necesitas conexión para modificar las categorías.");
-    const category: Category = { id: crypto.randomUUID(), name };
+    const category: Category = { id: crypto.randomUUID(), name, position: categories.length };
     if (supabase) {
-      const { error } = await supabase.from("categories").insert({ id: category.id, name, position: categories.length, active: true, published: true });
+      const { error } = await supabase.from("categories").insert({ id: category.id, name, position: category.position, active: true, published: true });
       if (error) throw new Error(error.message);
     }
     await db.catalogCategories.put(category);
@@ -542,9 +530,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const { error } = await supabase.from("categories").update({ name }).eq("id", categoryId);
       if (error) throw new Error(error.message);
     }
-    await db.catalogCategories.put({ id: categoryId, name });
+    // `put` reemplaza el registro completo: hay que conservar la posición o el menú se
+    // reordenaría al renombrar una categoría.
+    const current = categories.find((category) => category.id === categoryId);
+    await db.catalogCategories.put({ id: categoryId, name, position: current?.position ?? categories.length });
     setCategories((items) => items.map((category) => category.id === categoryId ? { ...category, name } : category));
-  }, [session]);
+  }, [session, categories]);
 
   const deleteCategory = useCallback(async (categoryId: string) => {
     if (session?.role !== "manager") throw new Error("Sólo gerencia puede editar las categorías.");
@@ -564,8 +555,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const uploadProductImage = useCallback(async (file: File) => {
     if (session?.role !== "manager") throw new Error("Sólo gerencia puede editar el catálogo.");
-    if (!/image\/(png|jpeg)/.test(file.type)) throw new Error("La imagen debe ser PNG o JPEG.");
-    if (file.size > 2_000_000) throw new Error("La imagen no debe pesar más de 2 MB.");
+    const imageError = productImageError(file);
+    if (imageError) throw new Error(imageError);
     if (supabase) {
       const path = `${crypto.randomUUID()}-${file.name}`;
       const { error } = await supabase.storage.from("product-images").upload(path, file);

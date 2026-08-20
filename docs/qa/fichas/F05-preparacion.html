@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>F05 · Preparación</title>
+<style>
+  @page { size: Letter; margin: 16mm 14mm; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; color: #1b1b1f; font-size: 10.5pt; line-height: 1.45; margin: 0; }
+  header { border-bottom: 3px solid #6b4423; padding-bottom: 10px; margin-bottom: 18px; }
+  .eyebrow { font-size: 8pt; letter-spacing: .12em; text-transform: uppercase; color: #6b4423; font-weight: 700; margin: 0; }
+  h1 { font-size: 19pt; margin: 4px 0 6px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 8.5pt; color: #55525a; }
+  .meta b { color: #1b1b1f; }
+  h2 { font-size: 11.5pt; margin: 20px 0 8px; padding-bottom: 4px; border-bottom: 1px solid #dcd7d1; }
+  ul { margin: 0 0 0 16px; padding: 0; }
+  li { margin-bottom: 4px; }
+  table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-top: 6px; }
+  th { background: #f4efe9; text-align: left; font-size: 8pt; letter-spacing: .06em; text-transform: uppercase; color: #55525a; }
+  th, td { border: 1px solid #dcd7d1; padding: 6px 8px; vertical-align: top; }
+  .ok { color: #1b6b3a; font-weight: 700; }
+  .fail { color: #b3261e; font-weight: 700; }
+  .warn { color: #8a5a00; font-weight: 700; }
+  .box { background: #f7f4f0; border-left: 4px solid #6b4423; padding: 10px 12px; margin-top: 8px; }
+  footer { margin-top: 24px; padding-top: 8px; border-top: 1px solid #dcd7d1; font-size: 8pt; color: #7a767e; }
+</style>
+</head>
+<body>
+<header>
+  <p class="eyebrow">Vereda Café · Punto de venta · Ficha de funcionalidad</p>
+  <h1>F05 · Preparación (vista de barra)</h1>
+  <div class="meta">
+    <span><b>Rutas:</b> /preparacion</span>
+    <span><b>Rol requerido:</b> Gerente y Barista</span>
+    <span><b>Modo probado:</b> Demostración (pasada A)</span>
+    <span><b>Fecha:</b> 20/08/2026</span>
+    <span><b>Versión:</b> commit 8257fbb + correcciones de esta revisión</span>
+  </div>
+</header>
+
+<h2>Qué hace</h2>
+<ul>
+  <li>Muestra una cola compartida, visible para todo el equipo, con las comandas activas.</li>
+  <li>Lista sólo los pedidos que tienen líneas efectivamente enviadas a la barra, <b>ordenados del más antiguo al más reciente</b>, para que se atienda primero lo que lleva más tiempo esperando.</li>
+  <li>Destaca en rojo el tiempo de espera del pedido más viejo de la cola.</li>
+  <li>En cada tarjeta muestra destino, folio, tiempo de espera y las líneas con cantidad, variante, extras y nota de preparación.</li>
+  <li>Con un botón por pedido, marca todo lo enviado como preparado y pasa la cuenta a «listo para entregar».</li>
+  <li>Mantiene una segunda columna con los pedidos ya listos pendientes de entregar.</li>
+  <li>Retira de la vista, sin dejar rastro para el barista, todo lo que se cancela: tanto una línea suelta como la cuenta entera.</li>
+  <li>Cuando no hay nada que preparar muestra un mensaje explícito, no una pantalla en blanco.</li>
+</ul>
+
+<h2>Qué NO hace</h2>
+<ul>
+  <li><b>No permite marcar listo un solo lote.</b> Si a un pedido se le envían dos comandas en momentos distintos, la barra las ve juntas en una sola tarjeta, sin distinguirlas, y el botón marca <b>todo</b> lo enviado de una vez. En la práctica: si la bebida sale antes que la comida, el pedido no se puede marcar listo hasta que esté todo lo enviado.</li>
+  <li>No permite marcar listo un artículo individual dentro del pedido.</li>
+  <li>No deja deshacer: una vez marcado listo, no hay forma de devolver el pedido a la cola desde esta pantalla.</li>
+  <li>No emite ningún aviso sonoro ni notificación cuando entra una comanda nueva; la pantalla se actualiza sola, pero hay que estar mirándola.</li>
+  <li>No muestra la hora de envío de cada lote, sólo el tiempo transcurrido desde que se abrió la cuenta.</li>
+</ul>
+
+<h2>Resultado de las pruebas</h2>
+<table>
+  <thead><tr><th style="width:36%">Caso probado</th><th style="width:40%">Resultado observado</th><th style="width:12%">Estado</th><th style="width:12%">Caso</th></tr></thead>
+  <tbody>
+    <tr><td>Contenido y orden de la cola</td><td>Sólo pedidos con líneas enviadas, el más antiguo primero (43 min antes que 9 min)</td><td class="ok">Correcto</td><td>P1</td></tr>
+    <tr><td>Datos de cada tarjeta</td><td>Destino, folio, líneas con cantidad y variante, tiempo de espera</td><td class="ok">Correcto</td><td>P2</td></tr>
+    <tr><td>Marcar listo</td><td>Lo enviado pasa a preparado y la cuenta a «listo»</td><td class="ok">Correcto</td><td>P3</td></tr>
+    <tr><td>Salida de la cola</td><td>El pedido pasa de «Por preparar» a «Listos para entregar»</td><td class="ok">Correcto</td><td>P4</td></tr>
+    <tr><td>Pedido con dos lotes</td><td>Se muestran juntos y se marcan listos todos a la vez</td><td class="warn">Documentado</td><td>P5</td></tr>
+    <tr><td>Línea cancelada</td><td>Desaparece de la barra; la incidencia impresa lleva su motivo</td><td class="ok">Correcto</td><td>P6</td></tr>
+    <tr><td>Vista vacía</td><td>«La barra está al día», con icono y contador en cero</td><td class="ok">Correcto</td><td>P7</td></tr>
+    <tr><td>Conteo de artículos por entregar</td><td>Incluía cancelados y pendientes, y decía «1 artículos»</td><td class="fail">Defecto</td><td>F05-01</td></tr>
+  </tbody>
+</table>
+
+<h2>Funcionalidades conectadas verificadas</h2>
+<table>
+  <thead><tr><th style="width:26%">Funcionalidad</th><th style="width:54%">Efecto comprobado</th><th style="width:20%">Estado</th></tr></thead>
+  <tbody>
+    <tr><td>F03 · Salón</td><td>La mesa pasa a verde «lista para entregar» al marcar listo, sin recargar</td><td class="ok">Correcto</td></tr>
+    <tr><td>F06 · Pedidos</td><td>El pedido listo aparece con ese estado y, al finalizarlo, pasa a cobros</td><td class="ok">Correcto</td></tr>
+    <tr><td>F08 · Cancelación</td><td>Cancelar una cuenta ya lista la saca por completo de la barra e imprime la incidencia con motivo</td><td class="ok">Correcto</td></tr>
+  </tbody>
+</table>
+
+<h2>Defecto encontrado y corregido</h2>
+<div class="box">
+  <p style="margin:0 0 6px"><b>F05-01 · La tarjeta de «listos para entregar» anunciaba artículos que la barra no entrega.</b></p>
+  <p style="margin:0">Contaba todos los renglones de la cuenta, incluidos los <b>cancelados</b> y los que aún no se habían enviado a preparar. Un pedido con tres renglones, uno de ellos anulado, se anunciaba como «3 artículos» cuando en la charola salían dos. Además el texto decía «1 artículos» en singular. Corregido: ahora se cuenta sólo lo que está en la barra o ya preparado, y el plural es correcto. Comprobado en pantalla con dos pedidos distintos.</p>
+</div>
+
+<h2>Pruebas automatizadas</h2>
+<ul>
+  <li><code>src/domain/order.test.ts</code> — 4 casos nuevos sobre el conteo de artículos entregables: cuenta lo enviado y lo preparado, descarta cancelados, descarta pendientes y devuelve cero cuando no queda nada.</li>
+  <li><code>src/domain/order.test.ts</code> — 5 casos nuevos sobre el paso a «listo»: convierte sólo lo enviado, deja intacto lo pendiente, no revive lo cancelado, es idempotente y no altera los datos de origen. La lógica se extrajo a una función propia para poder probarla; el comportamiento no cambió.</li>
+  <li>Reverificado en el navegador con un pedido que tenía una línea enviada y otra pendiente: tras marcar listo, la primera quedó preparada y la segunda siguió pendiente.</li>
+</ul>
+
+<h2>Limitaciones conocidas y riesgos para la entrega</h2>
+<div class="box">
+  <ul>
+    <li><b>Lo más importante que el equipo debe saber:</b> el botón de la barra es todo o nada por pedido. En un servicio donde la bebida y la comida salen en tiempos distintos, la cuenta permanecerá en la cola hasta que todo lo enviado esté hecho. Si esto estorba en la operación diaria, es una mejora a considerar después de la entrega.</li>
+    <li>No hay aviso al entrar una comanda nueva. La pantalla debe quedar a la vista de la barra.</li>
+    <li>Sin conexión la cola sigue funcionando con los datos del dispositivo; la coordinación entre dos dispositivos a la vez se verifica en F16.</li>
+  </ul>
+</div>
+
+<footer>Documento generado durante la revisión previa a la entrega. Refleja el estado del código en el commit indicado.</footer>
+</body>
+</html>

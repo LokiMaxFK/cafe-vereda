@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>F10 · Catálogo</title>
+<style>
+  @page { size: Letter; margin: 16mm 14mm; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; color: #1b1b1f; font-size: 10.5pt; line-height: 1.45; margin: 0; }
+  header { border-bottom: 3px solid #6b4423; padding-bottom: 10px; margin-bottom: 18px; }
+  .eyebrow { font-size: 8pt; letter-spacing: .12em; text-transform: uppercase; color: #6b4423; font-weight: 700; margin: 0; }
+  h1 { font-size: 19pt; margin: 4px 0 6px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 8.5pt; color: #55525a; }
+  .meta b { color: #1b1b1f; }
+  h2 { font-size: 11.5pt; margin: 20px 0 8px; padding-bottom: 4px; border-bottom: 1px solid #dcd7d1; }
+  ul { margin: 0 0 0 16px; padding: 0; }
+  li { margin-bottom: 4px; }
+  table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-top: 6px; }
+  th { background: #f4efe9; text-align: left; font-size: 8pt; letter-spacing: .06em; text-transform: uppercase; color: #55525a; }
+  th, td { border: 1px solid #dcd7d1; padding: 6px 8px; vertical-align: top; }
+  .ok { color: #1b6b3a; font-weight: 700; }
+  .fail { color: #b3261e; font-weight: 700; }
+  .warn { color: #8a5a00; font-weight: 700; }
+  .box { background: #f7f4f0; border-left: 4px solid #6b4423; padding: 10px 12px; margin-top: 8px; }
+  footer { margin-top: 24px; padding-top: 8px; border-top: 1px solid #dcd7d1; font-size: 8pt; color: #7a767e; }
+</style>
+</head>
+<body>
+<header>
+  <p class="eyebrow">Vereda Café · Punto de venta · Ficha de funcionalidad</p>
+  <h1>F10 · Catálogo: categorías, productos, variantes y extras</h1>
+  <div class="meta">
+    <span><b>Rutas:</b> /catalogo</span>
+    <span><b>Rol requerido:</b> Sólo gerente</span>
+    <span><b>Modo probado:</b> Demostración (pasada A)</span>
+    <span><b>Fecha:</b> 20/08/2026</span>
+    <span><b>Versión:</b> commit 8257fbb + correcciones de esta revisión</span>
+  </div>
+</header>
+
+<h2>Qué hace</h2>
+<ul>
+  <li>Administra en un solo lugar los productos, sus precios, su disponibilidad, sus presentaciones y los extras.</li>
+  <li>Resume el catálogo de un vistazo: número de productos, categorías y extras configurados.</li>
+  <li><b>Categorías:</b> crear, renombrar en línea y eliminar. La categoría nueva se coloca al final del menú y conserva su lugar al renombrarla.</li>
+  <li><b>Protege el menú:</b> una categoría con productos no se puede borrar —el botón queda inhabilitado y se explica por qué— así que no hay forma de dejar productos huérfanos.</li>
+  <li><b>Productos:</b> crear y editar nombre, categoría, precio, descripción, imagen, disponibilidad y bandera de temporada.</li>
+  <li><b>Presentaciones</b> (tamaños) con su propio precio, que se pueden agregar y quitar. Todas se ofrecen al capturar el pedido.</li>
+  <li><b>Congela el precio en la venta:</b> cambiar un precio afecta a los pedidos nuevos y deja intactos los ya capturados.</li>
+  <li>Marcar un producto como de temporada lo agrupa en una pestaña propia del selector, con un distintivo junto al nombre.</li>
+  <li>Eliminar un producto lo retira del menú pero <b>conserva el historial</b>: los pedidos anteriores siguen mostrando su nombre y su precio. En el servidor es una baja lógica, no un borrado.</li>
+  <li><b>Extras</b> (modificadores) con precio: crear, editar y eliminar.</li>
+  <li>Valida la imagen antes de aceptarla: sólo PNG o JPEG, y como máximo 2 MB.</li>
+  <li>La lista se ordena alfabéticamente y se puede filtrar con el buscador.</li>
+</ul>
+
+<h2>Qué NO hace</h2>
+<ul>
+  <li><b>No permite ordenar el menú desde la aplicación.</b> Las categorías se muestran en el orden que guarda el servidor, pero no hay forma de reordenarlas aquí: una categoría nueva siempre va al final.</li>
+  <li><b>No funciona sin conexión.</b> A diferencia de los pedidos, el catálogo exige estar en línea: sin red avisa «Necesitas conexión para modificar el catálogo» y no guarda nada.</li>
+  <li>No permite mover productos de una categoría a otra en bloque; hay que editarlos uno por uno.</li>
+  <li>No avisa si el precio base de un producto deja de coincidir con sus presentaciones (ver el defecto corregido más abajo).</li>
+  <li>No gestiona aquí las recetas de insumos: eso vive detrás del botón «Configurar recetas» y se verifica en F12.</li>
+  <li><b>No se ha verificado contra el servidor real.</b> La subida de imágenes a Storage, la persistencia de las recetas y el aviso de «sin conexión» quedan pendientes de la pasada B (F10-P17 a F10-P20).</li>
+</ul>
+
+<h2>Resultado de las pruebas</h2>
+<table>
+  <thead><tr><th style="width:36%">Caso probado</th><th style="width:40%">Resultado observado</th><th style="width:12%">Estado</th><th style="width:12%">Caso</th></tr></thead>
+  <tbody>
+    <tr><td>Crear categoría</td><td>Aparece en la lista y se coloca al final del menú</td><td class="ok">Correcto</td><td>P1</td></tr>
+    <tr><td>Renombrar categoría</td><td>Se guarda y conserva su lugar en el menú</td><td class="ok">Correcto</td><td>P2</td></tr>
+    <tr><td>Borrar categoría con productos</td><td>Inhabilitado, con explicación en la propia tarjeta</td><td class="ok">Correcto</td><td>P3</td></tr>
+    <tr><td>Borrar categoría vacía</td><td>Desaparece</td><td class="ok">Correcto</td><td>P4</td></tr>
+    <tr><td>Crear producto completo</td><td>Se guarda y aparece en orden alfabético</td><td class="ok">Correcto</td><td>P5</td></tr>
+    <tr><td>Producto con dos presentaciones</td><td>Ambas se ofrecen con su precio al capturar</td><td class="ok">Correcto</td><td>P6</td></tr>
+    <tr><td>Cambiar el precio de una presentación</td><td>El pedido ya capturado sigue en $65.00; uno nuevo cobra $99.00</td><td class="ok">Correcto</td><td>P7</td></tr>
+    <tr><td>Quitar una presentación</td><td>Deja de ofrecerse</td><td class="ok">Correcto</td><td>P8</td></tr>
+    <tr><td>Producto no disponible</td><td>Desaparece del selector; no se puede agregar</td><td class="ok">Correcto</td><td>P9</td></tr>
+    <tr><td>Producto de temporada</td><td>Se agrupa en la pestaña Temporada, con distintivo</td><td class="ok">Correcto</td><td>P10</td></tr>
+    <tr><td>Eliminar producto</td><td>Sale del menú; el pedido histórico conserva nombre y precio</td><td class="ok">Correcto</td><td>P11</td></tr>
+    <tr><td>Crear, editar y eliminar un extra</td><td>Las tres operaciones funcionan</td><td class="ok">Correcto</td><td>P12</td></tr>
+    <tr><td>Imagen PNG de 11 KB</td><td>Vista previa, se guarda y se ve en el selector</td><td class="ok">Correcto</td><td>P13</td></tr>
+    <tr><td>Archivo que no es imagen</td><td>«La imagen debe ser PNG o JPEG.»</td><td class="ok">Correcto</td><td>P14</td></tr>
+    <tr><td>Imagen de 3.2 MB</td><td>«La imagen no debe pesar más de 2 MB.»</td><td class="ok">Correcto</td><td>P15</td></tr>
+    <tr><td>Acceso de barista</td><td>Bloqueado, redirige a inicio</td><td class="ok">Correcto</td><td>P16</td></tr>
+    <tr><td>Precio anunciado en la tarjeta</td><td>Mostraba el precio base aunque ninguna presentación lo tuviera</td><td class="fail">Defecto</td><td>F10-01</td></tr>
+    <tr><td>Guardado contra el servidor y recetas</td><td>Requiere Supabase real</td><td class="warn">Pendiente</td><td>P17-P20</td></tr>
+  </tbody>
+</table>
+
+<h2>Defecto encontrado y corregido</h2>
+<div class="box">
+  <p style="margin:0 0 6px"><b>F10-01 · La pantalla anunciaba un precio que el cliente no podía pagar.</b></p>
+  <p style="margin:0 0 6px">La tarjeta de cada producto mostraba siempre el <b>precio base</b>, seguido de un «+» cuando había presentaciones, sin mirar cuánto cuestan esas presentaciones en realidad. Basta con que se cambie el precio de una presentación y no se toque el precio base para que la pantalla anuncie una cifra que ya no existe.</p>
+  <p style="margin:0 0 6px">Reproducido durante la prueba: un producto con precio base de $50.00 cuya <b>única</b> presentación costaba $99.00 se anunciaba como «$50.00+» —casi la mitad del precio real—, y el «+» sugería opciones más caras cuando no había ninguna otra. Es la cifra que el barista lee cuando el cliente pregunta cuánto cuesta.</p>
+  <p style="margin:0"><b>Corregido:</b> la tarjeta anuncia la presentación más barata que se puede comprar de verdad, y el «+» se reserva para cuando hay más de una opción. Comprobado en pantalla: el producto pasó a «$99.00» sin «+», y el resto del menú quedó igual que antes.</p>
+</div>
+
+<h2>Pruebas automatizadas</h2>
+<ul>
+  <li><code>src/domain/catalog.test.ts</code> — 5 casos sobre el precio anunciado: producto sin presentaciones, presentación más barata frente al precio base, independencia del orden, precios no numéricos, y cuándo corresponde decir «desde».</li>
+  <li><code>src/domain/catalog.test.ts</code> — 4 casos sobre la validación de imagen: formatos aceptados justo en el límite de 2 MB, tipos rechazados, tamaño excedido, y el orden de los avisos cuando un archivo falla por dos motivos a la vez. La validación se extrajo a una función propia para poder probarla sin depender del navegador.</li>
+</ul>
+
+<h2>Limitaciones conocidas y riesgos para la entrega</h2>
+<div class="box">
+  <ul>
+    <li><b>Lo más importante:</b> el catálogo exige conexión. Si se cae el internet, no se pueden cambiar precios ni disponibilidad. Los pedidos sí siguen funcionando.</li>
+    <li><b>Conviene revisar los precios base</b> del catálogo de producción: si en algún producto el precio base no coincide con su presentación más barata, hasta hoy la pantalla mostraba el base. Con la corrección ya no engaña, pero el dato guardado sigue desalineado y conviene ordenarlo.</li>
+    <li>Marcar un producto como no disponible lo <b>oculta</b> del selector en vez de mostrarlo deshabilitado. Si un producto «desaparece» del menú, el primer sitio donde mirar es esta pantalla.</li>
+    <li>El orden del menú no se puede cambiar desde la aplicación; una categoría nueva siempre queda al final.</li>
+  </ul>
+</div>
+
+<footer>Documento generado durante la revisión previa a la entrega. Refleja el estado del código en el commit indicado.</footer>
+</body>
+</html>

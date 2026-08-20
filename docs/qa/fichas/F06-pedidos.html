@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>F06 · Pedidos y entrega</title>
+<style>
+  @page { size: Letter; margin: 16mm 14mm; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; color: #1b1b1f; font-size: 10.5pt; line-height: 1.45; margin: 0; }
+  header { border-bottom: 3px solid #6b4423; padding-bottom: 10px; margin-bottom: 18px; }
+  .eyebrow { font-size: 8pt; letter-spacing: .12em; text-transform: uppercase; color: #6b4423; font-weight: 700; margin: 0; }
+  h1 { font-size: 19pt; margin: 4px 0 6px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 8.5pt; color: #55525a; }
+  .meta b { color: #1b1b1f; }
+  h2 { font-size: 11.5pt; margin: 20px 0 8px; padding-bottom: 4px; border-bottom: 1px solid #dcd7d1; }
+  ul { margin: 0 0 0 16px; padding: 0; }
+  li { margin-bottom: 4px; }
+  table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-top: 6px; }
+  th { background: #f4efe9; text-align: left; font-size: 8pt; letter-spacing: .06em; text-transform: uppercase; color: #55525a; }
+  th, td { border: 1px solid #dcd7d1; padding: 6px 8px; vertical-align: top; }
+  .ok { color: #1b6b3a; font-weight: 700; }
+  .fail { color: #b3261e; font-weight: 700; }
+  .warn { color: #8a5a00; font-weight: 700; }
+  .box { background: #f7f4f0; border-left: 4px solid #6b4423; padding: 10px 12px; margin-top: 8px; }
+  footer { margin-top: 24px; padding-top: 8px; border-top: 1px solid #dcd7d1; font-size: 8pt; color: #7a767e; }
+</style>
+</head>
+<body>
+<header>
+  <p class="eyebrow">Vereda Café · Punto de venta · Ficha de funcionalidad</p>
+  <h1>F06 · Pedidos y entrega</h1>
+  <div class="meta">
+    <span><b>Rutas:</b> /pedidos</span>
+    <span><b>Rol requerido:</b> Gerente y Barista</span>
+    <span><b>Modo probado:</b> Demostración (pasada A)</span>
+    <span><b>Fecha:</b> 20/08/2026</span>
+    <span><b>Versión:</b> commit 8257fbb + correcciones de esta revisión</span>
+  </div>
+</header>
+
+<h2>Qué hace</h2>
+<ul>
+  <li>Es el <b>historial operativo completo</b>, no sólo los pedidos activos: muestra abiertos, en preparación, listos, cobrados, cancelados y revertidos, sin borrar nunca el registro original.</li>
+  <li>De cada pedido presenta folio, fecha y hora de apertura, destino, estado, estado de sincronización, total y acciones.</li>
+  <li>Muestra el motivo bajo el estado de las cuentas canceladas, de modo que la razón queda a la vista sin abrir el pedido.</li>
+  <li>Ordena de lo más reciente a lo más antiguo por hora de apertura, que es la fecha que se muestra en la misma fila.</li>
+  <li>Filtra por estado con un selector de siete opciones y por texto sobre folio, mesa o nombre del cliente.</li>
+  <li>Abre cualquier pedido en su cuenta, y ofrece cancelar directamente los que todavía admiten cancelación.</li>
+  <li>Desde la cuenta, «Finalizar orden» marca el pedido como entregado y lo deja listo para cobro, sin imprimir nada: el ticket sale al cobrar.</li>
+  <li>Una vez entregado, bloquea la captura: el selector de productos desaparece y se explica en pantalla qué hacer a continuación.</li>
+</ul>
+
+<h2>Qué NO hace</h2>
+<ul>
+  <li><b>No permite devolver un pedido entregado a preparación.</b> No hay marcha atrás desde la interfaz: si se marcó por error, la salida es cancelar la cuenta y volver a capturarla.</li>
+  <li>No permite editar un pedido ya entregado, ni siquiera para agregar un producto de última hora.</li>
+  <li>No agrupa por día, por mesa ni por empleado: sólo ordena y filtra.</li>
+  <li>No pagina ni limita el número de filas; con muchos meses de operación la tabla crecerá sin cortes.</li>
+  <li>No exporta la lista a ningún archivo; para eso está Reportes.</li>
+</ul>
+
+<h2>Resultado de las pruebas</h2>
+<table>
+  <thead><tr><th style="width:36%">Caso probado</th><th style="width:40%">Resultado observado</th><th style="width:12%">Estado</th><th style="width:12%">Caso</th></tr></thead>
+  <tbody>
+    <tr><td>Contenido de la lista</td><td>Historial completo con folio, fecha, destino, estado, sincronización y total</td><td class="ok">Correcto</td><td>P1</td></tr>
+    <tr><td>Filtro por estado</td><td>«Listos» deja sólo los dos pedidos en ese estado</td><td class="ok">Correcto</td><td>P2</td></tr>
+    <tr><td>Filtro por texto</td><td>Encuentra por nombre y por folio</td><td class="ok">Correcto</td><td>P2</td></tr>
+    <tr><td>Abrir un pedido desde la lista</td><td>Lleva a la cuenta correspondiente</td><td class="ok">Correcto</td><td>P3</td></tr>
+    <tr><td>Marcar entregado</td><td>Pasa a «lista para cobrar»; el botón cambia a «Cobrar»; no imprime</td><td class="ok">Correcto</td><td>P4</td></tr>
+    <tr><td>Pedido entregado, vuelta atrás</td><td>No se puede: la captura queda bloqueada con explicación en pantalla</td><td class="ok">Correcto</td><td>P5</td></tr>
+    <tr><td>Método de pago en el ticket</td><td>Imprimía «CASH» en vez de «EFECTIVO»</td><td class="fail">Defecto</td><td>F06-01</td></tr>
+    <tr><td>Buscar por el destino que se ve en pantalla</td><td>«Mesa 5» no encontraba nada y no había mensaje de vacío</td><td class="fail">Defecto</td><td>F06-02</td></tr>
+    <tr><td>Orden de la lista</td><td>Se ordenaba por un dato que no se muestra; los folios saltaban</td><td class="fail">Defecto</td><td>F06-03</td></tr>
+    <tr><td>El estado entregado viaja al servidor</td><td>Requiere Supabase real</td><td class="warn">Pendiente</td><td>C2</td></tr>
+  </tbody>
+</table>
+
+<h2>Funcionalidades conectadas verificadas</h2>
+<table>
+  <thead><tr><th style="width:26%">Funcionalidad</th><th style="width:54%">Efecto comprobado</th><th style="width:20%">Estado</th></tr></thead>
+  <tbody>
+    <tr><td>F05 · Preparación</td><td>Un pedido marcado listo en la barra aparece aquí con ese estado</td><td class="ok">Correcto</td></tr>
+    <tr><td>F07 · Cobros</td><td>Al finalizar, el pedido entra en la lista de cobros y sale de ella al cobrarse</td><td class="ok">Correcto</td></tr>
+    <tr><td>F08 · Cancelación</td><td>Las canceladas se conservan en el historial con su motivo visible</td><td class="ok">Correcto</td></tr>
+  </tbody>
+</table>
+
+<h2>Defectos encontrados y corregidos</h2>
+<div class="box">
+  <p style="margin:0 0 6px"><b>F06-01 · El ticket del cliente imprimía el método de pago en inglés.</b> Salía «CASH», «CARD» o «TRANSFER» en el comprobante que se entrega en mano, y lo mismo en la pantalla de cobro, aunque el botón que el cajero acababa de pulsar decía «Efectivo». Reportes sí lo traducía, por su cuenta. Unificado en un único punto y comprobado reimprimiendo un ticket real: ahora dice <b>EFECTIVO</b>.</p>
+  <p style="margin:0 0 6px"><b>F06-02 · Buscar por lo que muestra la pantalla no encontraba nada.</b> El campo invita a buscar por mesa, pero sólo se buscaba por el identificador interno. Escribir «Mesa 5» —tal cual aparece en la columna Destino— devolvía cero resultados y una tabla vacía sin ningún mensaje. Corregido: se busca por el destino visible y, si no hay coincidencias, se explica.</p>
+  <p style="margin:0"><b>F06-03 · La lista parecía desordenada.</b> Se ordenaba por la fecha de última modificación, pero la columna muestra la de apertura, así que los folios saltaban sin motivo aparente. Ahora el orden coincide con la fecha que se ve.</p>
+</div>
+
+<h2>Pruebas automatizadas</h2>
+<ul>
+  <li><code>src/lib/printing.test.ts</code> — 1 caso nuevo: el ticket imprime el método de pago en español para efectivo, tarjeta y transferencia.</li>
+  <li><code>src/lib/remoteOrders.test.ts</code> — 2 casos nuevos: el estado «entregado» sobrevive el viaje al servidor y de vuelta, y un estado desconocido no rompe la lectura.</li>
+</ul>
+
+<h2>Limitaciones conocidas y riesgos para la entrega</h2>
+<div class="box">
+  <ul>
+    <li><b>Marcar entregado es irreversible desde la interfaz.</b> Conviene advertirlo al equipo: si se pulsa por error, la única salida es cancelar la cuenta —lo que deja registro— y volver a capturarla.</li>
+    <li><b>Hallazgo de contrato con el servidor:</b> al leer un pedido remoto, la aplicación acepta el estado tal como venga, sin validarlo. Hoy no es un problema porque el esquema lo controla este mismo proyecto, pero si en el futuro el servidor introduce un estado nuevo, el pedido entrará sin error y simplemente no aparecerá en ningún filtro. Queda documentado en las pruebas; no se endureció por ser el día de la entrega.</li>
+    <li>La tabla no pagina. Con el historial de varios meses convendrá revisar el rendimiento de esta pantalla.</li>
+  </ul>
+</div>
+
+<footer>Documento generado durante la revisión previa a la entrega. Refleja el estado del código en el commit indicado.</footer>
+</body>
+</html>

@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>F11 · Mesas</title>
+<style>
+  @page { size: Letter; margin: 16mm 14mm; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; color: #1b1b1f; font-size: 10.5pt; line-height: 1.45; margin: 0; }
+  header { border-bottom: 3px solid #6b4423; padding-bottom: 10px; margin-bottom: 18px; }
+  .eyebrow { font-size: 8pt; letter-spacing: .12em; text-transform: uppercase; color: #6b4423; font-weight: 700; margin: 0; }
+  h1 { font-size: 19pt; margin: 4px 0 6px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 8.5pt; color: #55525a; }
+  .meta b { color: #1b1b1f; }
+  h2 { font-size: 11.5pt; margin: 20px 0 8px; padding-bottom: 4px; border-bottom: 1px solid #dcd7d1; }
+  ul { margin: 0 0 0 16px; padding: 0; }
+  li { margin-bottom: 4px; }
+  table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-top: 6px; }
+  th { background: #f4efe9; text-align: left; font-size: 8pt; letter-spacing: .06em; text-transform: uppercase; color: #55525a; }
+  th, td { border: 1px solid #dcd7d1; padding: 6px 8px; vertical-align: top; }
+  .ok { color: #1b6b3a; font-weight: 700; }
+  .fail { color: #b3261e; font-weight: 700; }
+  .warn { color: #8a5a00; font-weight: 700; }
+  .box { background: #f7f4f0; border-left: 4px solid #6b4423; padding: 10px 12px; margin-top: 8px; }
+  footer { margin-top: 24px; padding-top: 8px; border-top: 1px solid #dcd7d1; font-size: 8pt; color: #7a767e; }
+</style>
+</head>
+<body>
+<header>
+  <p class="eyebrow">Vereda Café · Punto de venta · Ficha de funcionalidad</p>
+  <h1>F11 · Mesas: gestión del croquis</h1>
+  <div class="meta">
+    <span><b>Rutas:</b> /mesas</span>
+    <span><b>Rol requerido:</b> Sólo gerente</span>
+    <span><b>Modo probado:</b> Demostración (pasada A)</span>
+    <span><b>Fecha:</b> 20/08/2026</span>
+    <span><b>Versión:</b> commit 8257fbb + correcciones de esta revisión</span>
+  </div>
+</header>
+
+<h2>Qué hace</h2>
+<ul>
+  <li>Permite dibujar el salón como es en la realidad: agregar mesas, moverlas arrastrándolas y darles la forma y el número de lugares que tienen.</li>
+  <li>Numera las mesas de forma consecutiva y <b>coloca cada mesa nueva en un hueco libre</b>, sin encimarla sobre otra.</li>
+  <li>Ofrece tres formas —redonda, cuadrada y rectangular— que se reflejan en el dibujo.</li>
+  <li>Guarda la posición al soltar la mesa, y la conserva al recargar.</li>
+  <li>Distingue arrastrar de tocar: mover una mesa no abre el editor.</li>
+  <li>Da de baja y reactiva mesas sin borrarlas: las dadas de baja se muestran atenuadas aquí y desaparecen del salón.</li>
+  <li><b>Protege las cuentas abiertas:</b> una mesa con cuenta viva no se puede dar de baja, y se indica cuál es la cuenta que lo impide.</li>
+  <li>Avisa cuando no hay conexión de que los cambios no se guardarán hasta reconectar.</li>
+</ul>
+
+<h2>Qué NO hace</h2>
+<ul>
+  <li><b>No distingue en el croquis las mesas ocupadas de las libres.</b> Esta pantalla es sólo de configuración: para ver el estado de las cuentas hay que ir al Salón.</li>
+  <li>No permite renumerar mesas ni reutilizar el número de una mesa dada de baja: la siguiente mesa siempre toma el número más alto más uno.</li>
+  <li>No permite definir zonas ni salones adicionales; todo vive en el «Área principal».</li>
+  <li>No admite cambiar el tamaño de una mesa en el dibujo, sólo su forma.</li>
+  <li><b>Las mesas no pasan por la cola de sincronización.</b> A diferencia de los pedidos, un cambio hecho sin conexión no se reenvía solo al reconectar. Es un límite conocido, pendiente de verificar contra el servidor (F11-P10).</li>
+</ul>
+
+<h2>Resultado de las pruebas</h2>
+<table>
+  <thead><tr><th style="width:36%">Caso probado</th><th style="width:40%">Resultado observado</th><th style="width:12%">Estado</th><th style="width:12%">Caso</th></tr></thead>
+  <tbody>
+    <tr><td>Agregar una mesa</td><td>Número consecutivo y hueco libre, sin encimar</td><td class="ok">Correcto</td><td>P1</td></tr>
+    <tr><td>Agregar seis mesas seguidas</td><td>Cero superposiciones entre todas las parejas</td><td class="ok">Correcto</td><td>P2</td></tr>
+    <tr><td>Cambiar lugares</td><td>De 2 a 6, se guarda y se refleja</td><td class="ok">Correcto</td><td>P3</td></tr>
+    <tr><td>Cambiar forma</td><td>Rectangular: la mesa se dibuja más ancha que alta</td><td class="ok">Correcto</td><td>P4</td></tr>
+    <tr><td>Arrastrar una mesa</td><td>La posición persiste al recargar; no abre el editor</td><td class="ok">Correcto</td><td>P5</td></tr>
+    <tr><td>Dar de baja una mesa libre</td><td>Desaparece del salón y el contador se ajusta</td><td class="ok">Correcto</td><td>P6</td></tr>
+    <tr><td>Dar de baja una mesa ocupada</td><td>Se permitía sin aviso; el pedido salía del salón</td><td class="fail">Defecto</td><td>P7</td></tr>
+    <tr><td>Reactivar una mesa</td><td>Vuelve al croquis con su posición</td><td class="ok">Correcto</td><td>P8</td></tr>
+    <tr><td>Guardado contra el servidor y comportamiento sin conexión</td><td>Requiere Supabase real</td><td class="warn">Pendiente</td><td>P9-P10</td></tr>
+  </tbody>
+</table>
+
+<h2>Funcionalidades conectadas verificadas</h2>
+<table>
+  <thead><tr><th style="width:26%">Funcionalidad</th><th style="width:54%">Efecto comprobado</th><th style="width:20%">Estado</th></tr></thead>
+  <tbody>
+    <tr><td>F03 · Salón</td><td>Alta, baja y reactivación se reflejan de inmediato en el croquis del salón</td><td class="ok">Correcto</td></tr>
+    <tr><td>F02 · Nuevo pedido</td><td>El selector de destino sólo ofrece mesas activas y libres: las ocupadas salen bloqueadas y las dadas de baja no aparecen</td><td class="ok">Correcto</td></tr>
+  </tbody>
+</table>
+
+<h2>Defecto encontrado y corregido</h2>
+<div class="box">
+  <p style="margin:0 0 6px"><b>F11-01 · Se podía dar de baja una mesa con la cuenta abierta, sin ningún aviso.</b></p>
+  <p style="margin:0 0 6px">Esta pantalla no distingue una mesa ocupada de una libre, y el editor tampoco mencionaba la cuenta. Reproducido con una mesa que tenía un pedido abierto de $48.00: la baja se aplicó sin protestar y <b>el pedido desapareció del Salón</b>, que es donde el equipo trabaja.</p>
+  <p style="margin:0 0 6px">No hay pérdida de datos ni dinero irrecuperable —la cuenta sigue abierta y se puede abrir y cobrar desde Pedidos—, pero el riesgo real es que nadie la vea y se quede sin cobrar.</p>
+  <p style="margin:0"><b>Corregido:</b> «Quitar mesa» queda inhabilitado mientras la mesa tenga una cuenta viva, y debajo se indica cuál: «Tiene la cuenta #1052 abierta. Cóbrala o cancélala antes de dar la mesa de baja». Es el mismo criterio que ya se aplicaba al borrar una categoría con productos. Comprobado en los tres estados: bloqueado con cuenta viva, reactivación siempre libre, y baja permitida en cuanto la cuenta se cerró.</p>
+</div>
+
+<h2>Pruebas automatizadas</h2>
+<ul>
+  <li><code>src/domain/tables.test.ts</code> — 6 casos sobre la colocación automática: primera mesa, respeto de las distancias mínimas, mesas dadas de baja que no estorban, seis mesas seguidas sin encimarse, croquis lleno que recurre al centro, y veinte colocaciones sin salirse del plano. El cálculo se extrajo a un módulo propio para poder probarlo; el comportamiento no cambió y se comprobó en el navegador que una mesa nueva cae exactamente donde caía antes.</li>
+</ul>
+
+<h2>Limitaciones conocidas y riesgos para la entrega</h2>
+<div class="box">
+  <ul>
+    <li><b>Las mesas no son offline-first.</b> Si se reacomoda el salón sin conexión, el cambio se ve en el dispositivo pero puede no llegar al servidor. Conviene hacer los cambios de distribución con internet.</li>
+    <li>Al dar de baja una mesa que tuvo cuentas, el historial de esos pedidos sigue mostrándola como destino. Es lo correcto para la auditoría.</li>
+    <li>La numeración no se recicla: si se dan de baja mesas y se agregan otras, los números seguirán subiendo.</li>
+  </ul>
+</div>
+
+<footer>Documento generado durante la revisión previa a la entrega. Refleja el estado del código en el commit indicado.</footer>
+</body>
+</html>

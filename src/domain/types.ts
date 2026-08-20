@@ -16,7 +16,7 @@ export interface StaffSession {
   validatedAt: string;
 }
 
-export interface Category { id: string; name: string; }
+export interface Category { id: string; name: string; position: number; }
 export interface ProductVariant { id: string; name: string; price: number; }
 export interface Product {
   id: string;
