@@ -329,7 +329,7 @@ export function ReportsPage() {
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <MetricCard icon={<TrendingUp />} label="Ventas" value={mxn.format(dataset.metrics.netSales.value)} detail={metricDetail(dataset.metrics.netSales)} tone="primary" />
           <MetricCard icon={<ReceiptText />} label="Tickets cobrados" value={dataset.metrics.tickets.value} detail={metricDetail(dataset.metrics.tickets, false)} />
-          <MetricCard icon={<ShoppingBag />} label={filters.paymentMethod === "all" ? "Ticket promedio" : "Contribución promedio"} value={mxn.format(dataset.metrics.averageTicket.value)} detail={metricDetail(dataset.metrics.averageTicket)} />
+          <MetricCard icon={<ShoppingBag />} label={filters.paymentMethod === "all" ? "Ticket promedio (bruto)" : "Contribución promedio (bruta)"} value={mxn.format(dataset.metrics.averageTicket.value)} detail={metricDetail(dataset.metrics.averageTicket)} />
           <MetricCard icon={<WalletCards />} label="Propinas" value={mxn.format(dataset.metrics.tips.value)} detail={metricDetail(dataset.metrics.tips)} tone="success" />
           <MetricCard icon={<TrendingDown />} label="Descuentos" value={mxn.format(dataset.metrics.discounts.value)} detail={metricDetail(dataset.metrics.discounts)} />
           <MetricCard icon={<RotateCcw />} label="Reversiones" value={mxn.format(dataset.metrics.reversals.value)} detail={metricDetail(dataset.metrics.reversals)} tone="danger" />

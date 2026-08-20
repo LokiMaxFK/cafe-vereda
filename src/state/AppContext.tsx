@@ -8,7 +8,7 @@ import { applyPaymentCap, orderSubtotal, orderTotal, paidTotal } from "../domain
 import { cancelItemUnits, mergeOrAddItem, type OrderItemInput } from "../domain/orderItem";
 import type { AppRole, CafeTable, CatalogExtra, Category, Order, OrderItem, PaymentMethod, Product, StaffSession, SyncStatus } from "../domain/types";
 import { db } from "../lib/db";
-import { queueOperation, syncPendingOperations } from "../lib/offline";
+import { queueOperation, reclaimStalledOperations, syncPendingOperations } from "../lib/offline";
 import { mapRemoteOrder, REMOTE_ORDER_SELECT } from "../lib/remoteOrders";
 import { isSupabaseConfigured, supabase, usernameToInternalEmail } from "../lib/supabase";
 
@@ -158,6 +158,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (savedExtras.length) setExtras(savedExtras);
       else if (!isSupabaseConfigured) { await db.catalogExtras.bulkPut(demoExtras); setExtras(demoExtras); }
       else setExtras([]);
+      await reclaimStalledOperations();
       setPendingCount(await db.pendingOperations.where("status").anyOf("pending", "review_required").count());
     }).finally(() => setHydrated(true));
   }, []);

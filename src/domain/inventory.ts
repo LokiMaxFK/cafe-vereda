@@ -27,6 +27,16 @@ const atOrBefore = (counts: InventoryCount[], itemId: string, instant: string) =
   .filter((count) => count.countedAt <= instant && count.lines.some((line) => line.itemId === itemId))
   .sort((a, b) => b.countedAt.localeCompare(a.countedAt))[0];
 
+/**
+ * Primer conteo dentro de la ventana. Sirve de línea base cuando no existe ningún conteo anterior
+ * al inicio del periodo: sin esto, un insumo empezado a contar dentro de la ventana nunca llega a
+ * compararse —la tabla se queda en «Falta línea base o segundo conteo» aunque ya haya dos conteos—
+ * y el indicador queda muerto durante los primeros 30 días de operación.
+ */
+const firstWithin = (counts: InventoryCount[], itemId: string, start: string, end: string) => counts
+  .filter((count) => count.countedAt > start && count.countedAt <= end && count.lines.some((line) => line.itemId === itemId))
+  .sort((a, b) => a.countedAt.localeCompare(b.countedAt))[0];
+
 const quantityFor = (count: InventoryCount | undefined, itemId: string) => count?.lines.find((line) => line.itemId === itemId)?.quantity;
 
 function movementsBetween(movements: InventoryMovement[], itemId: string, fromExclusive: string, toInclusive: string) {
@@ -38,8 +48,8 @@ function movementsBetween(movements: InventoryMovement[], itemId: string, fromEx
 
 export function createInventoryAnalysis(items: InventoryItem[], counts: InventoryCount[], movements: InventoryMovement[], expected: Record<string, number>, start: string, end: string): InventoryAnalysisRow[] {
   return items.filter((item) => item.active).map((item) => {
-    const openingCount = atOrBefore(counts, item.id, start);
     const closingCount = atOrBefore(counts, item.id, end);
+    const openingCount = atOrBefore(counts, item.id, start) ?? firstWithin(counts, item.id, start, end);
     const opening = quantityFor(openingCount, item.id);
     const closing = quantityFor(closingCount, item.id);
     const { entries, waste } = movementsBetween(movements, item.id, openingCount?.countedAt ?? start, closingCount?.countedAt ?? end);

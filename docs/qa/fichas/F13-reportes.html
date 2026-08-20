@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Ficha de funcionalidad</title>
+<style>
+  @page { size: Letter; margin: 16mm 14mm; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; color: #1b1b1f; font-size: 10.5pt; line-height: 1.45; margin: 0; }
+  header { border-bottom: 3px solid #6b4423; padding-bottom: 10px; margin-bottom: 18px; }
+  .eyebrow { font-size: 8pt; letter-spacing: .12em; text-transform: uppercase; color: #6b4423; font-weight: 700; margin: 0; }
+  h1 { font-size: 19pt; margin: 4px 0 6px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 8.5pt; color: #55525a; }
+  .meta b { color: #1b1b1f; }
+  h2 { font-size: 11.5pt; margin: 20px 0 8px; padding-bottom: 4px; border-bottom: 1px solid #dcd7d1; }
+  ul { margin: 0 0 0 16px; padding: 0; }
+  li { margin-bottom: 4px; }
+  table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-top: 6px; }
+  th { background: #f4efe9; text-align: left; font-size: 8pt; letter-spacing: .06em; text-transform: uppercase; color: #55525a; }
+  th, td { border: 1px solid #dcd7d1; padding: 6px 8px; vertical-align: top; }
+  .ok { color: #1b6b3a; font-weight: 700; }
+  .fail { color: #b3261e; font-weight: 700; }
+  .warn { color: #8a5a00; font-weight: 700; }
+  .box { background: #f7f4f0; border-left: 4px solid #6b4423; padding: 10px 12px; margin-top: 8px; }
+  footer { margin-top: 24px; padding-top: 8px; border-top: 1px solid #dcd7d1; font-size: 8pt; color: #7a767e; }
+</style>
+</head>
+<body>
+<header>
+  <p class="eyebrow">Vereda Café · Punto de venta · Ficha de funcionalidad</p>
+  <h1>F13 · Reportes</h1>
+  <div class="meta">
+    <span><b>Rutas:</b> /reportes</span>
+    <span><b>Rol requerido:</b> Gerente</span>
+    <span><b>Modo probado:</b> Supabase real (pasada B)</span>
+    <span><b>Fecha:</b> 20/08/2026</span>
+    <span><b>Periodo auditado:</b> 18/08/2026</span>
+  </div>
+</header>
+
+<h2>Qué hace</h2>
+<ul>
+  <li>Resume el desempeño del periodo en 7 métricas, con comparación contra el periodo anterior equivalente.</li>
+  <li>Filtra por rango de fechas (5 presets y rango personalizado), empleado, tipo de pedido y método de pago; los filtros se combinan entre sí.</li>
+  <li>Desglosa la venta por método de pago, por hora del día, por día calendario y por producto (más/menos vendidos, por unidades o por ingreso).</li>
+  <li>Ofrece un <b>detalle auditable</b> fila a fila con folio enlazado a la venta, evento, empleado, tipo, bruta, reversión, neta y propina.</li>
+  <li>Muestra la <b>trazabilidad de incidencias</b> del periodo: cancelaciones de cuenta y de artículo y reversiones, con quién, motivo, importe y fecha.</li>
+  <li>Exporta el detalle completo a CSV e imprime un resumen en papel.</li>
+</ul>
+
+<h2>Qué NO hace</h2>
+<ul>
+  <li><b>No descuenta existencias:</b> el bloque de insumos es un indicador comparativo, no un stock calculado.</li>
+  <li><b>El reporte impreso no incluye</b> el detalle auditable, las incidencias ni los insumos (hallazgo F13-02). Para llevarse el detalle hay que usar «Exportar CSV».</li>
+  <li>El «Ticket promedio» se calcula sobre la venta <b>bruta</b>, no sobre la neta que muestra la tarjeta contigua; la etiqueta ya lo indica.</li>
+  <li>La igualdad «suma de métodos = venta neta» se cumple mientras las ventas queden pagadas por completo: la bruta usa el valor de la cuenta y el desglose usa los pagos topados a ese valor.</li>
+  <li>No cubre márgenes, costes ni rentabilidad por producto: sólo ingresos.</li>
+</ul>
+
+<h2>Resultado de las pruebas</h2>
+<table>
+  <thead><tr><th style="width:30%">Caso probado</th><th style="width:38%">Resultado observado</th><th style="width:14%">Estado</th><th style="width:18%">Comprobación</th></tr></thead>
+  <tbody>
+    <tr><td>Venta neta del periodo (18/08)</td><td><b>$443.00</b> en pantalla frente a <b>$443.00</b> calculado a mano: $539.00 de 9 ventas cerradas menos $96.00 de 2 reversiones</td><td class="ok">Exacto</td><td>Suma manual sobre filas crudas</td></tr>
+    <tr><td>Suma de métodos de pago</td><td>Efectivo $388.00 + tarjeta $0.00 + transferencia $55.00 = $443.00 = venta neta</td><td class="ok">Exacto</td><td>Suma manual</td></tr>
+    <tr><td>Ventas por hora</td><td>01h $220.00 · 02h $135.00 · 12h $88.00 · 14h $0.00 → suman $443.00. Las 4 horas coinciden con el recálculo en zona America/Mexico_City</td><td class="ok">Exacto</td><td>Suma manual</td></tr>
+    <tr><td>Ventas por día</td><td>18/08 · 9 tickets · $443.00, idéntico al detalle</td><td class="ok">Exacto</td><td>Suma manual</td></tr>
+    <tr><td>Filtro por tipo</td><td>Mesa $200.00 / 3 tickets y Para llevar $243.00 / 6 tickets; $200 + $243 = $443</td><td class="ok">Exacto</td><td>Suma manual</td></tr>
+    <tr><td>Filtro por empleado</td><td>Gerente $443.00 / 9 y Ana López $0.00 / 0, coherente con <code>closed_by</code></td><td class="ok">Exacto</td><td>Suma manual</td></tr>
+    <tr><td>Ranking de productos, 4 cruces</td><td>Espresso 4u/$192, Americano 2u/$110, Pozole $100, Chai $80, Flat White $65. El ingreso suma $547 = $539 de bruta + $8 de descuento</td><td class="ok">Correcto</td><td>Suma manual</td></tr>
+    <tr><td>Venta revertida</td><td>#1080: bruta $48.00, reversión −$48.00 en rojo, neta $0.00</td><td class="ok">Correcto</td><td>Pantalla</td></tr>
+    <tr><td>Venta cancelada</td><td>#1045: etiqueta «Cancelación», bruta y neta $0.00 pese a que la cuenta valía $201.00</td><td class="ok">Correcto</td><td>Pantalla</td></tr>
+    <tr><td>Periodo sin datos</td><td>Cada sección trae su propio estado vacío redactado, no sólo ceros. Sin errores en consola</td><td class="ok">Mejor de lo pedido</td><td>Pantalla</td></tr>
+    <tr><td>Enlace del folio</td><td>#1080 abre <code>/venta/39511e02-…</code> con la cabecera «Revertido»</td><td class="ok">Correcto</td><td>Pantalla</td></tr>
+    <tr><td>Paginación del detalle</td><td>«Página 1 de 1» con Anterior y Siguiente deshabilitados en ambos extremos</td><td class="ok">Correcto</td><td>Pantalla</td></tr>
+    <tr><td>Ticket promedio</td><td>Mostraba $59.89 mientras la tarjeta contigua daba $443.00 y 9 tickets: ninguna división visible daba esa cifra</td><td class="fail">Hallazgo F13-01</td><td>Corregido y verificado</td></tr>
+    <tr><td>Impresión del reporte</td><td>Se ocultan controles y <b>tres secciones de datos</b>: detalle auditable, incidencias e insumos</td><td class="warn">Hallazgo F13-02</td><td>Documentado</td></tr>
+    <tr><td>Rendimiento con 1000 registros</td><td>No verificable: la base real tiene 13 pedidos liquidados y sembrar cientos de pedidos falsos en producción viola la higiene de la revisión</td><td class="warn">No verificado</td><td>Riesgo abierto</td></tr>
+  </tbody>
+</table>
+
+<h2>Funcionalidades conectadas verificadas</h2>
+<table>
+  <thead><tr><th style="width:24%">Funcionalidad</th><th style="width:56%">Efecto comprobado</th><th style="width:20%">Estado</th></tr></thead>
+  <tbody>
+    <tr><td>F09 · Caja</td><td>Caja y Reportes delimitan el efectivo con eventos distintos por diseño; la divergencia legítima quedó explicada en la propia interfaz de Caja</td><td class="ok">Documentado en F09-01</td></tr>
+    <tr><td>F07 · Descuentos</td><td>El descuento de $8.00 de la orden #1065 aparece en la tarjeta «Descuentos» y se refleja en la venta neta</td><td class="ok">Correcto</td></tr>
+    <tr><td>F12 · Insumos</td><td>El bloque «Consumo físico vs. receta teórica» aparece con los mismos insumos, pero calculado sobre el periodo del filtro y no sobre la ventana fija de 30 días de /insumos</td><td class="ok">Correcto, con matiz</td></tr>
+    <tr><td>F14 · Personal</td><td>La columna «Empleado» y el filtro toman los nombres de <code>staff_profiles</code>, no de literales</td><td class="ok">Correcto</td></tr>
+  </tbody>
+</table>
+
+<h2>Pruebas automatizadas</h2>
+<ul>
+  <li><code>src/domain/reports.test.ts</code> — 11 casos sobre el cálculo puro: venta revertida con neta negativa, cancelada que no afecta a la bruta, agregación y contribuciones de pago.</li>
+  <li>La verificación principal de esta ficha <b>no</b> fue automatizada sino manual y deliberadamente independiente: se recalcularon las cifras leyendo <code>orders</code>, <code>order_items</code> y <code>payments</code> con una implementación propia, <b>sin importar <code>reports.ts</code></b>, para que el resultado no dependiera del módulo que se quería verificar.</li>
+</ul>
+
+<h2>Limitaciones conocidas y riesgos para la entrega</h2>
+<div class="box">
+  <ul>
+  <li><b>Rendimiento no medido.</b> El tope de consulta es de 1000 registros por página y la base real tiene 13 pedidos liquidados: no hay forma honesta de provocar la condición sin ensuciar producción. Se confirmó que la consulta pagina de verdad, así que el tope no trunca en silencio, pero el comportamiento con meses de operación real queda <b>sin verificar</b>.</li>
+  <li><b>El papel pierde la trazabilidad</b> (F13-02). Quien imprima el reporte para archivarlo no se lleva quién canceló qué ni por qué, que es justo el requisito que el cliente confirmó. Salida disponible: exportar a CSV.</li>
+  <li><b>Incidencias anteriores al 18/08 a las 14:00</b> conservan importes subestimados: la migración que corrigió el cálculo (F08-01) no rellenó hacia atrás. No es una regresión y sólo afecta a datos de prueba; el histórico real del cliente empieza ya corregido.</li>
+  </ul>
+</div>
+
+<footer>Documento generado durante la revisión previa a la entrega. Refleja el estado del código en el commit indicado.</footer>
+</body>
+</html>
