@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Ficha de funcionalidad</title>
+<style>
+  @page { size: Letter; margin: 16mm 14mm; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; color: #1b1b1f; font-size: 10.5pt; line-height: 1.45; margin: 0; }
+  header { border-bottom: 3px solid #6b4423; padding-bottom: 10px; margin-bottom: 18px; }
+  .eyebrow { font-size: 8pt; letter-spacing: .12em; text-transform: uppercase; color: #6b4423; font-weight: 700; margin: 0; }
+  h1 { font-size: 19pt; margin: 4px 0 6px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 8.5pt; color: #55525a; }
+  .meta b { color: #1b1b1f; }
+  h2 { font-size: 11.5pt; margin: 20px 0 8px; padding-bottom: 4px; border-bottom: 1px solid #dcd7d1; }
+  ul { margin: 0 0 0 16px; padding: 0; }
+  li { margin-bottom: 4px; }
+  table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-top: 6px; }
+  th { background: #f4efe9; text-align: left; font-size: 8pt; letter-spacing: .06em; text-transform: uppercase; color: #55525a; }
+  th, td { border: 1px solid #dcd7d1; padding: 6px 8px; vertical-align: top; }
+  .ok { color: #1b6b3a; font-weight: 700; }
+  .fail { color: #b3261e; font-weight: 700; }
+  .warn { color: #8a5a00; font-weight: 700; }
+  .box { background: #f7f4f0; border-left: 4px solid #6b4423; padding: 10px 12px; margin-top: 8px; }
+  footer { margin-top: 24px; padding-top: 8px; border-top: 1px solid #dcd7d1; font-size: 8pt; color: #7a767e; }
+</style>
+</head>
+<body>
+<header>
+  <p class="eyebrow">Vereda Café · Punto de venta · Ficha de funcionalidad</p>
+  <h1>F12 · Insumos</h1>
+  <div class="meta">
+    <span><b>Rutas:</b> /insumos</span>
+    <span><b>Rol requerido:</b> Gerente</span>
+    <span><b>Modo probado:</b> Supabase real (pasada B)</span>
+    <span><b>Fecha:</b> 20/08/2026</span>
+  </div>
+</header>
+
+<h2>Qué hace</h2>
+<ul>
+  <li>Registra la <b>existencia física</b> por insumo mediante conteos con fecha, nota y responsable; cada lectura queda guardada y es auditable.</li>
+  <li>Registra <b>entradas y mermas</b> con nota obligatoria, que explican el cambio entre dos conteos sin alterar el último conteo.</li>
+  <li>Compara el <b>consumo físico</b> (inicial + entradas − final − merma) contra el <b>consumo teórico</b> que producen las recetas, y marca en rojo lo que se sale de la tolerancia del insumo.</li>
+  <li>Avisa con la etiqueta <b>Reponer</b> cuando la última lectura queda en el mínimo o por debajo.</li>
+  <li>Ofrece por insumo el historial completo y el consumo periodo a periodo entre conteos consecutivos.</li>
+  <li>Funciona sin conexión: conteos y movimientos se encolan y se sincronizan al volver la red.</li>
+</ul>
+
+<h2>Qué NO hace</h2>
+<ul>
+  <li><b>Las ventas NO descuentan existencias.</b> Es una decisión deliberada, no una carencia: la única verdad sobre el stock es el conteo físico, y las recetas sólo generan un indicador para detectar desvíos. La propia pantalla lo declara.</li>
+  <li>No hay borrado de insumos, conteos ni movimientos: el inventario es <b>inmutable por diseño</b> y la base lo impide. Para retirar un insumo se usa la baja lógica, que lo oculta conservando su historia.</li>
+  <li>No sugiere cantidades de compra ni genera órdenes a proveedor; el patrón de recargas es informativo.</li>
+  <li>No controla caducidades, lotes ni costes por insumo.</li>
+</ul>
+
+<h2>Resultado de las pruebas</h2>
+<table>
+  <thead><tr><th style="width:30%">Caso probado</th><th style="width:38%">Resultado observado</th><th style="width:14%">Estado</th><th style="width:18%">Comprobación</th></tr></thead>
+  <tbody>
+    <tr><td>Alta de insumo</td><td><code>QA-20AGO-Leche</code> creado con unidad L, mínimo 8 y tolerancia 0.5; confirmado en <code>inventory_items</code> del servidor</td><td class="ok">Correcto</td><td>Consulta al servidor</td></tr>
+    <tr><td>Conteo de línea base</td><td>10 L guardados con nota; la fila deja de decir «pendiente de línea base»</td><td class="ok">Correcto</td><td>Consulta al servidor</td></tr>
+    <tr><td>Entrada con nota</td><td>«+2 L · Entrada · QA-20AGO compra proveedor», con flecha hacia arriba</td><td class="ok">Correcto</td><td>Pantalla</td></tr>
+    <tr><td>Merma con nota</td><td>«−1 L · Merma · QA-20AGO merma», con flecha hacia abajo</td><td class="ok">Correcto</td><td>Pantalla</td></tr>
+    <tr><td>Cantidad 0 y nota vacía</td><td>Rechazadas: el botón queda deshabilitado, también con una nota de sólo espacios</td><td class="ok">Correcto</td><td>Pantalla</td></tr>
+    <tr><td>Cantidad negativa</td><td>El botón se dejaba pulsar y no ocurría nada ni se avisaba. El dato nunca llegaba a guardarse (el manejador ya retornaba y la base tiene <code>check</code> propios): botón muerto, no riesgo de datos</td><td class="fail">Hallazgo F12-01</td><td>Corregido y verificado</td></tr>
+    <tr><td>Segundo conteo y cálculo</td><td>Entradas 2 L, mermas 1 L, <b>físico 0.5 L</b>, teórico 0 L, diferencia +0.5 L. Cuadra con la suma manual 10 + 2 − 10.5 − 1 = 0.5</td><td class="ok">Exacto</td><td>Suma manual</td></tr>
+    <tr><td>Etiqueta «Reponer»</td><td><code>Lechuga</code> (1 pza contada, mínimo 2) la muestra en rojo, color calculado <code>rgb(147, 0, 10)</code></td><td class="ok">Correcto</td><td>Estilo calculado</td></tr>
+    <tr><td>Variación en el límite exacto</td><td>Con tolerancia 0.5 y variación de exactamente 0.5 <b>no</b> se marca en rojo; con datos reales <code>Lechuga</code> sí alerta (+1.5 pza sobre tolerancia ±0)</td><td class="ok">Correcto</td><td>Pantalla</td></tr>
+    <tr><td>Detalle del insumo</td><td>Historial y «Consumo entre conteos»; el primer periodo se rotula «Línea base» con «—», sin inventar un número</td><td class="ok">Correcto</td><td>Pantalla</td></tr>
+    <tr><td>Un solo conteo</td><td>«Falta línea base o segundo conteo», con físico y diferencia en «—»</td><td class="ok">Correcto</td><td>Pantalla</td></tr>
+    <tr><td>Tabla de consumo, arranque</td><td>Con dos conteos reales la tabla seguía vacía: la línea base sólo se tomaba de un conteo <b>anterior</b> a la ventana de 30 días</td><td class="fail">Hallazgo F12-02</td><td>Corregido y verificado</td></tr>
+    <tr><td>Baja lógica de un insumo</td><td>Un insumo dado de baja seguía en la lista de existencias, en los selectores y en los últimos registros; sólo desaparecía de la tabla de análisis</td><td class="fail">Hallazgo F12-04</td><td>Corregido y verificado</td></tr>
+    <tr><td>Conteo sin conexión</td><td>No probado en esta pasada; se cruza con F16-P3 y F16-P7</td><td class="warn">Pendiente</td><td>—</td></tr>
+  </tbody>
+</table>
+
+<h2>Funcionalidades conectadas verificadas</h2>
+<table>
+  <thead><tr><th style="width:24%">Funcionalidad</th><th style="width:56%">Efecto comprobado</th><th style="width:20%">Estado</th></tr></thead>
+  <tbody>
+    <tr><td>F10 · Catálogo (recetas)</td><td><code>Lechuga</code> arroja un consumo teórico de <b>0.5 pza</b> distinto de cero, que sólo puede venir de las recetas resueltas por el servidor en <code>inventory_usage_lines</code></td><td class="ok">Correcto</td></tr>
+    <tr><td>F13 · Reportes</td><td>El mismo bloque aparece en Reportes con los mismos insumos; allí se calcula sobre el periodo del filtro y aquí sobre una ventana fija de 30 días</td><td class="ok">Correcto, con matiz</td></tr>
+    <tr><td>F16 · Sincronización</td><td>Conteos y movimientos pasan por la cola de <code>offline.ts</code> y viajan por su propia RPC con clave de idempotencia; un insumo que falla no arrastra al lote de pedidos</td><td class="ok">Cubierto por pruebas</td></tr>
+  </tbody>
+</table>
+
+<h2>Pruebas automatizadas</h2>
+<ul>
+  <li><code>src/domain/inventory.test.ts</code> — <b>16 casos</b> (8 previos + 8 añadidos en esta pasada): variación exactamente en el límite de la tolerancia (no alerta), un decimal por encima (alerta), la misma prueba en negativo (comprueba que usa valor absoluto), insumo sin conteos, y 4 casos de regresión de F12-02 —comparar dos conteos dentro de la ventana, contar sólo los movimientos ocurridos entre ellos, no comparar con un único conteo, y dar preferencia al conteo anterior a la ventana cuando existe—.</li>
+</ul>
+
+<h2>Limitaciones conocidas y riesgos para la entrega</h2>
+<div class="box">
+  <ul>
+  <li><b>El indicador de consumo necesita dos conteos.</b> Tras la corrección de F12-02 basta con que ambos estén dentro de los últimos 30 días, pero mientras sólo haya uno la tabla dirá «Falta línea base o segundo conteo». Es correcto: sin dos lecturas no hay consumo que calcular.</li>
+  <li><b>La tolerancia ±0 de la mayoría de insumos hace que cualquier desvío alerte.</b> Conviene que la gerencia ajuste una tolerancia realista por insumo antes de operar, o el indicador marcará en rojo permanentemente.</li>
+  <li><b>El registro sin conexión no se probó</b> en esta pasada (F12-P11); la idempotencia de la cola sí está cubierta por las pruebas de <code>offline.ts</code>.</li>
+  <li>Quedó en la base el insumo de prueba <code>QA-20AGO-Leche</code>, <b>dado de baja</b> y por tanto invisible para el equipo. Borrarlo de raíz exige la clave de servicio desde el panel de Supabase.</li>
+  </ul>
+</div>
+
+<footer>Documento generado durante la revisión previa a la entrega. Refleja el estado del código en el commit indicado.</footer>
+</body>
+</html>

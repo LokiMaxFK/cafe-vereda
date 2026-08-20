@@ -11,45 +11,69 @@ necesita leer este archivo para saber exactamente dónde se quedó.
 
 ---
 
-## ⏱️ DÓNDE SE QUEDÓ · Estado al 20/08/2026, 01:15
+## ⏱️ DÓNDE SE QUEDÓ · Estado al 20/08/2026, 12:40
 
 **Lee esto primero. Es el punto exacto de retorno.**
 
 ### Qué está hecho
 
 **Pasada A terminada.** Once funcionalidades verificadas en modo demostración (F01 a F11 y F15),
-con **12 fichas PDF** de 16 en `docs/qa/pdf/`. La suite pasó de 111 a **156 pruebas en verde**;
-lint y build limpios. Los hallazgos abiertos de esta jornada están todos corregidos y verificados
-en el navegador (§0.7): **F02-01, F05-01, F06-01, F06-02, F06-03, F07-05, F10-01, F11-01, F15-01**.
+con **12 fichas PDF** de 16 en `docs/qa/pdf/`. Los hallazgos de esa jornada están todos corregidos y
+verificados en el navegador (§0.7): **F02-01, F05-01, F06-01, F06-02, F06-03, F07-05, F10-01,
+F11-01, F15-01**.
+
+**Avance del 20/08 (máquina nueva, ver más abajo):**
+
+- **F14-P0 ✅** — `manage-staff` está desplegada y `ACTIVE` (v3). F14 **no** está bloqueada por
+  infraestructura, al contrario de lo que se temía.
+- **F16-U2 ✅** — la prueba de mayor valor del plan, hecha. `src/lib/offline.test.ts`, **16 casos**.
+  Destapó **F16-01 (Alta)**: una sincronización interrumpida deja las operaciones atrapadas en
+  `syncing` para siempre mientras la app anuncia «Todo sincronizado» — una venta que nunca sube y
+  nadie se entera. Corregido con `reclaimStalledOperations()` y **verificado en el navegador**.
+  De paso quedaron documentados **F16-02** (el resultado por operación del servidor se descarta) y
+  **F16-03** (una operación inválida bloquea toda la cola del dispositivo).
+- **F13 · Reportes ✅ (navegador)** — auditado contra el 18/08 recalculando **todo a mano** desde las
+  filas crudas, sin usar `reports.ts`. Las 9 cifras del tablero cuadran al centavo. Un hallazgo:
+  **F13-01**, el ticket promedio no era reconciliable (se calcula sobre la bruta mientras la tarjeta
+  de al lado muestra la neta) — corregido en la etiqueta, fórmula intacta. Documentados **F13-02**
+  (el reporte impreso pierde la tabla de Incidencias, justo la trazabilidad que pidió el cliente) y
+  **F13-03** (las incidencias previas a la migración de F08-01 conservan importes subestimados).
+- **F12 · Insumos ✅ (navegador)** — ciclo completo sobre un insumo real. **Tres hallazgos:**
+  **F12-02** (la tabla de consumo **no compara nada durante los primeros 30 días de operación**;
+  al corregirlo destapó una variación real que estaba oculta en `Lechuga`), **F12-01** (botón
+  habilitado con cantidad negativa que al pulsarse no hacía nada ni avisaba — **sin riesgo de datos**,
+  ver la rectificación en su ficha de §0.7) y **F12-03** (etiqueta incoherente, efecto secundario de
+  la corrección de F12-02, cazado al verificar en pantalla).
+- **F14 · Personal ⚠️ (lo que no exige credenciales)** — la Edge Function está desplegada, la lista y
+  las validaciones de PIN funcionan en dos capas, y el rol se comprueba también en el servidor
+  (403). Un hallazgo: **F14-01**, el error de usuario duplicado salía en inglés y hablando de un
+  correo que nadie escribió — corregido en el cliente, sin redesplegar la función.
+- Suite: de 156 a **180 pruebas en verde**; lint y build limpios.
 
 ### Qué falta, en el orden sugerido
 
-Todo lo pendiente **exige Supabase real (pasada B)**:
-
-1. **F13 · Reportes** — es lo que el dueño mira primero. Cada cifra debe cuadrar con una suma hecha
-   a mano.
-2. **F12 · Insumos** — conteos, mermas y el consumo teórico que viene de las recetas.
-3. **F16 · Offline y sincronización** — la parte unitaria (`F16-U2`, pruebas de `offline.ts`) se
-   puede hacer **sin servidor** y el propio plan la califica como la de mayor valor de todo el
-   documento; si sólo hay tiempo para una cosa, que sea ésa.
-4. **F14 · Personal** — depende de que la Edge Function `manage-staff` esté desplegada (F14-P0).
-5. **Casos sueltos de pasada B** que quedaron marcados: F02-P13/P14, F06-C2, F10-P17 a P20,
+1. **F14 · lo que exige credenciales (P2, P3, P6-P10)** — *lo ejecuta el responsable*, porque hay que
+   dar de alta un acceso con PIN y luego entrar con él (regla 9). Todo lo demás de F14 ya está.
+   **P11 queda excluido a propósito** y sin verificar.
+2. **F16 · la parte de navegador** (P1-P12, C1-C3): lo unitario ya está hecho. Cruza con F12-P11.
+3. **Casos sueltos de pasada B** que quedaron marcados: F02-P13/P14, F06-C2, F10-P17 a P20,
    F11-P9/P10.
-6. **Fichas que faltan:** F12, F13, F14 y F16.
+4. **Fichas que faltan:** F12, F13, F14 y F16.
 
 ### Estado del entorno en este momento
 
 | Cosa | Estado |
 |---|---|
-| `.env.local` | **Credenciales reales puestas** (pasada B activa). El respaldo vive en `.env.local.bak` y en `.env.production`, los tres ignorados por git |
-| Base local del navegador | **Vaciada** el 20/08 antes de cambiar de entorno. Al entrar con Supabase la app bajará los datos reales |
-| Cola de sincronización | **Purgada**: 32 operaciones `pending` de las pruebas en demo que, de no borrarse, se habrían subido a producción (ver hallazgo **F02-02**) |
-| Sesión | Cerrada. **El acceso lo escribe el responsable**, nunca el ejecutor de la revisión |
-| Servidor | `npm run dev` en el puerto 5173 |
+| `.env.local` | **Modo demostración** (las dos variables de Supabase vacías). Se devolvió a demo al cerrar la pasada B, según la regla. El respaldo con credenciales reales vive en `.env.local.bak` y `.env.production`, **los tres ignorados por git** (comprobado con `git check-ignore`) |
+| Base local del navegador | Trae los **datos reales** de la pasada B (25 pedidos). Al arrancar en demo no se cargarán los pedidos de ejemplo mientras esa caché siga ahí; si se quiere partir limpio, vaciar los datos del sitio `localhost:5173` |
+| Cola de sincronización | **En 0.** Se purgaron las 28 `pending` de la pasada A antes de cambiar de entorno (hallazgo **F02-02**) |
+| Sesión | **Abierta como gerente** en el navegador, escrita por el responsable |
+| Servidor | `npm run dev` en el puerto 5173 (reiniciar tras el cambio a demo) |
+| Datos QA en producción | 1 insumo `QA-20AGO-Leche` + 2 conteos + 2 movimientos, **dados de baja** y por tanto invisibles. Ver §0.8 L2 |
 
 ### Antes de retomar, en este orden
 
-1. `npm install` si hace falta, y `npm test && npm run lint` — deben dar **156 en verde**.
+1. `npm install` si hace falta, y `npm test && npm run lint` — deben dar **180 en verde**.
 2. Decidir la pasada. **Para volver a demostración:**
    `printf 'VITE_SUPABASE_URL=\nVITE_SUPABASE_PUBLISHABLE_KEY=\nVITE_AUTH_EMAIL_DOMAIN=pos.veredacafe.mx\n' > .env.local`
    **Para volver a producción:** `cp .env.local.bak .env.local`. Reiniciar `npm run dev` en ambos casos.
@@ -63,13 +87,22 @@ Todo lo pendiente **exige Supabase real (pasada B)**:
   bloqueado una vez y hubo que pedir ayuda para cerrar el diálogo a mano.
 - **No hay Docker.** La regla de probar toda migración en local antes de `db push` **no se puede
   cumplir aquí**; si algo requiere SQL nuevo, hay que avisar antes de tocar producción.
-- **Node es 20, no 22.** Con credenciales reales `npm test` falla en 2 archivos por falta de
-  WebSocket nativo. La suite se corre **en modo demostración**.
 - **El redimensionado de ventana está bloqueado.** Para probar pantallas angostas se carga la app en
   un marco de 390 px (así se hizo F03-P9).
 - Al hacer clic con el ratón, el primer intento a veces sólo enfoca. Es más fiable accionar los
   botones desde la consola, salvo en el croquis de mesas, que distingue arrastrar de tocar y sí
   necesita un clic real.
+- **`import.meta` no funciona** en el ejecutor de JavaScript del navegador (se evalúa fuera de un
+  módulo). Para saber si Supabase está configurado, importar `isSupabaseConfigured` desde
+  `/src/lib/supabase.ts` en vez de leer `import.meta.env`.
+
+> **Nota de entorno (20/08) — tercera máquina.** Diferencias comprobadas frente a la nota del 19/08:
+> **`.env.local.bak` sí existe** aquí y llegó en modo demostración, no en pasada B; **Node es
+> 22.23.2**, así que la advertencia de que `npm test` falla en 2 archivos por falta de WebSocket
+> nativo **ya no aplica** (Node 22 lo trae de serie) — aun así la suite se sigue corriendo en modo
+> demostración por higiene; **sigue sin haber Docker**; el CLI de Supabase **está autenticado** y
+> `cafeteria-vereda` (`ppgykmpkaviszlmrnijq`) aparece `linked` y `ACTIVE_HEALTHY`. Línea base
+> reconfirmada: **156 en verde** al abrir, **172** al cerrar F16-U2; lint y build limpios.
 
 ### 0.9 Interceptor de impresión (copiar tal cual)
 
@@ -205,11 +238,11 @@ con el nombre `FXX-NN-descripcion.png`.
 | F09 | Caja y arqueo | `/caja` | B | ✅ Completada | [F09](pdf/F09-caja.pdf) |
 | F10 | Catálogo | `/catalogo` | A + B | ⚠️ Pasada A completa (1 corrección); faltan P17-P20 [Requiere B] | [F10](pdf/F10-catalogo.pdf) |
 | F11 | Mesas (gestión) | `/mesas` | A + B | ⚠️ Pasada A completa (1 corrección); faltan P9-P10 [Requiere B] | [F11](pdf/F11-mesas.pdf) |
-| F12 | Insumos | `/insumos` | B | ⬜ Pendiente | — |
-| F13 | Reportes | `/reportes` | B | ⬜ Pendiente | — |
-| F14 | Personal | `/personal` | B | ⬜ Pendiente | — |
+| F12 | Insumos | `/insumos` | B | ⚠️ Navegador completo (4 correcciones); falta P11 offline | [F12](pdf/F12-insumos.pdf) |
+| F13 | Reportes | `/reportes` | B | ⚠️ Navegador completo (1 corrección); P16 no verificable por falta de volumen | [F13](pdf/F13-reportes.pdf) |
+| F14 | Personal | `/personal` | B | ⚠️ Verificado todo lo que no exige crear credencial (1 corrección); P2/P3/P6-P10 los ejecuta el responsable; P11 excluido | — |
 | F15 | Configuración e impresión | `/configuracion` | A | ⚠️ Completada salvo impresión en papel real (1 corrección alta) | [F15](pdf/F15-impresion.pdf) |
-| F16 | Offline y sincronización | transversal | A + B | ⬜ Pendiente | — |
+| F16 | Offline y sincronización | transversal | A + B | 🟡 Unitarias hechas (1 corrección alta); falta la parte de navegador | [F16](pdf/F16-offline-y-sincronizacion.pdf) |
 
 Estados posibles: ⬜ Pendiente · 🟡 En curso · ✅ Completada · ⚠️ Completada con hallazgos.
 
@@ -255,16 +288,49 @@ Estados posibles: ⬜ Pendiente · 🟡 En curso · ✅ Completada · ⚠️ Com
 
 | F15-01 | **Alta** | **En el ticket de 58 mm el método de pago se partía letra por letra.** La vista previa mostraba literalmente `TA` / `RJ` / `ET` / `A` en cuatro renglones: el importe con la propina en la misma línea («$270.00 + $20.00 propina») no dejaba espacio, y el CSS del renglón permite partir por cualquier carácter (`overflow-wrap:anywhere`). El resultado es ilegible en el comprobante que se entrega al cliente. **Transparencia sobre el origen:** lo destapó la corrección **F06-01** —al pasar de «CARD» (4 letras) a «TARJETA» (7) dejó de caber—, pero el defecto ya estaba latente: «TRANSFER», el valor crudo anterior, también se habría partido. | `src/lib/printing.ts` (renglón de pagos y CSS de `.row`) | ✅ **Corregido** 20/08: la propina pasa a su **propio renglón** indentado y el nombre del método no se parte (`white-space:nowrap`). Verificado en la vista previa real a 58 mm y a 80 mm: «TARJETA $270.00» completo y «Propina $20.00» debajo. 3 pruebas nuevas |
 
+| F16-01 | **Alta** | **Una sincronización interrumpida abandona las operaciones para siempre, y la app dice que todo está bien.** `syncPendingOperations` marca el lote como `syncing` (`offline.ts:29`) *antes* de llamar al servidor. Si la pestaña se cierra, se recarga o la llamada lanza una excepción en esa ventana —`forceSync` no tiene `try/catch`, así que la excepción sale como rechazo no capturado— las operaciones se quedan en `syncing` de forma permanente: la consulta de reintento sólo mira `pending`/`review_required` (`offline.ts:22`), el arranque no las rescata y `pendingCount` tampoco las cuenta (`AppContext.tsx:161,234`). Resultado: la venta nunca sube al servidor y el indicador anuncia **«Todo sincronizado»**. Es el peor modo de fallo posible en una tableta de café con wifi inestable, porque es silencioso. Reproducido en vivo: con 28 pendientes, poner una en `syncing` dejó la consulta de la app contando 27. | `src/lib/offline.ts:22,29`, `src/state/AppContext.tsx:161,234` | ✅ **Corregido** 20/08: `reclaimStalledOperations()` devuelve a `pending` todo lo que quedó en `syncing`, y se llama en la hidratación de `AppContext` antes de contar. Reenviar es seguro porque el servidor descarta el duplicado por `idempotency_key` (`on conflict (idempotency_key) do nothing`). Verificado en el navegador: la operación atrapada volvió a `pending` **con su clave intacta** y el contador pasó de 27 a 28. Cubierto por 3 pruebas nuevas en `offline.test.ts` |
+| F16-02 | Baja | **El resultado por operación que devuelve el servidor se descarta.** `sync_offline_operations` devuelve un arreglo `{id, status, duplicate}` por operación, pero el cliente hace `Array.isArray(data) ? A : B` con **las dos ramas idénticas** (`offline.ts:44`): marca `synced` todo el lote mirando sólo si hubo error de transporte. Hoy es inocuo porque cualquier rechazo del servidor lanza excepción y aborta la transacción entera, así que no existe el éxito parcial; pero el día que la RPC informe un rechazo por operación, el cliente lo dará por enviado. | `src/lib/offline.ts:44` | Documentado, **sin corregir por alcance** (endurecerlo el día de la entrega es riesgo innecesario). Anotado como deuda en la ficha de F16 |
+| F16-03 | Media | **Una sola operación inválida bloquea toda la cola del dispositivo.** `sync_offline_operations` procesa el lote en **una transacción**: si una operación lanza (`Manager role required`, `Reason required`…), aborta el lote completo y el cliente marca como fallidas **todas** las operaciones, incluidas las sanas. Tras 3 intentos el lote entero cae en `review_required`, y **no hay ninguna forma de resolverlo desde la interfaz** (lo que F16-P10 anticipaba como límite). Bloqueo de cabeza de línea clásico. | `supabase/migrations/20260818140000_incident_amount_includes_modifiers.sql:16-190`, `src/lib/offline.ts:41-45` | Documentado como **límite conocido**; requiere migración SQL para aislar el fallo por operación y no hay Docker para probarla (regla 4). Debe quedar escrito en la ficha de F16 y avisarse al cliente |
+
+| F13-01 | Media | **El «Ticket promedio» no cuadraba con ninguna división posible de lo que la pantalla muestra.** La tarjeta «Ventas» presenta la venta **neta** ($443.00) y «Tickets cobrados» 9, pero el promedio se calcula sobre la **bruta**: `gross / tickets` = $539.00 ÷ 9 = **$59.89**. El dueño que haga la división evidente —$443 ÷ 9 = $49.22— obtiene otra cifra y nada en pantalla explica la diferencia. Es precisamente el requisito de F13: *cada cifra debe cuadrar con una suma hecha a mano*. El cálculo en sí **es el correcto** (numerador y denominador comparten la base «ventas cerradas del periodo»; mezclar la neta con el conteo de tickets sería peor), así que el defecto es de presentación, no de aritmética. | `src/domain/reports.ts:355`, `src/pages/ReportsPage.tsx:332` | ✅ **Corregido** 20/08: la etiqueta pasa a **«Ticket promedio (bruto)»** (y «Contribución promedio (bruta)» al filtrar por método). Con eso la cifra queda reconciliable con lo que ya está en pantalla: ($443.00 neta + $96.00 reversiones) ÷ 9 = $59.89. **Fórmula intacta**, mismo criterio que se usó en F09-01. No se tocó `detail` porque lleva `truncate` y el texto se habría cortado. Verificado en el navegador: la etiqueta entra en una línea |
+| F13-02 | Media | **El reporte impreso se queda sin la trazabilidad de cancelaciones y reversiones.** Al imprimir (`Guardar PDF` y `Cmd+P` son el mismo camino: `window.print()` de la ventana principal) se ocultan por `print:hidden` el **Detalle auditable**, las **Incidencias** y el indicador de **Insumos**. Que el detalle no salga es defendible —está paginado y en papel saldría sólo la primera página, engañando—, pero **Incidencias no está paginada**: se muestra entera (7 registros con empleado, motivo, importe y fecha) y aun así no se imprime. Choca con el requisito que el propio cliente confirmó en F01-04 y que motivó F08-02 y F08-04: poder responsabilizar a alguien de cada cancelación. Quien imprima el reporte para archivarlo o revisarlo no lleva ese dato en el papel. | `src/pages/ReportsPage.tsx` (bloques con `print:hidden`) | **Sin corregir por alcance**, documentado como límite conocido: cambiar qué entra en el papel el día de la entrega puede romper la maquetación impresa, que no se puede probar sin impresora (ver F15-P10). **Salida disponible mientras tanto: «Exportar CSV», que sí incluye el detalle completo.** Debe quedar escrito en la ficha de F13 y decírselo al cliente |
+| F13-03 | Baja | **Las incidencias anteriores al 18/08 conservan el importe subestimado.** La migración de **F08-01** corrigió el cálculo hacia adelante, pero **no rellenó hacia atrás**: en la tabla de Incidencias siguen las filas viejas con los importes de antes ($180.00 en la anulación de 2 Matcha que valía $210.00; $186.00 en la cancelación de cuenta que valía $201.00). Son registros de prueba del 18/08 a las 10:17, anteriores a la migración de las 14:00. | `incidents` (filas históricas), migración `20260818140000` | Sin acción: **no es una regresión**, es historia previa al arreglo, y son datos de QA. Se documenta para que nadie lo lea como un defecto vivo. El histórico real del cliente empieza en la entrega, ya con el cálculo corregido |
+
+| F12-01 | Baja | **Botón muerto: con una cantidad negativa, «Guardar» se dejaba pulsar y no pasaba absolutamente nada.** La condición del botón era `!Number(quantity)`, que frena el `0` pero **deja pasar los negativos**, así que con −3 el botón quedaba habilitado (y el conteo, con `quantity === ""`, aceptaba hasta −5). **Rectificación importante sobre la primera lectura de este hallazgo:** *no* hay corrupción de datos ni riesgo para el indicador. El valor nunca llega a guardarse, porque hay dos defensas más abajo: el propio manejador ya devuelve temprano (`saveMovement`: `value <= 0 \|\| !note.trim()`; `saveCount`: `value < 0`, `InventoryPage.tsx:124,133`) y la base repite la regla (`inventory_movements.quantity check (quantity > 0)`, `note check (length(trim(note)) > 0)`, `inventory_count_lines.quantity check (quantity >= 0)`). El defecto real es de interfaz y de confianza: quien administra pulsa un botón habilitado, no ocurre nada, **no aparece ningún aviso** y no tiene forma de saber por qué. El `min="0.001"` del campo tampoco ayuda: es decorativo, porque estos modales no envían formulario. | `src/pages/InventoryPage.tsx:170,171` | ✅ **Corregido** 20/08: `!(Number(quantity) > 0)` en el movimiento (bloquea negativo, cero y `NaN`) y `!(Number(quantity) >= 0)` en el conteo (bloquea negativo y `NaN`, **permite el 0**, que es una lectura legítima: contaste y no había). Ahora el botón refleja lo que el manejador va a hacer. Verificado en el navegador en las seis combinaciones, sin guardar ningún valor inválido en producción |
+| F12-02 | Media | **La tabla «Consumo contado vs. receta teórica» no compara nada durante los primeros 30 días de operación.** La línea base se tomaba con `atOrBefore(counts, item, start)`, es decir **el último conteo anterior al inicio de la ventana**, y la ventana es fija de 30 días (`InventoryPage.tsx:117`). Los conteos hechos *dentro* del periodo no servían de línea base: sólo el más reciente contaba, como cierre. Consecuencia en la entrega: un café que empieza a contar hoy verá **«Falta línea base o segundo conteo» en todos sus insumos durante un mes entero**, por muchos conteos que haga — y el mensaje le pide justamente lo que ya hizo. Reproducido en vivo: con dos conteos reales (10 L y 10.5 L) la fila seguía vacía. | `src/domain/inventory.ts:26-28,41-48` | ✅ **Corregido** 20/08: si no hay conteo anterior a la ventana se usa como línea base el **primer conteo dentro** de ella (`firstWithin`), conservando la preferencia por el anterior cuando existe, de modo que el comportamiento ya probado no cambia. Verificado en producción: la fila pasó a «Con dos conteos comparables» con físico 0.5 L, y **destapó una variación real que estaba oculta**: `Lechuga`, +1.5 pza fuera de tolerancia. 4 pruebas de regresión |
+| F12-03 | Baja | **La etiqueta de la fila mentía cuando sólo había un conteo.** Se decidía con `row.openingAt && row.closingAt`, pero con un único conteo ambas fechas apuntan a **la misma** lectura: la fila anunciaba «Con dos conteos comparables» mientras el físico y la diferencia mostraban "—". Apareció al verificar F12-02 en el navegador, **como efecto secundario de esa misma corrección** (antes esos insumos ni siquiera llegaban a tener `openingAt`). | `src/pages/InventoryPage.tsx:168` | ✅ **Corregido** 20/08 en la misma pasada: la etiqueta se decide por `row.physical !== undefined`, que es la condición que de verdad gobierna si hay comparación. Verificado: 0 filas incoherentes sobre los 8 insumos reales |
+
+| F14-01 | Baja | **El error más probable de la pantalla de personal salía en inglés y hablaba de algo que el usuario nunca escribió.** Al intentar dar de alta un usuario que ya existe, la interfaz mostraba el mensaje crudo de Supabase Auth: *«A user with this email address has already been registered»*. La app fabrica un correo interno a partir del usuario (`VITE_AUTH_EMAIL_DOMAIN`), así que quien administra el personal —que sólo teclea un nombre de usuario— no tiene forma de relacionar ese texto con lo que hizo. `invokeError` devolvía el mensaje del servidor tal cual. Reproducido en producción intentando crear `gerente` de nuevo: **no se creó nada** (el rechazo funciona), pero el aviso era inservible. | `src/pages/PeoplePage.tsx:21-33` (`invokeError`) | ✅ **Corregido** 20/08: nueva función `readableError` que traduce los mensajes conocidos de Supabase Auth al vocabulario de la pantalla — «Ya existe un acceso con ese usuario. Elige otro nombre de usuario.» Se aplica en los tres puntos por los que pasa un error de la función (alta, restablecimiento de PIN y fallo de red), así que no hace falta **redesplegar la Edge Function** el día de la entrega. Verificado en vivo con el mismo caso |
+
+| F12-04 | Media | **No había forma de retirar un insumo de la vista: la baja lógica sólo la respetaba una de las tres zonas de la pantalla.** `createInventoryAnalysis` filtra por `item.active`, pero la lista «Existencia contada», los dos selectores de los modales y el panel «Últimos registros» recorrían `items`/`movements` **sin mirar `active`**. Un insumo que el café deja de manejar seguía apareciendo —con su existencia, ofreciéndose para nuevos conteos y con sus movimientos en el panel lateral— y el único sitio donde desaparecía era la tabla de análisis, lo que además resulta desconcertante. **Se descubrió al intentar limpiar los datos de esta revisión** (§0.8 L2): al dar de baja `QA-20AGO-Leche` desapareció de la tabla pero siguió en las otras tres zonas. | `src/pages/InventoryPage.tsx:165,166,170,171` | ✅ **Corregido** 20/08: memos `activeItems` y `activeMovements` alimentan la lista, los dos selectores y los últimos registros; `items` completo se conserva para resolver el **nombre de los movimientos históricos** y para el detalle, que deben seguir siendo consultables. Verificado en producción: el insumo dado de baja desapareció de las tres zonas y los 7 reales quedaron intactos |
+
 Severidades: **Bloqueante** (impide entregar) · **Alta** (rompe un flujo, hay rodeo) · **Media**
 (molesta pero no rompe) · **Baja** (cosmético).
 
 ### 0.8 Limpieza posterior
 
 - [ ] L1. `mv .env.local.bak .env.local` restaurado
-- [ ] L2. Datos `QA-18AGO-*` de Supabase eliminados o documentados como datos de prueba
+- [x] L2. **Resuelto el 20/08 con baja lógica, y por el camino salió el hallazgo F12-04.**
+      Lo creado en la pasada B fue: el insumo `QA-20AGO-Leche`, sus 2 conteos (10 L y 10.5 L) y sus
+      2 movimientos (entrada +2 L, merma 1 L). No se creó ningún pedido, pago ni turno de caja, y
+      **no se guardó ningún valor inválido** (los negativos de F12-01 se probaron sólo contra el
+      estado del botón).
+      **El borrado físico no es posible desde la aplicación, y está bien que así sea:** la RLS
+      responde `permission denied` en `inventory_counts` e `inventory_count_lines`, y las claves
+      foráneas son `on delete restrict`. El inventario es **inmutable por diseño**, que es lo que
+      hace que los conteos sirvan como prueba. Se intentó, se rechazó y **no se perdió ni un dato**.
+      La salida correcta es la que usa la propia aplicación para los productos: **baja lógica**
+      (`active = false`), aplicada al insumo. Tras ella desaparece de la lista de existencias, de los
+      selectores de conteo y movimiento, del panel de últimos registros y de la tabla de análisis —
+      esto último **sólo funciona gracias a la corrección F12-04**, que se descubrió justo aquí.
+      Queda invisible para el equipo del café y auditable en la base. Si aun así se quiere borrar de
+      raíz, hay que hacerlo con la clave de servicio desde el panel de Supabase, en orden:
+      `inventory_count_lines` → `inventory_counts` → `inventory_movements` → `inventory_items`.
 - [ ] L3. Sesión de caja de prueba cerrada (no dejar un turno abierto)
 - [ ] L4. `npm test`, `npm run lint` y `npm run build` en verde al final
-- [ ] L5. PDF de las 16 funcionalidades presentes en `docs/qa/pdf/`
+- [ ] L5. PDF de las 16 funcionalidades presentes en `docs/qa/pdf/`. **15 de 16 al 20/08**: se
+      añadieron F12, F13 y F16. **Falta sólo F14**, que se redactará cuando el responsable complete
+      los casos que exigen crear una credencial y entrar con ella (P2, P3, P6-P10).
 - [ ] L6. `pendingOperations` purgado de las operaciones creadas en pasada A antes de volver a
       credenciales reales (ver hallazgo **F02-02**: el modo demostración también encola, y esas
       operaciones se subirían a producción en cuanto Supabase quede configurado)
@@ -1096,41 +1162,72 @@ RPC `record_inventory_count`, `record_inventory_movement` · **Pasada:** B · **
 
 ### Pruebas en navegador
 
-- [ ] F12-P1. Crear insumo `QA-18AGO-Leche` con unidad, mínimo y tolerancia.
-- [ ] F12-P2. Registrar el **conteo de línea base**; el insumo deja de decir "pendiente de línea
-      base".
-- [ ] F12-P3. Registrar una **entrada** con nota → aparece en "Últimos registros" con flecha arriba.
-- [ ] F12-P4. Registrar una **merma** con nota → aparece con flecha abajo.
-- [ ] F12-P5. Entrada/merma sin nota o con cantidad 0 → rechazada.
-- [ ] F12-P6. Registrar un segundo conteo → la tabla "Consumo contado vs. receta teórica" ya calcula
-      físico, teórico y diferencia.
-- [ ] F12-P7. Un insumo con existencia por debajo del mínimo muestra la etiqueta **Reponer** en rojo.
-- [ ] F12-P8. Una diferencia fuera de la tolerancia se marca en rojo (`isInventoryVarianceAlert`).
-- [ ] F12-P9. Abrir el detalle de un insumo → historial de conteos y movimientos.
-- [ ] F12-P10. Con un solo conteo, la fila dice "Falta línea base o segundo conteo" y no inventa
-      números.
+> **Pasada B completada (20/08)** contra Supabase real con sesión de gerente. Se creó el insumo
+> `QA-20AGO-Leche` (L, mínimo 8, **tolerancia 0.5** — elegida a propósito para poder probar el límite
+> exacto) y sobre él se ejecutó el ciclo entero. **Dos hallazgos reales: F12-01 y F12-02.**
+
+- [x] F12-P1. Insumo `QA-20AGO-Leche` creado (unidad L, mínimo 8, tolerancia 0.5). Confirmado en
+      `inventory_items` del servidor, no sólo en pantalla. El botón «Crear insumo» nace
+      deshabilitado con el formulario vacío.
+- [x] F12-P2. Conteo de línea base de **10 L** con nota `QA-20AGO linea base`. La fila dejó de decir
+      "pendiente de línea base" y pasó a "contado 20/08/26, 12:56 p.m. · 10 L". Verificado en
+      `inventory_count_lines`.
+- [x] F12-P3. Entrada de **+2 L** con nota → aparece en "Últimos registros" como
+      «QA-20AGO-Leche +2 L · Entrada · QA-20AGO compra proveedor», con la flecha hacia arriba.
+- [x] F12-P4. Merma de **1 L** con nota → aparece como «−1 L · Merma · QA-20AGO merma», flecha abajo.
+- [!] F12-P5. **Hallazgo menor → F12-01.** Lo que el caso pedía sí se cumple (cantidad 0 y nota vacía
+      o de sólo espacios quedan rechazadas), **pero con una cantidad negativa el botón quedaba
+      habilitado**: al pulsarlo no ocurría nada ni se mostraba aviso alguno. Comprobado después que
+      el dato **nunca podía llegar a guardarse** —el manejador ya retornaba temprano y la base tiene
+      sus propios `check`—, así que era un botón muerto, no un riesgo de datos. Corregido y
+      reverificado en las seis combinaciones.
+- [x] F12-P6. **Sólo pasa gracias a la corrección de F12-02.** Con los dos conteos (10 L y 10.5 L),
+      la tabla calcula: entradas 2 L, mermas 1 L, **físico 0.5 L**, teórico 0 L, diferencia +0.5 L.
+      Cuadra con la suma manual: 10 + 2 − 10.5 − 1 = **0.5**. Antes del arreglo la fila seguía
+      diciendo "Falta línea base o segundo conteo" pese a tener los dos conteos.
+- [x] F12-P7. `Lechuga` (1 pza contada, mínimo 2) muestra la etiqueta **Reponer**, con
+      `bg-error-container` y color calculado `rgb(147, 0, 10)` — rojo, como pide el caso.
+- [x] F12-P8. **Verificado en el límite exacto, que es donde se rompen estas reglas.** Con tolerancia
+      0.5 y variación de exactamente 0.5, la diferencia **no** se marca en rojo (`0.5 > 0.5` es
+      falso). Y con datos reales sí alerta: `Lechuga` da físico 2 pza contra 0.5 pza teórico,
+      diferencia **+1.5 pza en rojo** con tolerancia ±0.
+- [x] F12-P9. El detalle del insumo abre con «CONSUMO ENTRE CONTEOS» (desde, hasta, días, entradas,
+      mermas, consumo físico) e «HISTORIAL». El primer periodo se rotula «Línea base» con "—" en
+      consumo, sin inventar un número.
+- [x] F12-P10. Con un solo conteo la fila dice "Falta línea base o segundo conteo" y deja físico y
+      diferencia en "—". Verificado sobre los 6 insumos que están en ese estado.
 - [ ] F12-P11. Offline: registrar un conteo sin conexión → queda encolado y se sincroniza al volver
       (a diferencia del catálogo, los insumos **sí** pasan por `offline.ts`). Verificar la
-      idempotencia: no debe duplicarse al reintentar (F16).
+      idempotencia: no debe duplicarse al reintentar (F16). **Pendiente**, se cruza con F16-P3/P7.
 
 ### Funcionalidades conectadas a verificar
 
-- [ ] F12-C1. El consumo teórico proviene de las recetas de `/catalogo` (F10): vender un producto con
-      receta debe aumentar el teórico.
-- [ ] F12-C2. **Las ventas no descuentan existencias** — la propia interfaz lo declara. Confirmarlo y
-      dejarlo escrito en el PDF como límite deliberado, no como error.
-- [ ] F12-C3. El mismo indicador aparece en `/reportes` con los mismos números (F13).
+- [x] F12-C1. **Confirmado con datos reales:** `Lechuga` tiene un consumo teórico de **0.5 pza**
+      distinto de cero, que sólo puede venir de las recetas de `/catalogo` resueltas por el servidor
+      en `inventory_usage_lines`. El resto de insumos, sin receta o sin ventas, dan 0.
+- [x] F12-C2. Confirmado: la propia pantalla lo declara arriba — «Los conteos son la existencia
+      física. Las recetas sólo generan indicadores y **nunca descuentan stock**» — y la tabla lo
+      repite. Es un límite **deliberado**, no un error, y así debe ir en la ficha.
+- [x] F12-C3. El mismo bloque aparece en `/reportes` ("Consumo físico vs. receta teórica") con los
+      mismos 7 insumos y la misma leyenda. **Diferencia legítima a documentar:** Reportes lo calcula
+      sobre el **periodo elegido en el filtro** y `/insumos` sobre una ventana fija de **30 días**,
+      así que las cifras no tienen por qué coincidir salvo que se elijan los mismos días.
 
 ### Pruebas unitarias
 
-- [ ] F12-U1. `src/domain/inventory.test.ts` (8 casos). **Ampliar** con: variación exactamente en el
-      límite de la tolerancia (no debe alertar); variación un decimal por encima (sí alerta);
-      insumo sin conteos; conteos desordenados en el tiempo.
+- [x] F12-U1. `src/domain/inventory.test.ts` ampliado de 8 a **16 casos**. Lo pedido: variación
+      **exactamente en el límite** de la tolerancia (no alerta), un decimal por encima (sí alerta),
+      la misma prueba **por debajo** con variación negativa (−0.6 también alerta: se comprueba que
+      usa el valor absoluto), e insumo sin conteos (ni físico ni variación, y no alerta). Más 4 casos
+      de regresión de **F12-02**: compara dos conteos hechos dentro de la ventana, cuenta sólo los
+      movimientos ocurridos entre ellos (no los anteriores), sigue sin comparar con un único conteo,
+      y **da preferencia al conteo anterior a la ventana cuando existe** (para no cambiar el
+      comportamiento que ya funcionaba). Suite total: **180 pruebas en verde**.
 
 ### Ficha PDF
 
-- [ ] F12-D1. `docs/qa/fichas/F12-insumos.html` redactado
-- [ ] F12-D2. `docs/qa/pdf/F12-insumos.pdf` generado
+- [x] F12-D1. `docs/qa/fichas/F12-insumos.html` redactado
+- [x] F12-D2. `docs/qa/pdf/F12-insumos.pdf` generado con Chrome (Skia)
 
 ---
 
@@ -1143,27 +1240,69 @@ Es lo que el cliente va a mirar primero. Cada cifra debe cuadrar con una suma he
 
 ### Pruebas en navegador
 
-- [ ] F13-P1. Filtro por rango de fechas: hoy, semana, rango personalizado.
-- [ ] F13-P2. Filtro por tipo (mesa / para llevar / todos).
-- [ ] F13-P3. Filtro por empleado.
-- [ ] F13-P4. **Venta neta del periodo = suma manual** de las ventas cerradas menos reversiones.
-      Comprobarlo con lápiz sobre un día con pocas ventas.
-- [ ] F13-P5. Métodos de pago: la suma de efectivo + tarjeta + transferencia = venta neta.
-- [ ] F13-P6. Ventas por hora: las barras suman el total del periodo.
-- [ ] F13-P7. Ventas por día: los tickets y el neto por día cuadran con el detalle.
-- [ ] F13-P8. Productos más vendidos / menos vendidos, por unidades y por ingreso: alternar los
-      cuatro cruces y verificar que el orden cambia coherentemente.
-- [ ] F13-P9. Tabla de detalle auditable: cada fila muestra folio, evento, empleado, tipo, bruta,
-      reversión, neta y propina.
-- [ ] F13-P10. Paginación del detalle: anterior/siguiente, y los botones se deshabilitan en los
-      extremos.
-- [ ] F13-P11. El enlace del folio abre la venta correspondiente en `/venta/:id`.
-- [ ] F13-P12. Una **venta revertida** aparece con reversión en rojo y neta negativa o neutra.
-- [ ] F13-P13. Una **venta cancelada** aparece con su etiqueta y no suma a la venta.
-- [ ] F13-P14. Periodo sin datos → estado vacío con mensaje, no ceros confusos ni error.
-- [ ] F13-P15. Impresión del reporte: `Cmd+P` — las secciones marcadas `print:hidden` se ocultan y el
-      resultado es legible en papel.
-- [ ] F13-P16. Rendimiento con el límite de 1000 registros: verificar que la página no se congela.
+> **Pasada B completada (20/08)** contra Supabase real con sesión de gerente. **Método:** se eligió
+> el **18/08** por ser el único día con la mezcla difícil (7 cobros, 2 reversiones, 1 cancelación) y
+> se recalcularon **todas** las cifras a mano, leyendo las filas crudas de `orders`, `order_items` y
+> `payments` con una implementación propia — **sin importar `reports.ts`**, para no caer en un
+> razonamiento circular. Referencia manual del día: bruta **$539.00**, reversiones **$96.00**, neta
+> **$443.00**, 9 tickets, propinas **$10.00**, descuentos **$8.00**, 1 cancelación, efectivo
+> **$388.00**, tarjeta **$0.00**, transferencia **$55.00**. Se encontró un hallazgo real: el ticket
+> promedio no era reconciliable (**F13-01**).
+
+- [x] F13-P1. Los presets funcionan y el rango personalizado también: «Hoy» (20/08, sin datos) y
+      `2026-08-18 al 2026-08-18`, que es el que se auditó a mano.
+- [x] F13-P2. Filtro por tipo, **cuadrado a mano**: Mesa $200.00 / 3 tickets y Para llevar
+      $243.00 / 6 tickets. $200 + $243 = **$443** = el total sin filtrar. Exacto.
+- [x] F13-P3. Filtro por empleado, **cuadrado a mano**: Gerente $443.00 / 9 (todo el día lo cerró
+      gerencia) y Ana López $0.00 / 0. Coincide con el recálculo por `closed_by`.
+- [x] F13-P4. **Venta neta = suma manual.** Pantalla **$443.00** frente a manual **$443.00**
+      ($539.00 de 9 ventas cerradas − $96.00 de las 2 reversiones). Exacto al centavo.
+- [x] F13-P5. Métodos de pago: efectivo $388.00 + tarjeta $0.00 + transferencia $55.00 = **$443.00**
+      = venta neta. Exacto. **Salvedad de contrato a documentar:** la igualdad se cumple porque todas
+      las ventas del día quedaron **pagadas por completo**. La bruta usa `orderTotal` (lo que la
+      cuenta valía) mientras que el desglose por método usa los pagos topados al total
+      (`paymentContributions`), así que una venta cerrada con pago incompleto rompería la igualdad.
+      No es un defecto observado, es el contrato: conviene que quede escrito.
+- [x] F13-P6. Ventas por hora: 01h $220.00, 02h $135.00, 12h $88.00, 14h $0.00 — **suman $443.00**,
+      el total del periodo. Las cuatro horas coinciden exactamente con el recálculo manual sobre
+      `closed_at`/`reversed_at` en zona `America/Mexico_City`. La hora 14h queda en $0.00 porque la
+      #1080 se cobró y se revirtió dentro de la misma hora: correcto, no es un hueco.
+- [x] F13-P7. Ventas por día: `18/08 · 9 tickets · $443.00`, idéntico al detalle y a la suma manual.
+- [x] F13-P8. Los cuatro cruces alternan de forma coherente y coinciden con el cálculo manual
+      (Espresso 4u/$192, Americano 2u/$110, Pozole Rojo 1u/$100, Chai 1u/$80, Flat White 1u/$65):
+      «más/unidades» y «más/ingreso» dan el mismo orden, y «menos» es el inverso. **Comprobación
+      cruzada:** el ingreso de productos suma $547.00 = $539.00 de venta bruta + $8.00 de descuento,
+      que es justo lo esperado porque el ranking va antes de descuento.
+- [x] F13-P9. El detalle trae las 8 columnas pedidas (venta, evento, empleado, tipo, bruta,
+      reversión, neta, propina) y **10 registros** = 9 cobros + 1 cancelación. Los eventos combinados
+      se etiquetan «Cobro · Reversión».
+- [x] F13-P10. `Página 1 de 1` con **Anterior y Siguiente deshabilitados** en ambos extremos, que es
+      el comportamiento correcto para un periodo de 10 registros.
+- [x] F13-P11. El enlace del folio abre la venta: `#1080` → `/venta/39511e02-…`, con la cabecera
+      «Revertido» y el texto «Venta revertida · El cobro se anuló y quedó registrado en Reportes»
+      (de paso confirma **F07-05** contra producción real).
+- [x] F13-P12. La venta revertida #1080 aparece con **bruta $48.00, reversión −$48.00 y neta $0.00**;
+      la reversión se muestra en rojo. Igual la #1056.
+- [x] F13-P13. La cancelada #1045 aparece con evento «Cancelación», empleado «—», y **bruta $0.00 /
+      neta $0.00**: no suma a la venta pese a que la cuenta valía $201.00. Correcto.
+- [x] F13-P14. **Mejor de lo que pedía el caso.** El periodo «Hoy» (sin datos) no se queda en ceros
+      confusos: **cada sección trae su propio estado vacío redactado** — «Sin movimientos financieros
+      · No hubo cobros ni reversiones en este periodo», «Sin ventas en el periodo», «Sin productos
+      cobrados en el periodo», «Sin registros», «Sin incidencias». Ningún error en consola.
+- [x] F13-P15. **Verificado por estructura, sin abrir el diálogo** (abrirlo cuelga la automatización,
+      §0.9). Se comprobó que «Guardar PDF» y `Cmd+P` son **el mismo camino**: el botón llama a
+      `window.print()` de la ventana principal (1 llamada contada con `print` neutralizado), no a un
+      marco oculto. Al imprimir se ocultan los controles (filtros y botones) y **tres secciones de
+      datos: Detalle auditable, Incidencias e Insumos**; se conservan las métricas, la tendencia, los
+      métodos de pago, las ventas por hora, por día y el ranking. Funciona como está programado →
+      pero el contenido que se pierde merece aviso: hallazgo **F13-02**.
+- [!] F13-P16. **No verificable con los datos actuales.** El tope es de 1000 registros por página de
+      consulta y la base real tiene **13 pedidos liquidados en total**, así que no hay forma honesta
+      de provocar la condición sin sembrar cientos de pedidos falsos en producción, que es
+      justamente lo que la higiene de esta revisión prohíbe. Queda como **riesgo abierto para la
+      entrega**: el rendimiento con volumen real de meses no está medido. Lo que sí se comprobó es
+      que la consulta **pagina de verdad** (`fetchPage` itera en bloques de `PAGE_SIZE` hasta agotar),
+      así que el tope de 1000 no trunca en silencio.
 
 ### Funcionalidades conectadas a verificar
 
@@ -1182,8 +1321,8 @@ Es lo que el cliente va a mirar primero. Cada cifra debe cuadrar con una suma he
 
 ### Ficha PDF
 
-- [ ] F13-D1. `docs/qa/fichas/F13-reportes.html` redactado
-- [ ] F13-D2. `docs/qa/pdf/F13-reportes.pdf` generado
+- [x] F13-D1. `docs/qa/fichas/F13-reportes.html` redactado
+- [x] F13-D2. `docs/qa/pdf/F13-reportes.pdf` generado con Chrome (Skia), revisado visualmente
 
 ---
 
@@ -1197,31 +1336,76 @@ todo F14 falla por infraestructura, no por código.
 
 ### Pruebas en navegador
 
-- [ ] F14-P0. Confirmar que `manage-staff` está desplegada (`npx supabase functions list`).
-- [ ] F14-P1. La lista muestra el personal con usuario, nombre, rol y estado.
-- [ ] F14-P2. Crear un empleado `QA-18AGO-user` con rol barista → aparece en la lista.
+- [x] F14-P0. **Confirmado el 20/08:** `manage-staff` está desplegada y `ACTIVE` (versión 3,
+      `verify_jwt: true`), junto con `qz-sign`. **F14 no está bloqueada por infraestructura.**
+> **Pasada B parcial (20/08).** Se verificó todo lo que **no exige crear una credencial ni
+> autenticarse con ella**. Los casos restantes (P2, P3, P6-P10) dependen de dar de alta un acceso con
+> PIN y luego entrar con él: por la regla 9 de esta revisión, **eso lo hace el responsable**, no el
+> ejecutor. **P11 se excluyó por decisión del responsable** (ver abajo). Un hallazgo real: **F14-01**.
+> Nada de lo probado alteró el personal existente: al terminar seguían sólo `gerente` (activo,
+> manager) y `ana` (desactivada, barista), idénticos al inicio.
+
+- [x] F14-P0. **Confirmado el 20/08:** `manage-staff` está desplegada y `ACTIVE` (versión 3,
+      `verify_jwt: true`), junto con `qz-sign`. **F14 no está bloqueada por infraestructura.**
+- [x] F14-P1. La lista muestra las cuatro columnas pedidas: `Gerente / @gerente / Gerente / Activo`
+      y `Ana López / @ana / Barista / Desactivado`, más las métricas «Personal activo 1»,
+      «Gerentes 1» y «PIN restablecido 0».
+- [ ] F14-P2. Crear un empleado `QA-20AGO-user` con rol barista → aparece en la lista.
+      **Lo hace el responsable:** exige fijar un PIN, es decir crear una credencial real en
+      producción.
 - [ ] F14-P3. Iniciar sesión con ese usuario nuevo en una ventana de incógnito → entra con permisos
-      de barista (cruce con F01).
-- [ ] F14-P4. Crear empleado con usuario **duplicado** → error claro, no crea.
-- [ ] F14-P5. Crear empleado con PIN inválido (muy corto / no numérico) → validación.
+      de barista (cruce con F01). **Lo hace el responsable** (regla 9).
+- [!] F14-P4. **Hallazgo real → F14-01.** No crea el duplicado (verificado: el personal siguió
+      intacto), **pero el aviso no era claro**: devolvía el error crudo de Supabase Auth,
+      *«A user with this email address has already been registered»* — en inglés, en una pantalla
+      enteramente en español, y hablando de un **correo** que quien administra nunca escribió, porque
+      lo que teclea es un usuario. Corregido y reverificado: ahora dice «Ya existe un acceso con ese
+      usuario. Elige otro nombre de usuario.»
+- [x] F14-P5. **Validación correcta y en dos capas.** El PIN no numérico es **imposible por
+      construcción**: `PinField` filtra al teclear (`replace(/\D/g, "")`) y recorta a 8 dígitos, así
+      que no se pueden escribir letras. El PIN corto lo rechaza el servidor con mensaje claro:
+      probado con `123` → «El PIN debe ser numérico, de 6 a 8 dígitos.» y **nada creado** en
+      `staff_profiles`. El formulario vacío lo frena la validación nativa del navegador (`required`),
+      que es por lo que el botón puede estar habilitado sin peligro.
 - [ ] F14-P6. **Restablecer PIN** de ese empleado → el PIN viejo deja de funcionar y el nuevo sí.
+      **Lo hace el responsable** (depende de P2 y de entrar con la cuenta).
 - [ ] F14-P7. El contador de restablecimientos de PIN (que lee `audit_log`) sube en uno.
+      **Depende de P6.** Comprobado que el contador existe y hoy marca **0**, y que `audit_log` es
+      legible desde la sesión de gerencia (devuelve filas con `action` y `created_at`), así que la
+      fuente del contador funciona.
 - [ ] F14-P8. **Desactivar** al empleado → al intentar entrar, "Este acceso está desactivado."
-- [ ] F14-P9. Reactivarlo → vuelve a entrar.
+      **Depende de P2.** No se probó sobre `ana` para no tocar a una persona real del negocio.
+- [ ] F14-P9. Reactivarlo → vuelve a entrar. **Depende de P8.**
 - [ ] F14-P10. Cambiar el rol de barista a gerente → tras volver a entrar, ve el menú de Gestión.
-- [ ] F14-P11. Intentar desactivar la **propia** cuenta del gerente conectado → documentar qué pasa
-      (si se permite y deja al sistema sin gerente, es un hallazgo **alto**).
+      **Depende de P2.**
+- [ ] F14-P11. Intentar desactivar la **propia** cuenta del gerente conectado.
+      **Excluido a propósito el 20/08 por decisión del responsable:** si el sistema lo permite, deja
+      al negocio sin ningún acceso de gerencia y habría que recuperarlo desde Supabase. Queda como
+      **riesgo abierto, no verificado**, y debe decírsele al cliente.
 
 ### Funcionalidades conectadas a verificar
 
-- [ ] F14-C1. Los nombres aparecen como "empleado que cerró" en `/reportes` (F13).
-- [ ] F14-C2. El rol asignado aquí controla `ManagerOnly` y los guards del contexto (F01).
-- [ ] F14-C3. El `audit_log` registra los restablecimientos de PIN.
+- [x] F14-C1. **Verificado en F13:** la columna «Empleado» del detalle auditable y de la tabla de
+      Incidencias muestra «Gerente», y el filtro por empleado ofrece «Ana López» y «Gerente» — los
+      nombres salen de `staff_profiles`, no de un literal.
+- [x] F14-C2. **Verificado por código, en las dos capas.** En el cliente, `/personal` vive dentro de
+      `ManagerOnly` (ya comprobado en F01-P8: el barista es redirigido). En el servidor, la Edge
+      Function repite la comprobación antes de cualquier acción y responde **403** con «Sólo gerencia
+      puede administrar personal.» (`manage-staff/index.ts:43`), de modo que no basta con saltarse la
+      interfaz.
+- [x] F14-C3. `audit_log` es legible desde la sesión de gerencia y la Edge Function escribe en él
+      con `action: "reset_pin"` (`manage-staff/index.ts:104`). La comprobación de que **sube en uno**
+      queda en F14-P7, que depende de P6.
 
 ### Pruebas unitarias
 
-- [ ] F14-U1. Sin backend no hay mucho puro que probar. Cubrir la normalización de usuario a email
-      interno (compartida con F01-U1) y, si existe, la validación de formato de PIN.
+- [x] F14-U1. **No hace falta añadir nada, y conviene dejar escrito por qué.** La normalización de
+      usuario a correo interno ya está cubierta por los **7 casos de `supabase.test.ts`** (F01-U1),
+      que incluyen el caso de seguridad de que un usuario no pueda escaparse del dominio interno. Y
+      la validación de formato de PIN **no vive en el cliente**: el campo impide teclear no-dígitos y
+      la regla real (`/^\d{6,8}$/`) está en la Edge Function, que es código Deno fuera del alcance de
+      esta suite de Vitest. Duplicar ahí una expresión regular que no se ejecuta daría una falsa
+      sensación de cobertura.
 
 ### Ficha PDF
 
@@ -1349,16 +1533,23 @@ porque necesita datos generados por las anteriores.
 
 - [ ] F16-U1. `src/lib/remoteOrders.test.ts` (14 casos) cubre el mapeo. **Confirmar** que hay ida y
       vuelta de todos los estados y de los pagos con propina.
-- [ ] F16-U2. `src/lib/offline.ts` no tiene pruebas. Agregar `src/lib/offline.test.ts` con Supabase
-      simulado: que una operación exitosa se marque como enviada; que un fallo de red la deje
-      pendiente y reintentable; que la clave de idempotencia no cambie entre reintentos; que un
-      error del servidor la mande a `review_required`. **Es la prueba unitaria de mayor valor de todo
-      el plan** — si sólo alcanza el tiempo para una, que sea ésta.
+- [x] F16-U2. **Hecha el 20/08 y rentable de inmediato: destapó el hallazgo F16-01 (Alta).**
+      `src/lib/offline.test.ts` nuevo, **16 casos**, con un doble en memoria de la tabla Dexie y
+      Supabase simulado (sin IndexedDB ni navegador). Cubre lo pedido —operación aceptada → `synced`;
+      fallo de red → sigue `pending` y reintentable con el intento contado; la clave de idempotencia
+      **no cambia entre reintentos** (se comprueba sobre lo que se envía, no sólo sobre lo guardado);
+      tercer fallo → `review_required`— y además: la cola se envía en orden de creación, sin conexión
+      y en modo demostración nada se marca falsamente como enviado, una operación en `review_required`
+      se reintenta y puede recuperarse sola, los insumos viajan por su propia RPC con la clave, y un
+      insumo que falla **no arrastra al lote de pedidos**. Los 3 últimos casos son la regresión de
+      **F16-01**: uno de ellos deja escrito que, antes del arreglo, `syncPendingOperations` devuelve
+      `{synced:0, review:0}` ante una operación atrapada en `syncing` — es decir, la da por
+      inexistente. Suite total: **172 pruebas en verde**, lint y build limpios.
 
 ### Ficha PDF
 
-- [ ] F16-D1. `docs/qa/fichas/F16-offline-y-sincronizacion.html` redactado
-- [ ] F16-D2. `docs/qa/pdf/F16-offline-y-sincronizacion.pdf` generado
+- [x] F16-D1. `docs/qa/fichas/F16-offline-y-sincronizacion.html` redactado
+- [x] F16-D2. `docs/qa/pdf/F16-offline-y-sincronizacion.pdf` generado con Chrome (Skia)
 
 ---
 

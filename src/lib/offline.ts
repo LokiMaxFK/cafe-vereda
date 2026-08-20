@@ -18,6 +18,17 @@ export async function queueOperation(type: string, entityId: string, payload: un
   return operation;
 }
 
+/**
+ * Devuelve a la cola las operaciones que quedaron en "syncing". Ese estado sólo dura lo que tarda
+ * la llamada al servidor, pero si la pestaña se cierra o recarga en ese momento la operación queda
+ * huérfana: `syncPendingOperations` no la vuelve a mirar y `pendingCount` no la cuenta, de modo que
+ * la aplicación anuncia "Todo sincronizado" con una venta sin subir. Reenviarla es seguro porque el
+ * servidor descarta el duplicado por `idempotency_key`.
+ */
+export async function reclaimStalledOperations() {
+  return db.pendingOperations.where("status").equals("syncing").modify({ status: "pending" });
+}
+
 export async function syncPendingOperations() {
   const pending = await db.pendingOperations.where("status").anyOf("pending", "review_required").sortBy("createdAt");
   if (!pending.length) return { synced: 0, review: 0 };

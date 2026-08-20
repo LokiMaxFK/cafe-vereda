@@ -75,3 +75,75 @@ describe("restock pattern", () => {
     expect(pattern.averageIntervalDays).toBeUndefined();
   });
 });
+
+describe("inventory variance tolerance boundary", () => {
+  const build = (tolerance: number, closing: number) => createInventoryAnalysis(
+    [{ ...item, tolerance }],
+    [
+      { id: "opening", countedAt: "2026-08-16T23:00:00.000Z", lines: [{ itemId: "coffee", quantity: 10 }] },
+      { id: "closing", countedAt: "2026-08-17T23:00:00.000Z", lines: [{ itemId: "coffee", quantity: closing }] }
+    ],
+    [], {}, "2026-08-16T23:30:00.000Z", "2026-08-18T00:00:00.000Z"
+  )[0];
+
+  it("no alerta cuando la variación cae exactamente en el límite de la tolerancia", () => {
+    const row = build(0.5, 9.5);
+    expect(row.variance).toBeCloseTo(0.5);
+    expect(isInventoryVarianceAlert(row)).toBe(false);
+  });
+
+  it("alerta con un decimal por encima del límite", () => {
+    const row = build(0.5, 9.4);
+    expect(row.variance).toBeCloseTo(0.6);
+    expect(isInventoryVarianceAlert(row)).toBe(true);
+  });
+
+  it("alerta igual cuando la variación se pasa por debajo (negativa)", () => {
+    const row = build(0.5, 10.6);
+    expect(row.variance).toBeCloseTo(-0.6);
+    expect(isInventoryVarianceAlert(row)).toBe(true);
+  });
+
+  it("un insumo sin conteos no alerta ni inventa una variación", () => {
+    const [row] = createInventoryAnalysis([item], [], [], { coffee: 3 }, "2026-08-16T00:00:00.000Z", "2026-08-18T00:00:00.000Z");
+    expect(row.physical).toBeUndefined();
+    expect(row.variance).toBeUndefined();
+    expect(isInventoryVarianceAlert(row)).toBe(false);
+  });
+});
+
+describe("línea base dentro de la ventana · hallazgo F12-02", () => {
+  const dentro = [
+    { id: "primero", countedAt: "2026-08-17T10:00:00.000Z", lines: [{ itemId: "coffee", quantity: 10 }] },
+    { id: "segundo", countedAt: "2026-08-17T20:00:00.000Z", lines: [{ itemId: "coffee", quantity: 8 }] }
+  ];
+
+  it("compara dos conteos hechos dentro del periodo, sin exigir uno anterior a la ventana", () => {
+    const [row] = createInventoryAnalysis([item], dentro, [], {}, "2026-08-17T00:00:00.000Z", "2026-08-18T00:00:00.000Z");
+    expect(row.openingAt).toBe("2026-08-17T10:00:00.000Z");
+    expect(row.closingAt).toBe("2026-08-17T20:00:00.000Z");
+    expect(row.physical).toBeCloseTo(2);
+  });
+
+  it("cuenta las entradas y mermas ocurridas entre esos dos conteos, no las anteriores", () => {
+    const movimientos: InventoryMovement[] = [
+      { id: "antes", itemId: "coffee", type: "entry", quantity: 5, note: "Previa", recordedAt: "2026-08-17T09:00:00.000Z" },
+      { id: "dentro", itemId: "coffee", type: "entry", quantity: 1, note: "Compra", recordedAt: "2026-08-17T15:00:00.000Z" }
+    ];
+    const [row] = createInventoryAnalysis([item], dentro, movimientos, {}, "2026-08-17T00:00:00.000Z", "2026-08-18T00:00:00.000Z");
+    expect(row.entries).toBe(1);
+    expect(row.physical).toBeCloseTo(3);
+  });
+
+  it("sigue sin comparar cuando sólo hay un conteo dentro del periodo", () => {
+    const [row] = createInventoryAnalysis([item], [dentro[0]], [], {}, "2026-08-17T00:00:00.000Z", "2026-08-18T00:00:00.000Z");
+    expect(row.physical).toBeUndefined();
+  });
+
+  it("da preferencia al conteo anterior a la ventana cuando existe", () => {
+    const previo = { id: "previo", countedAt: "2026-08-16T10:00:00.000Z", lines: [{ itemId: "coffee", quantity: 20 }] };
+    const [row] = createInventoryAnalysis([item], [previo, ...dentro], [], {}, "2026-08-17T00:00:00.000Z", "2026-08-18T00:00:00.000Z");
+    expect(row.openingAt).toBe("2026-08-16T10:00:00.000Z");
+    expect(row.physical).toBeCloseTo(12);
+  });
+});

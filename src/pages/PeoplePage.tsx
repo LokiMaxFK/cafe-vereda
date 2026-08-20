@@ -18,18 +18,34 @@ function initials(name: string) {
   return name.split(" ").map((word) => word[0]).slice(0, 2).join("").toUpperCase();
 }
 
+/**
+ * Algunos errores llegan crudos desde Supabase Auth: en inglés y hablando del correo interno que
+ * la aplicación fabrica a partir del usuario. Quien administra el personal nunca escribe un correo,
+ * así que ese texto no le dice nada. Se traducen los casos conocidos al vocabulario de la pantalla.
+ */
+function readableError(message: string) {
+  const raw = message.toLowerCase();
+  if (raw.includes("already been registered") || raw.includes("already registered")) {
+    return "Ya existe un acceso con ese usuario. Elige otro nombre de usuario.";
+  }
+  if (raw.includes("password should be at least")) {
+    return "El PIN debe ser numérico, de 6 a 8 dígitos.";
+  }
+  return message;
+}
+
 async function invokeError(data: unknown, fallbackError: (Error & { context?: Response }) | null | undefined) {
   const direct = (data as { error?: string } | null)?.error;
-  if (direct) return direct;
+  if (direct) return readableError(direct);
   if (fallbackError?.context) {
     try {
       const body = await fallbackError.context.clone().json();
-      if (body?.error) return String(body.error);
+      if (body?.error) return readableError(String(body.error));
     } catch {
       // response body wasn't JSON — fall through to the generic message
     }
   }
-  return fallbackError?.message ?? "Ocurrió un error inesperado.";
+  return fallbackError?.message ? readableError(fallbackError.message) : "Ocurrió un error inesperado.";
 }
 
 function PinField({ pin, onChange }: { pin: string; onChange: (value: string) => void }) {

@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Ficha de funcionalidad</title>
+<style>
+  @page { size: Letter; margin: 16mm 14mm; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; color: #1b1b1f; font-size: 10.5pt; line-height: 1.45; margin: 0; }
+  header { border-bottom: 3px solid #6b4423; padding-bottom: 10px; margin-bottom: 18px; }
+  .eyebrow { font-size: 8pt; letter-spacing: .12em; text-transform: uppercase; color: #6b4423; font-weight: 700; margin: 0; }
+  h1 { font-size: 19pt; margin: 4px 0 6px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 8.5pt; color: #55525a; }
+  .meta b { color: #1b1b1f; }
+  h2 { font-size: 11.5pt; margin: 20px 0 8px; padding-bottom: 4px; border-bottom: 1px solid #dcd7d1; }
+  ul { margin: 0 0 0 16px; padding: 0; }
+  li { margin-bottom: 4px; }
+  table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-top: 6px; }
+  th { background: #f4efe9; text-align: left; font-size: 8pt; letter-spacing: .06em; text-transform: uppercase; color: #55525a; }
+  th, td { border: 1px solid #dcd7d1; padding: 6px 8px; vertical-align: top; }
+  .ok { color: #1b6b3a; font-weight: 700; }
+  .fail { color: #b3261e; font-weight: 700; }
+  .warn { color: #8a5a00; font-weight: 700; }
+  .box { background: #f7f4f0; border-left: 4px solid #6b4423; padding: 10px 12px; margin-top: 8px; }
+  footer { margin-top: 24px; padding-top: 8px; border-top: 1px solid #dcd7d1; font-size: 8pt; color: #7a767e; }
+</style>
+</head>
+<body>
+<header>
+  <p class="eyebrow">Vereda Café · Punto de venta · Ficha de funcionalidad</p>
+  <h1>F16 · Offline y sincronización</h1>
+  <div class="meta">
+    <span><b>Alcance:</b> transversal</span>
+    <span><b>Rol requerido:</b> Ambos</span>
+    <span><b>Modo probado:</b> Unitario (Supabase simulado) + navegador</span>
+    <span><b>Fecha:</b> 20/08/2026</span>
+  </div>
+</header>
+
+<h2>Qué hace</h2>
+<ul>
+  <li>Los <b>pedidos funcionan sin conexión</b>: se crean, se les añaden productos y se envían a preparación contra IndexedDB, y cada cambio deja una operación en cola.</li>
+  <li>Cada operación nace con una <b>clave de idempotencia</b> propia del dispositivo que <b>no cambia entre reintentos</b>, de modo que el servidor descarta el duplicado si la respuesta se perdió.</li>
+  <li>Reintenta sola al volver la red y, tras tres fallos, aparta la operación como «por revisar» en vez de perderla.</li>
+  <li>Los insumos viajan por su propia RPC, de una en una, de forma que el fallo de uno no arrastra al resto de pedidos.</li>
+  <li>Tras una interrupción (pestaña cerrada, recarga, caída a media subida) <b>recupera al arrancar</b> las operaciones que se quedaron a medio enviar.</li>
+</ul>
+
+<h2>Qué NO hace</h2>
+<ul>
+  <li><b>No hay forma de resolver desde la interfaz</b> una operación que quedó «por revisar»: el indicador avisa, pero no ofrece salida (hallazgo F16-03).</li>
+  <li><b>No aísla el fallo por operación:</b> el servidor procesa el lote en una única transacción, así que una operación inválida bloquea toda la cola de ese dispositivo hasta que se resuelva.</li>
+  <li>El cliente <b>ignora el resultado por operación</b> que devuelve el servidor y se guía sólo por el error de transporte (F16-02).</li>
+  <li>Catálogo, mesas, caja y personal <b>no son offline-first</b>: exigen conexión.</li>
+  <li>El primer acceso o un cambio de usuario requieren conexión; sólo la sesión ya validada sobrevive sin red.</li>
+</ul>
+
+<h2>Resultado de las pruebas</h2>
+<table>
+  <thead><tr><th style="width:30%">Caso probado</th><th style="width:38%">Resultado observado</th><th style="width:14%">Estado</th><th style="width:18%">Comprobación</th></tr></thead>
+  <tbody>
+    <tr><td>Operación aceptada por el servidor</td><td>Queda marcada como enviada y sale de la cola</td><td class="ok">Correcto</td><td>Prueba unitaria</td></tr>
+    <tr><td>Fallo de red</td><td>Sigue pendiente y reintentable, con el intento contado</td><td class="ok">Correcto</td><td>Prueba unitaria</td></tr>
+    <tr><td>Clave de idempotencia entre reintentos</td><td><b>No cambia</b>: se comprueba sobre lo que se envía, no sólo sobre lo guardado, así que el servidor puede descartar el duplicado</td><td class="ok">Correcto</td><td>Prueba unitaria</td></tr>
+    <tr><td>Fallo repetido</td><td>Al tercer intento pasa a «por revisar»</td><td class="ok">Correcto</td><td>Prueba unitaria</td></tr>
+    <tr><td>Sin conexión y en modo demostración</td><td>Nada se marca falsamente como enviado; la operación se conserva intacta</td><td class="ok">Correcto</td><td>Prueba unitaria</td></tr>
+    <tr><td>Orden de envío</td><td>La cola se envía en orden de creación, no de inserción</td><td class="ok">Correcto</td><td>Prueba unitaria</td></tr>
+    <tr><td>Insumos por su propia RPC</td><td>Viajan con su clave de idempotencia y un insumo que falla <b>no arrastra</b> al lote de pedidos</td><td class="ok">Correcto</td><td>Prueba unitaria</td></tr>
+    <tr><td>Sincronización interrumpida</td><td>Las operaciones quedaban atrapadas en <code>syncing</code> para siempre: no se reintentaban, no se contaban, y la aplicación anunciaba «Todo sincronizado». Reproducido en vivo: con 28 pendientes, marcar una como <code>syncing</code> dejó la consulta contando 27</td><td class="fail">Hallazgo F16-01</td><td>Corregido y verificado</td></tr>
+    <tr><td>Recuperación tras el arreglo</td><td>Al recargar, la operación atrapada vuelve a <code>pending</code> <b>con su clave intacta</b> y el contador pasa de 27 a 28</td><td class="ok">Correcto</td><td>Navegador</td></tr>
+    <tr><td>Operación inválida en el lote</td><td>La RPC procesa el lote en una transacción: una sola operación que falle aborta el lote entero y arrastra a las sanas</td><td class="warn">Hallazgo F16-03</td><td>Documentado</td></tr>
+    <tr><td>Resultado por operación del servidor</td><td>La RPC devuelve un estado por operación que el cliente descarta (las dos ramas del ternario son idénticas)</td><td class="warn">Hallazgo F16-02</td><td>Documentado</td></tr>
+    <tr><td>Pruebas de navegador P1-P12</td><td>Indicador de conexión, creación de pedidos sin red, recarga offline, reconexión, conflicto entre pestañas y tiempo real</td><td class="warn">Pendiente</td><td>—</td></tr>
+  </tbody>
+</table>
+
+<h2>Funcionalidades conectadas verificadas</h2>
+<table>
+  <thead><tr><th style="width:24%">Funcionalidad</th><th style="width:56%">Efecto comprobado</th><th style="width:20%">Estado</th></tr></thead>
+  <tbody>
+    <tr><td>F02-F08 · Pedidos</td><td>Son offline-first: cada cambio encola una operación y el contador de pendientes sube, ya verificado en F04-C4</td><td class="ok">Correcto</td></tr>
+    <tr><td>F12 · Insumos</td><td>También pasan por la cola, con su propia RPC y clave de idempotencia</td><td class="ok">Correcto</td></tr>
+    <tr><td>F10, F11, F09, F14</td><td>Catálogo, mesas, caja y personal <b>exigen conexión</b>: no pasan por la cola. Las mesas además escriben en local sin encolar, así que un cambio sin red puede quedar sólo en el dispositivo</td><td class="warn">Límite conocido</td></tr>
+  </tbody>
+</table>
+
+<h2>Pruebas automatizadas</h2>
+<ul>
+  <li><code>src/lib/offline.test.ts</code> — <b>16 casos nuevos</b>, escritos en esta pasada con un doble en memoria de la tabla Dexie y Supabase simulado, sin IndexedDB ni navegador. Cubren el ciclo completo de la cola y los 3 casos de regresión de F16-01.</li>
+  <li><code>src/lib/remoteOrders.test.ts</code> — 16 casos sobre el mapeo de ida y vuelta: los siete estados viajan y regresan igual, y los pagos conservan método y propina.</li>
+</ul>
+
+<h2>Limitaciones conocidas y riesgos para la entrega</h2>
+<div class="box">
+  <ul>
+  <li><b>Era el riesgo más serio de toda la revisión y estaba oculto.</b> F16-01 hacía que una sincronización interrumpida abandonara ventas para siempre <b>mientras la aplicación anunciaba «Todo sincronizado»</b>. En una tableta de café con wifi inestable es el peor modo de fallo posible, porque es silencioso. Ya está corregido, pero conviene que el cliente sepa que existió: es la razón por la que esta prueba unitaria era la de mayor valor del plan.</li>
+  <li><b>Una operación atascada bloquea la cola del dispositivo</b> (F16-03) y no hay salida desde la interfaz. Si aparece «Hay operaciones por revisar» de forma persistente, hoy hace falta intervención técnica. Resolverlo bien exige una migración SQL, que no se pudo probar en local por no haber Docker en el equipo de la revisión.</li>
+  <li><b>Las pruebas de navegador (P1-P12) siguen pendientes:</b> el corte de red real, el conflicto entre dos pestañas y la sincronización en tiempo real no se han ejercitado en vivo. Lo verificado hasta ahora es la lógica de la cola y la recuperación tras interrupción.</li>
+  <li><b>Las mesas no pasan por la cola:</b> un cambio de croquis sin conexión se escribe en el dispositivo pero no llega al servidor, sin aviso.</li>
+  </ul>
+</div>
+
+<footer>Documento generado durante la revisión previa a la entrega. Refleja el estado del código en el commit indicado.</footer>
+</body>
+</html>
