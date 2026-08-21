@@ -77,6 +77,15 @@ describe("mapRemoteOrderItem", () => {
   it("tolera un modifiers no-arreglo sin romper la sincronización", () => {
     expect(mapRemoteOrderItem(itemRow({ modifiers: null })).modifiers).toEqual([]);
   });
+
+  it("conserva los cuatro estados de un renglón sin traducirlos", () => {
+    // Mismo contrato que el estado de la orden: el renglón se pasa tal cual, sin validar. Si el
+    // literal del servidor y el del dominio dejaran de coincidir, la barra vería la comanda vacía
+    // y nadie recibiría un error: el renglón simplemente no entraría en ningún filtro de pantalla.
+    for (const status of ["pending", "dispatched", "prepared", "cancelled"]) {
+      expect(mapRemoteOrderItem(itemRow({ status })).status).toBe(status);
+    }
+  });
 });
 
 describe("mapRemoteOrder", () => {
@@ -133,6 +142,16 @@ describe("mapRemoteOrder", () => {
     expect(order.discount).toBe(10.5);
     expect(order.payments[0].amount).toBe(180);
     expect(order.payments[0].tip).toBe(20);
+  });
+
+  it("conserva los tres métodos de pago junto con su propina", () => {
+    // El método también es un cast. Un literal que no encaje deja el pago fuera del arqueo de Caja
+    // y fuera del desglose de Reportes, sin ningún aviso.
+    for (const method of ["cash", "card", "transfer"]) {
+      const order = mapRemoteOrder({ ...row, payments: [{ ...row.payments[0], method, tip_cents: 1550 }] });
+      expect(order.payments[0].method).toBe(method);
+      expect(order.payments[0].tip).toBe(15.5);
+    }
   });
 
   it("sobrevive a una orden sin renglones ni pagos", () => {
