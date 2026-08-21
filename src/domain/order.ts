@@ -46,6 +46,24 @@ export function markItemsPrepared<T extends Pick<OrderItem, "status">>(items: T[
   return items.map((item) => item.status === "dispatched" ? { ...item, status: "prepared" as const } : item);
 }
 
+/**
+ * Renglones que ya salieron a la barra y que, al cancelar la cuenta entera, hay que avisar en papel.
+ *
+ * Un artículo despachado o preparado sigue ocupando a la cocina aunque la cuenta se cancele: sin
+ * ese aviso físico nadie se entera de que debe detenerse, y el pedido simplemente desaparece de su
+ * cola. Los que aún no se han enviado no hace falta avisarlos —la barra nunca los vio— y los ya
+ * cancelados tampoco.
+ *
+ * Vive aquí, y no en la pantalla, porque la regla no depende de por dónde se cancele: una cuenta se
+ * puede cancelar desde la venta, desde el listado de Pedidos y desde la vista previa del Salón
+ * (hallazgo F08-05, en el que dos de esos tres caminos no avisaban).
+ */
+export function barItemsForCancellation(items: OrderItem[], reason: string): OrderItem[] {
+  return items
+    .filter((item) => item.status === "dispatched" || item.status === "prepared")
+    .map((item) => ({ ...item, cancellationReason: reason.trim() }));
+}
+
 export function orderDestination(order: Pick<Order, "type" | "tableId" | "customerName">) {
   return order.type === "table" ? `Mesa ${order.tableId?.replace("t", "")}` : order.customerName || "Para llevar";
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { deliverableItemCount, elapsedMinutes, FIRST_LOCAL_FOLIO, isCancellable, isTracked, markItemsPrepared, nextLocalFolio, orderDestination, tableStatus } from "./order";
+import { barItemsForCancellation, deliverableItemCount, elapsedMinutes, FIRST_LOCAL_FOLIO, isCancellable, isTracked, markItemsPrepared, nextLocalFolio, orderDestination, tableStatus } from "./order";
 import type { Order, OrderItem, OrderStatus } from "./types";
 
 const allStatuses: OrderStatus[] = ["open", "preparing", "ready", "served", "closed", "cancelled", "reversed"];
@@ -161,3 +161,36 @@ describe("tableStatus con estados ya liquidados", () => {
     }
   });
 });
+
+// F08-05: al cancelar una cuenta entera hay que avisar en papel de lo que ya está en la barra, y la
+// regla no puede depender de desde qué pantalla se cancele.
+describe("aviso a la barra al cancelar una cuenta", () => {
+  const renglon = (id: string, status: OrderItem["status"]): OrderItem =>
+    ({ id, productId: "cafe", name: "Café", quantity: 1, unitPrice: 50, modifiers: [], status });
+
+  it("avisa de lo despachado y de lo ya preparado, que es lo que ocupa a la cocina", () => {
+    const avisados = barItemsForCancellation([renglon("a", "dispatched"), renglon("b", "prepared")], "El cliente se fue");
+    expect(avisados.map((item) => item.id)).toEqual(["a", "b"]);
+  });
+
+  it("no avisa de lo que la barra nunca vio ni de lo ya cancelado", () => {
+    const avisados = barItemsForCancellation([renglon("a", "pending"), renglon("b", "cancelled")], "El cliente se fue");
+    expect(avisados).toEqual([]);
+  });
+
+  it("estampa el motivo en cada renglón, para que salga impreso en la comanda", () => {
+    const avisados = barItemsForCancellation([renglon("a", "dispatched")], "  El cliente se fue  ");
+    expect(avisados[0].cancellationReason).toBe("El cliente se fue");
+  });
+
+  it("no toca los renglones originales", () => {
+    const originales = [renglon("a", "dispatched")];
+    barItemsForCancellation(originales, "El cliente se fue");
+    expect(originales[0].cancellationReason).toBeUndefined();
+  });
+
+  it("devuelve vacío cuando no hay nada en la barra, para no imprimir papel de más", () => {
+    expect(barItemsForCancellation([], "El cliente se fue")).toEqual([]);
+  });
+});
+

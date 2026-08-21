@@ -9,6 +9,7 @@ import { Modal } from "../components/Modal";
 import { ProductPicker } from "../components/ProductPicker";
 import { OrderStatusBadge } from "../components/StatusBadge";
 import { printErrorMessage } from "../lib/browserPrinting";
+import { cancelOrderNotifyingBar } from "../lib/orderCancellation";
 import { printCommand, printTicket } from "../lib/printing";
 import { useApp } from "../state/AppContext";
 
@@ -132,15 +133,10 @@ export function SalePage() {
   async function performOrderAction() {
     if (!orderAction || !orderActionReason.trim()) return;
     if (orderAction === "cancel") {
-      // Un artículo ya despachado o preparado sigue en la barra aunque se cancele toda la cuenta:
-      // sin este aviso la cocina no tiene forma física de enterarse de que debe detenerse.
-      const barraItems = activeOrder.items
-        .filter((item) => item.status === "dispatched" || item.status === "prepared")
-        .map((item) => ({ ...item, cancellationReason: orderActionReason.trim() }));
-      await cancelOrder(activeOrder.id, orderActionReason);
-      if (barraItems.length) {
-        try { await printCommand(activeOrder, barraItems, 0, true); } catch (reason) { setMessage(`Cuenta cancelada, pero no se pudo imprimir la incidencia: ${printErrorMessage(reason)}`); }
-      }
+      // El aviso a la barra va dentro de `cancelOrderNotifyingBar`, compartido con los demás puntos
+      // desde los que se puede cancelar una cuenta (hallazgo F08-05).
+      const { printError } = await cancelOrderNotifyingBar(activeOrder, orderActionReason, cancelOrder);
+      if (printError) setMessage(`Cuenta cancelada, pero no se pudo imprimir la incidencia: ${printError}`);
     } else {
       await reverseSale(activeOrder.id, orderActionReason);
     }
