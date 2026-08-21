@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>F14 · Personal · Vereda Café</title>
+<style>
+  @page { size: Letter; margin: 16mm 14mm; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; color: #1b1b1f; font-size: 10.5pt; line-height: 1.45; margin: 0; }
+  header { border-bottom: 3px solid #6b4423; padding-bottom: 10px; margin-bottom: 18px; }
+  .eyebrow { font-size: 8pt; letter-spacing: .12em; text-transform: uppercase; color: #6b4423; font-weight: 700; margin: 0; }
+  h1 { font-size: 19pt; margin: 4px 0 6px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 8.5pt; color: #55525a; }
+  .meta b { color: #1b1b1f; }
+  h2 { font-size: 11.5pt; margin: 20px 0 8px; padding-bottom: 4px; border-bottom: 1px solid #dcd7d1; }
+  ul { margin: 0 0 0 16px; padding: 0; }
+  li { margin-bottom: 4px; }
+  table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-top: 6px; }
+  th { background: #f4efe9; text-align: left; font-size: 8pt; letter-spacing: .06em; text-transform: uppercase; color: #55525a; }
+  th, td { border: 1px solid #dcd7d1; padding: 6px 8px; vertical-align: top; }
+  .ok { color: #1b6b3a; font-weight: 700; }
+  .fail { color: #b3261e; font-weight: 700; }
+  .warn { color: #8a5a00; font-weight: 700; }
+  .box { background: #f7f4f0; border-left: 4px solid #6b4423; padding: 10px 12px; margin-top: 8px; }
+  footer { margin-top: 24px; padding-top: 8px; border-top: 1px solid #dcd7d1; font-size: 8pt; color: #7a767e; }
+</style>
+</head>
+<body>
+<header>
+  <p class="eyebrow">Vereda Café · Punto de venta · Ficha de funcionalidad</p>
+  <h1>F14 · Personal</h1>
+  <div class="meta">
+    <span><b>Rutas:</b> /personal</span>
+    <span><b>Rol requerido:</b> Gerente</span>
+    <span><b>Modo probado:</b> Supabase real (pasada B)</span>
+    <span><b>Fecha:</b> 20/08/2026</span>
+    <span><b>Infraestructura:</b> Edge Function <code>manage-staff</code> v3, ACTIVE</span>
+  </div>
+</header>
+
+<h2>Qué hace</h2>
+<ul>
+  <li>Lista los accesos internos del café con <b>nombre, usuario, rol y estado</b>, y tres indicadores en cabecera: personal activo, gerentes y PIN restablecidos.</li>
+  <li><b>Crea un acceso</b> con nombre completo, usuario, rol (barista o gerente) y PIN inicial de 6 a 8 dígitos. El usuario se normaliza solo a minúsculas, números, puntos y guiones.</li>
+  <li><b>Restablece el PIN</b> de cualquier empleado. El PIN anterior deja de funcionar en el acto y el nuevo entra sin más trámite.</li>
+  <li><b>Desactiva y reactiva</b> accesos. Un acceso desactivado no puede volver a entrar: la pantalla responde «Este acceso está desactivado.»</li>
+  <li>Comprueba el rol <b>en dos capas independientes</b>: la pantalla vive dentro de <code>ManagerOnly</code>, y la Edge Function repite la comprobación en el servidor y responde <b>403 · «Sólo gerencia puede administrar personal.»</b> Saltarse la interfaz no sirve de nada.</li>
+  <li>Deja rastro en <code>audit_log</code>: cada alta y cada restablecimiento se registran con la acción, el empleado afectado y <b>quién lo hizo</b>.</li>
+  <li>Valida el PIN en dos capas: el campo impide teclear cualquier cosa que no sea un dígito, y el servidor rechaza los formatos inválidos con «El PIN debe ser numérico, de 6 a 8 dígitos.»</li>
+  <li>No permite duplicar un usuario existente, y lo dice en español y hablando de lo que el gerente escribió: «Ya existe un acceso con ese usuario. Elige otro nombre de usuario.»</li>
+</ul>
+
+<h2>Qué NO hace</h2>
+<ul>
+  <li><b class="fail">Desactivar un acceso no cierra las sesiones ya abiertas</b> (hallazgo F14-02, severidad alta). Sólo impide entrar de nuevo. Ver el recuadro de riesgos al final: es lo más importante de esta ficha.</li>
+  <li><b>No permite cambiar el rol de nadie</b> (hallazgo F14-04). Quien se da de alta como barista se queda barista. El selector de rol existe sólo en el alta.</li>
+  <li><b>Restablecer el PIN tampoco cierra la sesión abierta</b> del empleado (hallazgo F14-03).</li>
+  <li><b>No hay recuperación de PIN por parte del empleado.</b> Si alguien olvida el suyo, necesita que gerencia se lo restablezca; no existe autoservicio ni envío por correo.</li>
+  <li><b>No borra empleados.</b> La baja es lógica (desactivar), nunca física, para no romper la trazabilidad de lo que esa persona hizo.</li>
+  <li>El indicador «PIN restablecido» cuenta <b>todos</b> los restablecimientos registrados, no los del día ni los de un empleado concreto.</li>
+</ul>
+
+<h2>Resultado de las pruebas</h2>
+<table>
+  <thead><tr><th style="width:32%">Caso probado</th><th style="width:36%">Resultado obtenido</th><th style="width:14%">Estado</th><th style="width:18%">Comprobado en</th></tr></thead>
+  <tbody>
+    <tr><td>P0. La Edge Function está desplegada</td><td><code>manage-staff</code> v3, <code>ACTIVE</code>, <code>verify_jwt: true</code></td><td class="ok">Correcto</td><td>Panel de Supabase</td></tr>
+    <tr><td>P1. La lista muestra las cuatro columnas</td><td>Nombre, usuario, rol y estado de cada acceso, más los tres indicadores</td><td class="ok">Correcto</td><td>Pantalla</td></tr>
+    <tr><td>P2. Crear un empleado con rol barista</td><td>Aparece en la lista; «Personal activo» sube de 1 a 2 y «Gerentes» se queda en 1</td><td class="ok">Correcto</td><td>Pantalla y <code>staff_profiles</code></td></tr>
+    <tr><td>P3. Entrar con el usuario nuevo</td><td>Entra como barista, sin menú de «Gestión». Las seis rutas de gestión tecleadas a mano redirigen a <code>/inicio</code>; la Edge Function le responde 403</td><td class="ok">Correcto</td><td>Sesión real de barista</td></tr>
+    <tr><td>P4. Crear un usuario duplicado</td><td>No lo crea, y el aviso es claro y en español</td><td class="ok">Corregido</td><td>Pantalla · F14-01</td></tr>
+    <tr><td>P5. PIN inválido (no numérico, corto, vacío)</td><td>Imposible teclear letras; el servidor rechaza el PIN corto y no crea nada</td><td class="ok">Correcto</td><td>Pantalla y servidor</td></tr>
+    <tr><td>P6. Restablecer el PIN</td><td>El PIN viejo se rechaza con «Usuario o PIN incorrectos.»; el nuevo entra</td><td class="ok">Correcto</td><td>Sesión real</td></tr>
+    <tr><td>P7. El contador de restablecimientos sube</td><td>De 0 a 1, sin recargar. <code>audit_log</code> trae la fila <code>reset_pin</code> con su autor</td><td class="ok">Correcto</td><td>Pantalla y <code>audit_log</code></td></tr>
+    <tr><td>P8. Desactivar el acceso</td><td>El mensaje al intentar entrar es el esperado, <b>pero la sesión que ya estaba abierta sigue operando</b></td><td class="fail">Hallazgo</td><td>F14-02</td></tr>
+    <tr><td>P9. Reactivar el acceso</td><td>Vuelve a entrar con el mismo PIN, mismo rol, sin trámite adicional</td><td class="ok">Correcto</td><td>Sesión real</td></tr>
+    <tr><td>P10. Cambiar el rol de barista a gerente</td><td><b>No se puede hacer desde la aplicación</b></td><td class="fail">Hallazgo</td><td>F14-04</td></tr>
+    <tr><td>P11. Desactivar la propia cuenta del gerente</td><td><b>No verificado</b>, excluido a propósito por el responsable</td><td class="warn">Sin probar</td><td>Ver riesgos</td></tr>
+    <tr><td>Extra. ¿Puede un barista ascenderse solo?</td><td><b>No.</b> La RLS le devuelve 0 filas cambiadas y sólo le deja leer su propia ficha</td><td class="ok">Correcto</td><td>Sesión real de barista</td></tr>
+  </tbody>
+</table>
+
+<h2>Funcionalidades conectadas verificadas</h2>
+<table>
+  <thead><tr><th style="width:26%">Funcionalidad</th><th style="width:54%">Efecto comprobado</th><th style="width:20%">Estado</th></tr></thead>
+  <tbody>
+    <tr><td>F13 · Reportes</td><td>La columna «Empleado» del detalle auditable y de la tabla de Incidencias toma los nombres de <code>staff_profiles</code>, no de un literal; el filtro por empleado los ofrece</td><td class="ok">Correcto</td></tr>
+    <tr><td>F01 · Acceso y roles</td><td>El rol se respeta en las dos capas: redirección en el cliente y 403 en el servidor, comprobado con el token real de un barista</td><td class="ok">Correcto</td></tr>
+    <tr><td>Auditoría</td><td><code>audit_log</code> recibe <code>create_staff</code> y <code>reset_pin</code> con el identificador de quien las ejecutó</td><td class="ok">Correcto</td></tr>
+  </tbody>
+</table>
+
+<h2>Pruebas automatizadas</h2>
+<ul>
+  <li><code>src/lib/supabase.test.ts</code> — 7 casos. Cubren la normalización del usuario al correo interno, incluido el caso de seguridad de que un usuario no pueda escaparse del dominio del café.</li>
+  <li>No se añadieron pruebas de formato de PIN a propósito: esa regla no vive en el cliente. El campo impide teclear lo que no sea un dígito y la validación real está en la Edge Function, que es código Deno fuera del alcance de esta suite. Duplicar allí una expresión regular que nunca se ejecuta daría una falsa sensación de cobertura.</li>
+</ul>
+
+<h2>Limitaciones conocidas y riesgos para la entrega</h2>
+<div class="box">
+  <ul>
+    <li><b class="fail">Desactivar un acceso no lo revoca de verdad (F14-02, alta).</b> Impide entrar de nuevo, pero no toca las sesiones ya abiertas. Comprobado: con el acceso ya desactivado, la sesión abierta siguió leyendo pedidos, reservó un folio de la secuencia del servidor y sobrevivió a recargar la página entera. <b>Si se despide a alguien, desactivar su acceso no basta:</b> hay que cerrar la sesión en cada dispositivo donde estuviera dentro. La solución de fondo pide revalidar el estado del empleado al restaurar la sesión y exigirlo también en las políticas del servidor.</li>
+    <li><b>No se puede ascender ni degradar a nadie (F14-04, media).</b> Para cambiar el rol de una persona hay que crear un acceso nuevo y desactivar el viejo, lo que le cambia el nombre de usuario y parte en dos su historial de auditoría. La columna sí es escribible por gerencia, así que exponerlo en la tarjeta del empleado no exige tocar el servidor.</li>
+    <li><b>Restablecer un PIN no expulsa al que ya está dentro (F14-03, media).</b> Importa si el PIN se restablece porque se ha comprometido, no si fue un olvido.</li>
+    <li><b>Riesgo no verificado:</b> no se probó qué ocurre si el único gerente se desactiva a sí mismo, por decisión expresa del responsable — de permitirse, el negocio se quedaría sin ningún acceso de gerencia y habría que recuperarlo desde Supabase. A favor: el botón de desactivar aparece inhabilitado sobre la propia cuenta, así que la interfaz sí lo impide. <b>No se ha comprobado si el servidor lo impide igualmente.</b></li>
+    <li>El alta de un acceso exige fijar un PIN, es decir crear una credencial real. Durante esta revisión esos pasos los ejecutó el responsable del proyecto, no el equipo de verificación.</li>
+  </ul>
+</div>
+
+<footer>Documento generado durante la revisión previa a la entrega. Refleja el estado del código en el commit indicado.</footer>
+</body>
+</html>

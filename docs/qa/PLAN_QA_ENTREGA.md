@@ -11,98 +11,95 @@ necesita leer este archivo para saber exactamente dónde se quedó.
 
 ---
 
-## ⏱️ DÓNDE SE QUEDÓ · Estado al 20/08/2026, 12:40
+## ⏱️ DÓNDE SE QUEDÓ · Estado al 20/08/2026, 23:10
 
 **Lee esto primero. Es el punto exacto de retorno.**
 
 ### Qué está hecho
 
-**Pasada A terminada.** Once funcionalidades verificadas en modo demostración (F01 a F11 y F15),
-con **12 fichas PDF** de 16 en `docs/qa/pdf/`. Los hallazgos de esa jornada están todos corregidos y
-verificados en el navegador (§0.7): **F02-01, F05-01, F06-01, F06-02, F06-03, F07-05, F10-01,
-F11-01, F15-01**.
+**La revisión está terminada.** Las 16 funcionalidades están en ✅ o ⚠️ en el tablero (§0.6), los
+**16 PDF** están en `docs/qa/pdf/`, la limpieza (§0.8) está cerrada con su inventario de lo que quedó
+en producción, y el **resumen ejecutivo para el cliente** está redactado al final del documento (Z5).
 
-**Avance del 20/08 (máquina nueva, ver más abajo):**
+**Lo que cerró la jornada del 20/08 (tercera sesión, en producción y con el responsable presente):**
 
-- **F14-P0 ✅** — `manage-staff` está desplegada y `ACTIVE` (v3). F14 **no** está bloqueada por
-  infraestructura, al contrario de lo que se temía.
-- **F16-U2 ✅** — la prueba de mayor valor del plan, hecha. `src/lib/offline.test.ts`, **16 casos**.
-  Destapó **F16-01 (Alta)**: una sincronización interrumpida deja las operaciones atrapadas en
-  `syncing` para siempre mientras la app anuncia «Todo sincronizado» — una venta que nunca sube y
-  nadie se entera. Corregido con `reclaimStalledOperations()` y **verificado en el navegador**.
-  De paso quedaron documentados **F16-02** (el resultado por operación del servidor se descarta) y
-  **F16-03** (una operación inválida bloquea toda la cola del dispositivo).
-- **F13 · Reportes ✅ (navegador)** — auditado contra el 18/08 recalculando **todo a mano** desde las
-  filas crudas, sin usar `reports.ts`. Las 9 cifras del tablero cuadran al centavo. Un hallazgo:
-  **F13-01**, el ticket promedio no era reconciliable (se calcula sobre la bruta mientras la tarjeta
-  de al lado muestra la neta) — corregido en la etiqueta, fórmula intacta. Documentados **F13-02**
-  (el reporte impreso pierde la tabla de Incidencias, justo la trazabilidad que pidió el cliente) y
-  **F13-03** (las incidencias previas a la migración de F08-01 conservan importes subestimados).
-- **F12 · Insumos ✅ (navegador)** — ciclo completo sobre un insumo real. **Tres hallazgos:**
-  **F12-02** (la tabla de consumo **no compara nada durante los primeros 30 días de operación**;
-  al corregirlo destapó una variación real que estaba oculta en `Lechuga`), **F12-01** (botón
-  habilitado con cantidad negativa que al pulsarse no hacía nada ni avisaba — **sin riesgo de datos**,
-  ver la rectificación en su ficha de §0.7) y **F12-03** (etiqueta incoherente, efecto secundario de
-  la corrección de F12-02, cazado al verificar en pantalla).
-- **F14 · Personal ⚠️ (lo que no exige credenciales)** — la Edge Function está desplegada, la lista y
-  las validaciones de PIN funcionan en dos capas, y el rol se comprueba también en el servidor
-  (403). Un hallazgo: **F14-01**, el error de usuario duplicado salía en inglés y hablando de un
-  correo que nadie escribió — corregido en el cliente, sin redesplegar la función.
-- Suite: de 156 a **180 pruebas en verde**; lint y build limpios.
+- **F14 · Personal** — cerrada. El responsable ejecutó los casos que exigen credencial (P2, P3, P6 a
+  P10). Salieron **tres hallazgos**: **F14-02 (Alta)** desactivar un acceso **no lo revoca**,
+  F14-03 (restablecer el PIN tampoco cierra sesiones) y F14-04 (no se puede cambiar el rol). Buena
+  noticia de seguridad comprobada: un barista **no** puede ascenderse solo, la RLS lo filtra.
+  Ficha F14 redactada y generada — **con ella se completan las 16 de 16**.
+- **F16 · Offline y sincronización** — cerrada, navegador incluido (P1 a P12 y C1-C3), con pedidos y
+  cobros reales. **P11 falló y se corrigió durante la sesión**: el tiempo real **nunca había
+  funcionado** (**F16-05, Alta**) porque faltaba una política de `realtime.messages` que las
+  migraciones no pueden crear. El responsable la aplicó desde el panel y se verificó de punta a
+  punta. Quedó documentada en `docs/DEPLOY_HOSTINGER.md` como paso manual obligatorio.
+- **Casos sueltos de pasada B** — todos cerrados: F02-P13/P14, F04-C2, F06-C2, F10-P17 a P20,
+  F10-C1/C2/C3, F11-P9/P10, F12-P11, F13-C1 a C4.
+- **Correcciones de código con prueba**: **F07-06** (una cuenta pagada podía quedarse sin poder
+  cerrarse por el redondeo) y las tres unitarias pendientes: **F16-U1**, **F04-U2** y **F13-U1**.
+- **Suite de 180 → 196 pruebas en verde**, lint y build limpios. Sólo creció.
 
-### Qué falta, en el orden sugerido
+### Qué falta
 
-1. **F14 · lo que exige credenciales (P2, P3, P6-P10)** — *lo ejecuta el responsable*, porque hay que
-   dar de alta un acceso con PIN y luego entrar con él (regla 9). Todo lo demás de F14 ya está.
-   **P11 queda excluido a propósito** y sin verificar.
-2. **F16 · la parte de navegador** (P1-P12, C1-C3): lo unitario ya está hecho. Cruza con F12-P11.
-3. **Casos sueltos de pasada B** que quedaron marcados: F02-P13/P14, F06-C2, F10-P17 a P20,
-   F11-P9/P10.
-4. **Fichas que faltan:** F12, F13, F14 y F16.
+**Nada de la revisión.** Lo que queda son **decisiones del responsable**, no trabajo de verificación:
 
-### Estado del entorno en este momento
+1. **7 hallazgos abiertos**, todos con el arreglo ya analizado en §0.7 — dos de severidad **Alta**:
+   **F08-05** (cancelar desde Pedidos o Salón no avisa a la barra) y **F14-02** (desactivar no
+   revoca). Los demás son Media: F11-02, F14-03, F14-04, F14-05, F16-04.
+2. **F14-P11 sigue excluido y sin verificar** por decisión expresa: qué pasa si el único gerente se
+   desactiva a sí mismo. La interfaz lo impide (`disabled={isSelf}`); **no se comprobó el servidor**.
+   Es el único riesgo del entregable que nadie ha mirado.
+3. **F15-P10** (impresión en papel real) sigue sin poderse hacer: no hay impresora térmica.
+
+### Estado del entorno al cerrar
 
 | Cosa | Estado |
 |---|---|
-| `.env.local` | **Modo demostración** (las dos variables de Supabase vacías). Se devolvió a demo al cerrar la pasada B, según la regla. El respaldo con credenciales reales vive en `.env.local.bak` y `.env.production`, **los tres ignorados por git** (comprobado con `git check-ignore`) |
-| Base local del navegador | Trae los **datos reales** de la pasada B (25 pedidos). Al arrancar en demo no se cargarán los pedidos de ejemplo mientras esa caché siga ahí; si se quiere partir limpio, vaciar los datos del sitio `localhost:5173` |
-| Cola de sincronización | **En 0.** Se purgaron las 28 `pending` de la pasada A antes de cambiar de entorno (hallazgo **F02-02**) |
-| Sesión | **Abierta como gerente** en el navegador, escrita por el responsable |
-| Servidor | `npm run dev` en el puerto 5173 (reiniciar tras el cambio a demo) |
-| Datos QA en producción | 1 insumo `QA-20AGO-Leche` + 2 conteos + 2 movimientos, **dados de baja** y por tanto invisibles. Ver §0.8 L2 |
+| `.env.local` | **Modo demostración**. Las credenciales reales siguen en `.env.local.bak`, `.env.production` y `.env.local.prod-recibido`, **los tres ignorados por git** (recomprobado) |
+| Servidores | **Ninguno levantado.** Se pararon los de los puertos 5174, 5175 y 5176 |
+| Navegador | Pestañas cerradas. La caché de demostración de `localhost:5173` quedó **intacta** |
+| Cola de sincronización | En 0 en el origen 5173. *Ojo:* en el origen **5175** quedó una operación en `review_required`, creada a propósito para F16-P9/P10. Es un puerto de desarrollo desechable y no afecta a nada; si molesta, basta con vaciar los datos de ese sitio |
+| Turno de caja | **Ninguno abierto** |
+| Datos QA en producción | Declarados uno a uno en **§0.8 L8** |
+| Repositorio | Cambios **sin confirmar**. Modificados: `money.ts`, `SalePage.tsx`, `AppContext.tsx`, 3 archivos de prueba, el plan, la ficha y el PDF de F16 y `DEPLOY_HOSTINGER.md`. Nuevos: ficha y PDF de F14 |
 
 ### Antes de retomar, en este orden
 
-1. `npm install` si hace falta, y `npm test && npm run lint` — deben dar **180 en verde**.
-2. Decidir la pasada. **Para volver a demostración:**
-   `printf 'VITE_SUPABASE_URL=\nVITE_SUPABASE_PUBLISHABLE_KEY=\nVITE_AUTH_EMAIL_DOMAIN=pos.veredacafe.mx\n' > .env.local`
-   **Para volver a producción:** `cp .env.local.bak .env.local`. Reiniciar `npm run dev` en ambos casos.
-3. **Al pasar de demostración a producción, purgar siempre la cola** antes de reiniciar (§0.8, L6).
-4. Pedir el usuario y el PIN al responsable; no escribirlos por cuenta propia.
+1. `npm test && npm run lint && npm run build` — deben dar **196 en verde**, lint y build limpios.
+2. Decidir la pasada (§0.4). Para producción: `cp .env.local.bak .env.local` y reiniciar `npm run dev`.
+3. Si se retoma para **corregir** los hallazgos abiertos, empezar por los dos de severidad Alta,
+   **F08-05** y **F14-02**, que ya tienen el arreglo descrito en §0.7.
 
 ### Trampas de este entorno que ya costaron tiempo
 
-- **La impresión cuelga el navegador.** Antes de cualquier acción que imprima hay que instalar el
-  interceptor de §0.9, y **reinstalarlo después de cada navegación**. Olvidarlo dejó el navegador
-  bloqueado una vez y hubo que pedir ayuda para cerrar el diálogo a mano.
-- **No hay Docker.** La regla de probar toda migración en local antes de `db push` **no se puede
-  cumplir aquí**; si algo requiere SQL nuevo, hay que avisar antes de tocar producción.
-- **El redimensionado de ventana está bloqueado.** Para probar pantallas angostas se carga la app en
-  un marco de 390 px (así se hizo F03-P9).
-- Al hacer clic con el ratón, el primer intento a veces sólo enfoca. Es más fiable accionar los
-  botones desde la consola, salvo en el croquis de mesas, que distingue arrastrar de tocar y sí
-  necesita un clic real.
-- **`import.meta` no funciona** en el ejecutor de JavaScript del navegador (se evalúa fuera de un
-  módulo). Para saber si Supabase está configurado, importar `isSupabaseConfigured` desde
-  `/src/lib/supabase.ts` en vez de leer `import.meta.env`.
+- **Node.** En esta máquina `node` es el 20.20.2 de nvm, que **no trae WebSocket nativo** y hace
+  fallar dos suites. Hay un **26.4.0 en Homebrew**: se usó `export PATH=/opt/homebrew/bin:$PATH`
+  para todo. Compruébalo con `node -v` antes de dar por bueno un fallo de pruebas.
+- **La impresión cuelga el navegador.** Instalar el interceptor de §0.9 antes de cualquier acción que
+  imprima, y **reinstalarlo después de cada recarga** (las navegaciones por el enrutador interno,
+  con `history.pushState` + `popstate`, **sí lo conservan** — es la forma barata de moverse).
+- **El primer clic a veces sólo enfoca.** Pasa con botones y con el croquis. Si un modal no abre,
+  vuelve a pulsar antes de buscar una causa más rara.
+- **Los avisos desplazan el diseño.** Al cortar la red aparece una franja roja en `/mesas` que baja
+  el croquis unos 66 px; los clics por coordenada dejan de acertar. Toma una captura antes.
+- **No hay Docker ni CLI de Supabase** en esta máquina. Pero **no hacen falta para aplicar SQL**: el
+  editor SQL del panel sirve, y así se aplicó la corrección de F16-05.
+- **`import.meta` no funciona** en el ejecutor de JavaScript del navegador. Para saber si Supabase
+  está configurado, importar `isSupabaseConfigured` desde `/src/lib/supabase.ts`.
+- **Simular el corte de red:** la aplicación se apoya enteramente en `navigator.onLine` y en los
+  eventos `online`/`offline`, así que basta redefinir la propiedad y despachar el evento — **y
+  además** bloquear el `fetch` a `supabase.co`, para que ningún camino que ignore la bandera dé un
+  aprobado falso. **No sobrevive a una recarga**, así que hay que reinstalarlo.
+- **Cuidado con los falsos hallazgos.** Dos que estuvieron a punto de colarse en esta jornada:
+  llamar a `syncPendingOperations()` directamente **no** actualiza el indicador de la interfaz
+  (eso lo hace `forceSync`), y las claves de idempotencia **comparten prefijo a propósito** porque
+  son `${deviceId}:${id}`. Ninguna de las dos cosas es un defecto.
 
-> **Nota de entorno (20/08) — tercera máquina.** Diferencias comprobadas frente a la nota del 19/08:
-> **`.env.local.bak` sí existe** aquí y llegó en modo demostración, no en pasada B; **Node es
-> 22.23.2**, así que la advertencia de que `npm test` falla en 2 archivos por falta de WebSocket
-> nativo **ya no aplica** (Node 22 lo trae de serie) — aun así la suite se sigue corriendo en modo
-> demostración por higiene; **sigue sin haber Docker**; el CLI de Supabase **está autenticado** y
-> `cafeteria-vereda` (`ppgykmpkaviszlmrnijq`) aparece `linked` y `ACTIVE_HEALTHY`. Línea base
-> reconfirmada: **156 en verde** al abrir, **172** al cerrar F16-U2; lint y build limpios.
+> **Nota de entorno (20/08, cuarta máquina).** Diferente de la del traspaso anterior: aquí el
+> navegador llegó **limpio** —sin los 25 pedidos ni la sesión de gerente que describía la nota
+> previa— y **Node es 20.20.2**, no 22. La pasada de producción se levantó en el puerto **5174** en
+> vez del 5173, a propósito: un origen nuevo tiene su propio IndexedDB vacío, así que producción
+> arrancó limpia **sin borrar** la caché de demostración. Es un truco que conviene repetir.
 
 ### 0.9 Interceptor de impresión (copiar tal cual)
 
@@ -228,21 +225,21 @@ con el nombre `FXX-NN-descripcion.png`.
 | ID | Funcionalidad | Rutas | Pasada | Estado | PDF |
 |---|---|---|---|---|---|
 | F01 | Acceso, roles y sesión | `/` | A | ✅ Completada (2 correcciones aplicadas) | [F01](pdf/F01-acceso-y-roles.pdf) |
-| F02 | Nuevo pedido y folio | `/venta/nueva` | A + B | ⚠️ Pasada A completa (1 corrección); faltan P13-P14 [Requiere B] | [F02](pdf/F02-nuevo-pedido.pdf) |
+| F02 | Nuevo pedido y folio | `/venta/nueva` | A + B | ✅ Completada (A y B; 1 corrección) | [F02](pdf/F02-nuevo-pedido.pdf) |
 | F03 | Salón y vista de mesas | `/salon` | A | ✅ Completada | [F03](pdf/F03-salon.pdf) |
 | F04 | Comanda y envío a preparación | `/venta/:id` | A | ✅ Completada (3 correcciones aplicadas) | [F04](pdf/F04-comanda.pdf) |
 | F05 | Preparación (barra) | `/preparacion` | A | ✅ Completada (1 corrección aplicada) | [F05](pdf/F05-preparacion.pdf) |
-| F06 | Pedidos y entrega | `/pedidos` | A | ⚠️ Pasada A completa (3 correcciones); falta C2 [Requiere B] | [F06](pdf/F06-pedidos.pdf) |
+| F06 | Pedidos y entrega | `/pedidos` | A + B | ✅ Completada (A y B; 3 correcciones) | [F06](pdf/F06-pedidos.pdf) |
 | F07 | Cobro, descuento y ticket | `/cobros`, `/venta/:id` | A | ✅ Completada (4 correcciones aplicadas) | [F07](pdf/F07-cobro.pdf) |
-| F08 | Cancelación y reversión | `/venta/:id` | A + B | ✅ Completada (2 correcciones aplicadas) | [F08](pdf/F08-cancelacion-y-reversion.pdf) |
+| F08 | Cancelación y reversión | `/venta/:id`, `/pedidos`, `/salon` | A + B | ⚠️ Completada con hallazgos (2 correcciones; **F08-05 Alta abierta**, hallada el 20/08) | [F08](pdf/F08-cancelacion-y-reversion.pdf) |
 | F09 | Caja y arqueo | `/caja` | B | ✅ Completada | [F09](pdf/F09-caja.pdf) |
-| F10 | Catálogo | `/catalogo` | A + B | ⚠️ Pasada A completa (1 corrección); faltan P17-P20 [Requiere B] | [F10](pdf/F10-catalogo.pdf) |
-| F11 | Mesas (gestión) | `/mesas` | A + B | ⚠️ Pasada A completa (1 corrección); faltan P9-P10 [Requiere B] | [F11](pdf/F11-mesas.pdf) |
-| F12 | Insumos | `/insumos` | B | ⚠️ Navegador completo (4 correcciones); falta P11 offline | [F12](pdf/F12-insumos.pdf) |
-| F13 | Reportes | `/reportes` | B | ⚠️ Navegador completo (1 corrección); P16 no verificable por falta de volumen | [F13](pdf/F13-reportes.pdf) |
-| F14 | Personal | `/personal` | B | ⚠️ Verificado todo lo que no exige crear credencial (1 corrección); P2/P3/P6-P10 los ejecuta el responsable; P11 excluido | — |
+| F10 | Catálogo | `/catalogo` | A + B | ✅ Completada (A y B; 1 corrección) | [F10](pdf/F10-catalogo.pdf) |
+| F11 | Mesas (gestión) | `/mesas` | A + B | ⚠️ Completada con hallazgos (1 corrección; **F11-02 abierta**) | [F11](pdf/F11-mesas.pdf) |
+| F12 | Insumos | `/insumos` | B | ⚠️ Completada, offline incluido (4 correcciones) | [F12](pdf/F12-insumos.pdf) |
+| F13 | Reportes | `/reportes` | B | ⚠️ Completada (1 corrección; P16 y C1 no verificables a fondo por falta de volumen y de turno de caja) | [F13](pdf/F13-reportes.pdf) |
+| F14 | Personal | `/personal` | B | ⚠️ Completada con hallazgos (1 corrección; **F14-02 Alta abierta**, F14-03 y F14-04 abiertas); P11 excluido y sin verificar | [F14](pdf/F14-personal.pdf) |
 | F15 | Configuración e impresión | `/configuracion` | A | ⚠️ Completada salvo impresión en papel real (1 corrección alta) | [F15](pdf/F15-impresion.pdf) |
-| F16 | Offline y sincronización | transversal | A + B | 🟡 Unitarias hechas (1 corrección alta); falta la parte de navegador | [F16](pdf/F16-offline-y-sincronizacion.pdf) |
+| F16 | Offline y sincronización | transversal | A + B | ⚠️ Completada, navegador incluido (2 correcciones altas: F16-01 y **F16-05**; F16-02, F16-03 y **F16-04** abiertas) | [F16](pdf/F16-offline-y-sincronizacion.pdf) |
 
 Estados posibles: ⬜ Pendiente · 🟡 En curso · ✅ Completada · ⚠️ Completada con hallazgos.
 
@@ -268,9 +265,11 @@ Estados posibles: ⬜ Pendiente · 🟡 En curso · ✅ Completada · ⚠️ Com
 | F07-02 | **Alta** | Todas las cifras MXN se formatean sin decimales. Un total de $100.01 se presenta como $100 y un saldo de $0.01 como $0, aunque la regla de cierre sí sigue considerando el centavo; la pantalla puede indicar visualmente cero y mantener la cuenta abierta. | `src/domain/money.ts:3`, usos en `ReadyToChargePage.tsx`, `SalePage.tsx`, `CashPage.tsx`, `ReportsPage.tsx` y `printing.ts` | ✅ **Corregido** 18/08 (vía Codex): el formateador MXN común muestra siempre dos decimales |
 | F07-03 | **Alta** | El ticket de cobro omite el motivo del descuento y todas las propinas. Sólo imprime el importe del descuento y el importe de cada pago, aunque ambos datos sí quedan guardados en la orden. Incumple el contenido exigido para F07-P12. | `src/lib/printing.ts:51-63` | ✅ **Corregido** 18/08 (vía Codex): el ticket imprime el motivo escapado y las propinas positivas con la misma redacción de Cobro |
 | F07-04 | Baja | En una venta cerrada la acción de ticket sí reimprime, pero el botón dice sólo «Ticket»; no cambia a «Reimprimir» como pide F07-P13, por lo que no deja claro que se generará una segunda copia. | `src/pages/SalePage.tsx:131` | ✅ **Corregido** 18/08 (vía Codex): la acción visible de una venta cerrada ahora dice «Reimprimir» |
+| F07-06 | Media | **Una cuenta pagada podía quedarse sin poder cerrarse, con la pantalla anunciando «Saldo pendiente $0.00».** `money.ts` no redondeaba en ningún punto, así que un total corriente como 3 × $10.05 valía en realidad `30.150000000000002`. El cajero teclea los `$30.15` que ve, `applyPaymentCap` los acepta, y queda un saldo residual de `3.55e-15`. `SalePage.tsx:188` decide con `balance > 0` si enseña el botón «Cerrar e imprimir ticket», de modo que **el botón nunca aparece**; y `closeOrder` (`AppContext.tsx:370`) comparaba la suma cruda de pagos contra el total y hacía `return` en silencio, sin aviso ninguno. La única salida era pulsar «Saldo exacto», que escribía `8.881784197001252e-16` en el campo de importe —porque el botón y el marcador usaban `String(balance)` sin formatear— y registrar un pago de esa cifra. Medido por fuerza bruta sobre precios de dos decimales entre $10 y $300, cantidades de 1 a 10 y extras habituales: **10.3 % de las combinaciones sin descuento alguno** caen en el caso (35 901 de 348 060), y con descuento sube al 12 %. Es la misma familia que F07-02, pero del lado de la comparación en vez del formato. | `src/domain/money.ts` (sin redondeo), `src/state/AppContext.tsx:370`, `src/pages/SalePage.tsx:188` | ✅ **Corregido** 20/08: `roundToCents()` cuadra al centavo todo lo que sale de `money.ts`; `closeOrder` compara con `paidTotal` en vez de una suma cruda propia; «Saldo exacto» y el marcador usan `toFixed(2)`. **6 pruebas de regresión** en `money.test.ts`, comprobadas fallando sin la corrección. **Alcance real medido contra el catálogo de producción (20/08), que es lo que fija la severidad:** los **37 precios y los 5 extras son pesos enteros**, así que por la vía de los artículos el fallo **no era alcanzable hoy** — multiplicar y sumar enteros no deja residuo. Tampoco lo disparan los descuentos de porcentaje redondo (5, 10, 15, 20, 25, 30 y 50 % sobre subtotales enteros): **0 de 980**, porque dan cuartos y medios, que sí son exactos en binario. La única vía viva es un descuento **tecleado con centavos sueltos** (el campo es `type=\"number\"` libre, sin `step`): «que quede en $27.99» → descuento $2.01 → total `27.990000000000002`. De esos, **15.15 % atoran la cuenta** (644 596 de 4 255 200). Por eso queda en **Media** y no en Alta. **Pasa a Alta en cuanto entre al catálogo un solo precio con centavos** que no sea de media unidad: con $45.90, dos unidades ya dan `137.70000000000002`. La corrección se deja aplicada por eso mismo — es la clase de fallo que aparece el día que el café ajusta un precio, no el día de la entrega. |
 | F09-01 | **Alta** | Caja y Reportes no delimitan el efectivo con el mismo evento: Caja suma pagos creados desde la apertura y excluye según el estado actual de la orden; Reportes atribuye cobros y reversiones por `closed_at` y `reversed_at`. Una reversión durante el turno actual de una venta cobrada antes de abrirlo resta en Reportes, pero no reduce el esperado de Caja. Por ello el corte no siempre puede conciliarse con Reportes para el mismo rango horario. | `src/pages/CashPage.tsx:186`, `src/pages/ReportsPage.tsx:74-109`, `src/domain/reports.ts:205-229,273-316`, `supabase/migrations/20260818120000_reverse_sale_and_cash_reversal_fix.sql:211-216` | ✅ **Corregido** 18/08 (vía Codex): Caja aclara que el esperado es efectivo físico del turno y explica la divergencia por reversiones de turnos anteriores; fórmulas intactas |
 | ~~F09-02~~ | ~~Media~~ | ~~"Registrar retiro" no está realmente deshabilitado sin nota.~~ **Retractado 18/08: falso positivo de la prueba, no un defecto.** La prueba original hizo `document.querySelectorAll('button').find(...)` sobre toda la página, y hay **dos** botones con el texto "Registrar retiro": el del encabezado (sólo abre el modal, nunca deshabilitado) y el del propio modal (el que envía). El `find` sin acotar devolvió el primero, dando un falso "no deshabilitado". Reverificado acotando la consulta a `[role=dialog]`: el botón del modal está correctamente `disabled` sin importe, sigue `disabled` con sólo importe, y se habilita con importe y nota — probado en vivo contra producción, incluyendo un envío real completado sin error. | `src/pages/CashPage.tsx:102` (`disabled={loading \|\| !Number(amount) \|\| !note.trim()}`, ya correcto) | Sin acción: el código estaba bien. Error de metodología de prueba, documentado para que no se repita |
 | F08-03 | **Alta** | **Cancelar una cuenta completa con artículos ya despachados/preparados no avisaba a la barra.** A diferencia de cancelar un solo artículo (que sí imprime una comanda de cancelación), `performOrderAction` nunca llamaba a `printCommand`: la cocina se quedaba sin ningún aviso físico de que debía detener o descartar algo que ya estaba preparando. El pedido simplemente desaparecía de la cola de Preparación sin explicación. | `src/pages/SalePage.tsx` (`performOrderAction`) | ✅ **Corregido** 18/08: ahora imprime una comanda «CANCELACIÓN» con el motivo, listando los artículos que ya estaban en la barra. Verificado dos veces en producción real (sin motivo visible primero, luego con `MOTIVO:` en el papel) |
+| F08-05 | **Alta** | **La corrección de F08-03 sólo cubre una de las tres formas de cancelar una cuenta: desde las otras dos, la barra sigue sin enterarse.** F08-03 añadió la impresión de la comanda de cancelación en `SalePage.tsx:140-142`, dentro de la pantalla de la venta (`/venta/:id`), y ahí funciona. Pero cancelar una cuenta completa **también** se puede hacer desde el listado de **Pedidos** (`OrdersPage.tsx:5`) y desde la **vista previa del Salón** (`OrderPreviewModal.tsx:77`), y las dos usan `CancelOrderModal`, que llama a `cancelOrder(order.id, reason)` y **no llama a `printCommand` en ningún momento** (`CancelOrderModal.tsx:13-22`). Verificado en producción el 20/08 con el interceptor de impresión de §0.9 activo: al cancelar desde `/pedidos` la orden #1085 —que tenía su renglón ya **despachado a la barra**— la orden quedó `cancelled` con su motivo en el servidor y **no se generó ninguna comanda de cancelación** (`__qaPrintDocs` vacío, con el interceptor demostradamente funcionando: había capturado comandas y tickets minutos antes en la misma sesión). **Consecuencia idéntica a la que F08-03 vino a resolver:** la cocina sigue preparando algo que ya se canceló y el pedido simplemente desaparece de su cola. Y son justo los dos caminos más naturales para gerencia, que cancela repasando la sala o el historial, no entrando a la venta. | `src/components/CancelOrderModal.tsx:13-22`, usado desde `src/pages/OrdersPage.tsx:5` y `src/components/OrderPreviewModal.tsx:77` | ⚠️ **Abierto.** No se corrige en esta pasada por la regla de no abrir correcciones a medias sin avisar. El arreglo es pequeño y **sin SQL**: mover la impresión de la comanda de cancelación a `cancelOrder` (o llamar a `printCommand(order, itemsEnBarra, 0, true)` desde `CancelOrderModal`, como ya hace `SalePage`), de modo que quede cubierta cualquiera que sea la puerta de entrada |
 | F08-04 | **Alta** | **La tabla de Incidencias en Reportes (agregada en F08-02) no mostraba quién hizo la cancelación/reversión.** El dato existía (`incidents.created_by`) pero la consulta no lo traía y la tabla no tenía columna de empleado — contradice directamente el requisito confirmado por el cliente de poder responsabilizar a alguien (F01-04). | `src/pages/ReportsPage.tsx` (consulta de incidencias y tabla) | ✅ **Corregido** 18/08: se agregó el join a `staff_profiles` y la columna "Empleado". Verificado en producción real: las 6 incidencias existentes mostraron "Gerente" correctamente tras el cambio |
 
 | F02-01 | Media | **El orden del menú se perdía al recargar y "Nuevo Pedido" abría en una categoría al azar.** El servidor sí guarda el orden en `categories.position` y la consulta lo respeta (`.order("position")`), pero al mapear se descartaba la columna: `Category` era `{id, name}`. Al persistirse en IndexedDB sin ese dato, `db.catalogCategories.toArray()` devolvía las categorías **ordenadas por clave primaria**, es decir por el identificador interno (un UUID en producción). El selector de productos abre en `categories[0]`, así que el barista veía una categoría distinta según el azar del identificador. **Esto es la causa real de F04-06** (abrir en `America&Kevin`, vacía): no era higiene de catálogo. Verificado en vivo: recién sembrado salía "Café" primero; tras recargar salía "Otros" (id `bakery`). | `src/state/AppContext.tsx:153,205,212`, `src/domain/types.ts:19`, `src/components/ProductPicker.tsx:27` | ✅ **Corregido** 19/08: `Category` lleva `position`, se pide y se conserva desde el servidor, y una función pura `sortCategories` (`src/domain/catalog.ts`, **6 pruebas**) ordena por posición con desempate por nombre. Se corrigió además `updateCategory`, cuyo `put` borraba la posición al renombrar. Verificado tras recargar: IndexedDB sigue devolviendo por id (Otros, Almuerzos, Café…) pero la pantalla muestra Café, Frías, Almuerzos… y abre en Café |
@@ -284,14 +283,17 @@ Estados posibles: ⬜ Pendiente · 🟡 En curso · ✅ Completada · ⚠️ Com
 
 | F10-01 | Media | **La tarjeta del selector anunciaba un precio que no se podía pagar.** Mostraba siempre el **precio base** del producto seguido de "+" cuando había presentaciones, sin mirar cuánto cuestan realmente. Basta con que la gerencia cambie el precio de una presentación y no toque el precio base para que la pantalla anuncie una cifra inexistente. Reproducido durante F10-P7/P8: producto con base $50.00 cuya **única** presentación cuesta $99.00 → la tarjeta decía «$50.00+», casi la mitad del precio real, y el "+" sugería opciones más caras cuando no había ninguna otra. Es la cifra que el barista lee en voz alta cuando el cliente pregunta el precio. | `src/components/ProductPicker.tsx:60` | ✅ **Corregido** 20/08: `productDisplayPrice` anuncia la presentación **más barata realmente comprable** y `hasPriceChoices` reserva el "+" para cuando hay más de una opción (`src/domain/catalog.ts`, **5 pruebas**). Verificado en pantalla: el producto pasó a «$99.00» sin "+", y el caso normal quedó intacto (Cappuccino sigue «$70.00+», Espresso «$48.00») |
 
+| F11-02 | Media | **El aviso de la pantalla de Mesas promete que los cambios se guardarán al reconectar, y lo que ocurre es que se tiran.** Sin conexión, `/mesas` muestra en rojo: «Sin conexión: los cambios se ven aquí pero **no se guardarán hasta reconectar**.» — que en español se lee como *se guardarán cuando reconectes*. Es falso: las mesas **no pasan por la cola de sincronización** (a diferencia de los pedidos), así que `updateTable` sólo escribe en el dispositivo y, al volver la conexión, **la descarga remota pisa el valor local y el cambio desaparece sin ningún aviso**. Verificado en producción el 20/08: con la Mesa 8 en 3 lugares se editó sin conexión a 5, la cola se quedó en **0 operaciones**, y al reconectar el dispositivo volvió solo a 3. **Lo tranquilizador:** no queda inconsistencia entre dispositivo y servidor —gana el servidor— así que no hay corrupción ni datos divergentes. **Lo que sí ocurre:** quien reacomode el croquis del salón durante un corte de internet pierde el trabajo entero y no se entera. | `src/pages/TablesPage.tsx:51` (el texto), `src/state/AppContext.tsx:405` (`updateTable`) | ⚠️ **Abierto.** Corrección pequeña y sin SQL: cambiar el texto por uno que diga la verdad —del estilo «Sin conexión: puedes ver el croquis, pero **no se pueden guardar cambios**; vuelve a intentarlo al recuperar la conexión»— y, mejor todavía, deshabilitar el guardado mientras no haya conexión, como ya hacen Catálogo y Caja |
 | F11-01 | Media | **Se podía dar de baja una mesa con la cuenta abierta, sin ningún aviso.** Ni el croquis de `/mesas` distingue una mesa ocupada de una libre, ni el editor mencionaba la cuenta. Reproducido con la Mesa 9 y el pedido #1052 ($48.00, `open`): la baja se aplicó sin protestar y **el pedido desapareció de `/salon`** —donde el equipo trabaja— quedando visible sólo en `/pedidos`. No hay pérdida de datos ni dinero irrecuperable (la cuenta sigue alcanzable y cobrable desde el historial), pero sí riesgo real de que una cuenta viva se quede sin cobrar porque nadie la ve. | `src/pages/TablesPage.tsx` (`toggleActive` y el botón «Quitar mesa») | ✅ **Corregido** 20/08: «Quitar mesa» se deshabilita mientras la mesa tenga una cuenta rastreada y se explica debajo: «Tiene la cuenta #1052 abierta (Mesa 9). Cóbrala o cancélala antes de dar la mesa de baja». Es el mismo patrón que ya usaba el borrado de categorías con productos. **Ojo con el guard:** en la primera versión bloqueaba también «Reactivar mesa», justo la salida para arreglar una mesa ya dada de baja; se acotó a la baja. Verificado en los tres estados: bloqueada con cuenta viva, reactivación libre, y baja permitida en cuanto la cuenta se canceló |
 
 | F15-01 | **Alta** | **En el ticket de 58 mm el método de pago se partía letra por letra.** La vista previa mostraba literalmente `TA` / `RJ` / `ET` / `A` en cuatro renglones: el importe con la propina en la misma línea («$270.00 + $20.00 propina») no dejaba espacio, y el CSS del renglón permite partir por cualquier carácter (`overflow-wrap:anywhere`). El resultado es ilegible en el comprobante que se entrega al cliente. **Transparencia sobre el origen:** lo destapó la corrección **F06-01** —al pasar de «CARD» (4 letras) a «TARJETA» (7) dejó de caber—, pero el defecto ya estaba latente: «TRANSFER», el valor crudo anterior, también se habría partido. | `src/lib/printing.ts` (renglón de pagos y CSS de `.row`) | ✅ **Corregido** 20/08: la propina pasa a su **propio renglón** indentado y el nombre del método no se parte (`white-space:nowrap`). Verificado en la vista previa real a 58 mm y a 80 mm: «TARJETA $270.00» completo y «Propina $20.00» debajo. 3 pruebas nuevas |
 
+| F16-05 | **Alta** | **El tiempo real nunca ha funcionado en producción: falta una política que la propia migración avisa que hay que aplicar a mano, y no se aplicó.** La aplicación abre el canal como **privado** — `client.channel("branch:main", { config: { private: true } })` (`AppContext.tsx:252`) — y un canal privado de Supabase Realtime exige una política sobre `realtime.messages` que autorice el tema. Esa política **está comentada** en la migración inicial, con la nota de que `realtime.messages` pertenece a `supabase_realtime_admin`, que el rol de migraciones no puede crearla y que hay que **aplicarla a mano desde el editor SQL del panel** (`20260813023800_initial_pos.sql:594-599`). Nunca se hizo. **Aislado sin ambigüedad el 20/08:** un canal genérico se suscribe bien (`SUBSCRIBED`), y sobre **el mismo tema `branch:main`**, `private: false` devuelve `SUBSCRIBED` mientras `private: true` —como lo abre la aplicación— no responde nunca. Los disparadores del servidor sí publican (`realtime.broadcast_changes` sobre `orders`, `order_items`, `cafe_tables` y el catálogo): los mensajes salen y **nadie los puede recibir**. **Qué significa para el café:** ninguna pantalla se entera sola de nada. La barra no ve entrar una comanda nueva hasta que alguien recarga; el salón no ve que una mesa se liberó; quien cobra no ve que la barra terminó un plato. Todo el equipo trabaja con datos viejos sin ningún aviso de que lo son, porque el indicador sigue diciendo «Todo sincronizado». Es la clase de fallo que en una demostración con un solo dispositivo no se nota y en un turno con tres tabletas se nota todo el rato. | `src/state/AppContext.tsx:252`, `supabase/migrations/20260813023800_initial_pos.sql:594-599` | ✅ **Corregido y verificado el 20/08.** El responsable aplicó la política desde el editor SQL del panel y se comprobó en el acto: el canal privado pasó de no responder a `SUBSCRIBED`, el canal de la aplicación a **`joined`** en las dos ventanas, y un cambio hecho por gerencia apareció solo en la sesión del barista, sin recargar (ver F16-P11). **La sentencia aplicada fue una sola**, la que la propia migración dejaba escrita: `create policy "authenticated receive branch broadcasts" on realtime.messages for select to authenticated using ((select realtime.topic()) = 'branch:main');` Fue **aditiva y de riesgo mínimo**: esa tabla rechazaba a todo el mundo, así que sólo podía pasar de «nadie recibe» a «los autenticados reciben». No hizo falta Docker ni CLI, ni se tocó ninguna política existente. **Se revierte con** `drop policy "authenticated receive branch broadcasts" on realtime.messages;`. **Pendiente para la entrega:** esta política **no vive en `supabase/migrations/`** —no puede, por el dueño de la tabla— así que **un despliegue en un proyecto Supabase nuevo volverá a nacer sin tiempo real**. Debe quedar escrito en la guía de despliegue como paso manual obligatorio |
 | F16-01 | **Alta** | **Una sincronización interrumpida abandona las operaciones para siempre, y la app dice que todo está bien.** `syncPendingOperations` marca el lote como `syncing` (`offline.ts:29`) *antes* de llamar al servidor. Si la pestaña se cierra, se recarga o la llamada lanza una excepción en esa ventana —`forceSync` no tiene `try/catch`, así que la excepción sale como rechazo no capturado— las operaciones se quedan en `syncing` de forma permanente: la consulta de reintento sólo mira `pending`/`review_required` (`offline.ts:22`), el arranque no las rescata y `pendingCount` tampoco las cuenta (`AppContext.tsx:161,234`). Resultado: la venta nunca sube al servidor y el indicador anuncia **«Todo sincronizado»**. Es el peor modo de fallo posible en una tableta de café con wifi inestable, porque es silencioso. Reproducido en vivo: con 28 pendientes, poner una en `syncing` dejó la consulta de la app contando 27. | `src/lib/offline.ts:22,29`, `src/state/AppContext.tsx:161,234` | ✅ **Corregido** 20/08: `reclaimStalledOperations()` devuelve a `pending` todo lo que quedó en `syncing`, y se llama en la hidratación de `AppContext` antes de contar. Reenviar es seguro porque el servidor descarta el duplicado por `idempotency_key` (`on conflict (idempotency_key) do nothing`). Verificado en el navegador: la operación atrapada volvió a `pending` **con su clave intacta** y el contador pasó de 27 a 28. Cubierto por 3 pruebas nuevas en `offline.test.ts` |
 | F16-02 | Baja | **El resultado por operación que devuelve el servidor se descarta.** `sync_offline_operations` devuelve un arreglo `{id, status, duplicate}` por operación, pero el cliente hace `Array.isArray(data) ? A : B` con **las dos ramas idénticas** (`offline.ts:44`): marca `synced` todo el lote mirando sólo si hubo error de transporte. Hoy es inocuo porque cualquier rechazo del servidor lanza excepción y aborta la transacción entera, así que no existe el éxito parcial; pero el día que la RPC informe un rechazo por operación, el cliente lo dará por enviado. | `src/lib/offline.ts:44` | Documentado, **sin corregir por alcance** (endurecerlo el día de la entrega es riesgo innecesario). Anotado como deuda en la ficha de F16 |
 | F16-03 | Media | **Una sola operación inválida bloquea toda la cola del dispositivo.** `sync_offline_operations` procesa el lote en **una transacción**: si una operación lanza (`Manager role required`, `Reason required`…), aborta el lote completo y el cliente marca como fallidas **todas** las operaciones, incluidas las sanas. Tras 3 intentos el lote entero cae en `review_required`, y **no hay ninguna forma de resolverlo desde la interfaz** (lo que F16-P10 anticipaba como límite). Bloqueo de cabeza de línea clásico. | `supabase/migrations/20260818140000_incident_amount_includes_modifiers.sql:16-190`, `src/lib/offline.ts:41-45` | Documentado como **límite conocido**; requiere migración SQL para aislar el fallo por operación y no hay Docker para probarla (regla 4). Debe quedar escrito en la ficha de F16 y avisarse al cliente |
 
+| F16-04 | Media | **Un pedido tomado sin conexión puede acabar con un folio distinto del que lleva impreso la comanda que está en la barra.** Sin conexión no se puede reservar de la secuencia, así que `reserveFolio` cae a un consecutivo local, `Math.max(folios locales) + 1` (`AppContext.tsx:299-303`). Si ese número ya está ocupado al sincronizar, el servidor **lo descarta y asigna uno de la secuencia** — lo cual está bien resuelto y **no bloquea la cola** (`coalesce(v_folio, nextval(...))`, `20260818130000_server_assigned_folio.sql:82-86`). El problema es que **nadie se entera**: `sync_offline_operations` sólo devuelve `{id,status,duplicate}` por operación y el cliente ni eso mira (F16-02), así que el dispositivo sigue enseñando el folio viejo hasta que una recarga completa vuelve a bajar la orden. **Y el papel no se corrige nunca.** Verificado en producción el 20/08 forzando el choque: una orden creada con folio 1000 (ya ocupado) se guardó como **1084**; el dispositivo siguió mostrando 1000 y sólo se corrigió al recargar entero. **Cuándo muerde de verdad:** si se cae el internet, **todas** las tabletas del café quedan sin conexión a la vez y todas calculan el mismo folio siguiente; al volver la línea, una se lo queda y **el resto son reasignadas**, de modo que sus comandas de papel apuntan a números que pertenecen a otras órdenes. El barista que busque el #1000 de su comanda encontrará una orden ajena. No se pierde ningún dato y hay salida —buscar por nombre del pedido— pero conviene decírselo al cliente. | `src/state/AppContext.tsx:294-303`, `supabase/migrations/20260818130000_server_assigned_folio.sql:78-86` | ⚠️ **Abierto.** No se corrige en esta pasada. La salida limpia es que el servidor devuelva el folio definitivo por operación y el cliente lo aplique — que es exactamente lo que **F16-02** ya pedía habilitar |
 | F13-01 | Media | **El «Ticket promedio» no cuadraba con ninguna división posible de lo que la pantalla muestra.** La tarjeta «Ventas» presenta la venta **neta** ($443.00) y «Tickets cobrados» 9, pero el promedio se calcula sobre la **bruta**: `gross / tickets` = $539.00 ÷ 9 = **$59.89**. El dueño que haga la división evidente —$443 ÷ 9 = $49.22— obtiene otra cifra y nada en pantalla explica la diferencia. Es precisamente el requisito de F13: *cada cifra debe cuadrar con una suma hecha a mano*. El cálculo en sí **es el correcto** (numerador y denominador comparten la base «ventas cerradas del periodo»; mezclar la neta con el conteo de tickets sería peor), así que el defecto es de presentación, no de aritmética. | `src/domain/reports.ts:355`, `src/pages/ReportsPage.tsx:332` | ✅ **Corregido** 20/08: la etiqueta pasa a **«Ticket promedio (bruto)»** (y «Contribución promedio (bruta)» al filtrar por método). Con eso la cifra queda reconciliable con lo que ya está en pantalla: ($443.00 neta + $96.00 reversiones) ÷ 9 = $59.89. **Fórmula intacta**, mismo criterio que se usó en F09-01. No se tocó `detail` porque lleva `truncate` y el texto se habría cortado. Verificado en el navegador: la etiqueta entra en una línea |
 | F13-02 | Media | **El reporte impreso se queda sin la trazabilidad de cancelaciones y reversiones.** Al imprimir (`Guardar PDF` y `Cmd+P` son el mismo camino: `window.print()` de la ventana principal) se ocultan por `print:hidden` el **Detalle auditable**, las **Incidencias** y el indicador de **Insumos**. Que el detalle no salga es defendible —está paginado y en papel saldría sólo la primera página, engañando—, pero **Incidencias no está paginada**: se muestra entera (7 registros con empleado, motivo, importe y fecha) y aun así no se imprime. Choca con el requisito que el propio cliente confirmó en F01-04 y que motivó F08-02 y F08-04: poder responsabilizar a alguien de cada cancelación. Quien imprima el reporte para archivarlo o revisarlo no lleva ese dato en el papel. | `src/pages/ReportsPage.tsx` (bloques con `print:hidden`) | **Sin corregir por alcance**, documentado como límite conocido: cambiar qué entra en el papel el día de la entrega puede romper la maquetación impresa, que no se puede probar sin impresora (ver F15-P10). **Salida disponible mientras tanto: «Exportar CSV», que sí incluye el detalle completo.** Debe quedar escrito en la ficha de F13 y decírselo al cliente |
 | F13-03 | Baja | **Las incidencias anteriores al 18/08 conservan el importe subestimado.** La migración de **F08-01** corrigió el cálculo hacia adelante, pero **no rellenó hacia atrás**: en la tabla de Incidencias siguen las filas viejas con los importes de antes ($180.00 en la anulación de 2 Matcha que valía $210.00; $186.00 en la cancelación de cuenta que valía $201.00). Son registros de prueba del 18/08 a las 10:17, anteriores a la migración de las 14:00. | `incidents` (filas históricas), migración `20260818140000` | Sin acción: **no es una regresión**, es historia previa al arreglo, y son datos de QA. Se documenta para que nadie lo lea como un defecto vivo. El histórico real del cliente empieza en la entrega, ya con el cálculo corregido |
@@ -302,14 +304,40 @@ Estados posibles: ⬜ Pendiente · 🟡 En curso · ✅ Completada · ⚠️ Com
 
 | F14-01 | Baja | **El error más probable de la pantalla de personal salía en inglés y hablaba de algo que el usuario nunca escribió.** Al intentar dar de alta un usuario que ya existe, la interfaz mostraba el mensaje crudo de Supabase Auth: *«A user with this email address has already been registered»*. La app fabrica un correo interno a partir del usuario (`VITE_AUTH_EMAIL_DOMAIN`), así que quien administra el personal —que sólo teclea un nombre de usuario— no tiene forma de relacionar ese texto con lo que hizo. `invokeError` devolvía el mensaje del servidor tal cual. Reproducido en producción intentando crear `gerente` de nuevo: **no se creó nada** (el rechazo funciona), pero el aviso era inservible. | `src/pages/PeoplePage.tsx:21-33` (`invokeError`) | ✅ **Corregido** 20/08: nueva función `readableError` que traduce los mensajes conocidos de Supabase Auth al vocabulario de la pantalla — «Ya existe un acceso con ese usuario. Elige otro nombre de usuario.» Se aplica en los tres puntos por los que pasa un error de la función (alta, restablecimiento de PIN y fallo de red), así que no hace falta **redesplegar la Edge Function** el día de la entrega. Verificado en vivo con el mismo caso |
 
+| F14-05 | Media | **Sin conexión, la pantalla de Personal escupe un error técnico en inglés.** `PeoplePage.tsx` **no comprueba la conexión en ningún punto** —no menciona `navigator.onLine` ni una sola vez, a diferencia de Catálogo, Caja y Mesas, que sí tienen mensajes propios en español—, así que la llamada a la Edge Function falla y el error crudo llega a la pantalla: se lee literalmente **«TypeError: Failed to fetch»** donde debería estar la lista del personal, en una pantalla por lo demás enteramente en español. El botón «Crear acceso» sigue habilitado, de modo que se puede rellenar el formulario entero —incluido fijar un PIN— para que al final no ocurra nada explicable. Lo único que avisa es el indicador de la barra lateral, que dice «Sin conexión» pero no relaciona una cosa con la otra. Es la misma familia que **F14-01**, que se corrigió para el caso del usuario duplicado y dejó este camino sin cubrir. Encontrado al consolidar F16-C3. | `src/pages/PeoplePage.tsx` (sin ninguna comprobación de conexión) | ⚠️ **Abierto.** Corrección pequeña y sin SQL: comprobar `navigator.onLine` como ya hacen Catálogo y Caja, y traducir el fallo de red a un mensaje del estilo «Necesitas conexión a internet para administrar el personal.» |
+| F14-02 | **Alta** | **Desactivar un acceso no lo revoca: sólo impide entrar de nuevo.** La comprobación de `active` vive en **un único sitio**, `AppContext.tsx:278`, dentro del inicio de sesión (`if (profileError || !profile?.active) throw new Error("Este acceso está desactivado.")`). Nada la revalida al restaurar la sesión, ni antes de ninguna operación. Verificado en producción el 20/08 sobre `@qa-20ago-user`: se dejó su sesión abierta, gerencia lo desactivó (`active: false` confirmado en `staff_profiles`, «Personal activo» bajó de 2 a 1) y esa sesión **siguió funcionando entera** — leyó pedidos, **reservó el folio 1083 de la secuencia del servidor** (`next_order_folio`) y el RPC `sync_offline_operations` le aceptó el lote. **Recargando la página entera sigue dentro**, con todo su menú operativo y la tarjeta anunciando «Sesión validada». Tampoco lo tapa el servidor: una inserción sonda en `orders` fue rechazada con `22P02` (valor de enum inválido) y **no** con `42501` (violación de RLS), lo que prueba que la escritura pasó el control de acceso y sólo la frenó el tipo de dato. Consecuencia para el café: si se despide a alguien y se desactiva su acceso, **cualquier tableta donde ya estuviera dentro sigue tomando pedidos y cobrando**, y el único remedio real es cerrar la sesión en ese dispositivo o invalidar el token desde Supabase. Mismo patrón, más leve, en **F14-03**. **Causa raíz localizada el 20/08:** el servidor decide quién eres a partir del **token**, no de la tabla. `private.current_role()` lee `auth.jwt() -> 'app_metadata' ->> 'role'`, y **`active` no viaja en el token** (comprobado descodificando el JWT: lleva `role`, no lleva `active`). Ninguna política consulta `staff_profiles.active`. Por eso desactivar en la tabla no tiene ningún efecto sobre una sesión ya emitida. | `src/state/AppContext.tsx:278` (único chequeo), `private.current_role()` en `20260813023800_initial_pos.sql:267`, políticas RLS | ⚠️ **Abierto por decisión expresa del responsable el 20/08**, que prefirió no tocar producción durante la revisión. **El análisis del arreglo ya está hecho, para que quien lo retome no lo repita.** Son tres piezas, de menos a más riesgo: **(1) Cliente** — revalidar `active` al restaurar la sesión y en cada sincronización. TypeScript puro, con pruebas unitarias, riesgo cero; cubre la tableta olvidada, que es el caso real. **(2) Guardas en los RPC** — un `if not active then raise` al principio de `sync_offline_operations`, `next_order_folio`, `close_order`, `reverse_sale`, `open_cash_session`, `record_cash_movement` y `dispatch_order_items`. Riesgo bajo: son `create or replace function` sueltas, cada una revertible por separado volviendo a pegar su definición anterior desde `supabase/migrations/`. Cubre **todas las escrituras operativas**, porque la aplicación es *offline-first* y encola todo por esos RPC. **(3) Políticas RLS** — añadir `and private.is_active()` a las ~40 políticas repartidas en 10 migraciones. Es lo único hermético frente a quien llame a la API a mano, y **el único paso de riesgo alto**: un fallo deja al café entero sin poder operar, y sin Docker no se puede ensayar la migración en local antes (regla 8). **No hace falta Docker ni el CLI para aplicar (1) y (2):** basta el editor SQL del panel de Supabase |
+| F14-03 | Media | **Restablecer el PIN tampoco cierra la sesión que el empleado ya tuviera abierta.** Misma causa que F14-02: el PIN sólo se comprueba al entrar. Verificado el 20/08 dejando a propósito la pestaña del barista dentro durante el restablecimiento — su token siguió siendo válido contra el servidor. Es menos grave que F14-02 porque restablecer un PIN suele responder a un olvido, no a una baja; pero si se restablece **porque el PIN se comprometió**, quien lo conociera y ya estuviera dentro no sale. | `src/state/AppContext.tsx:278`, `supabase/functions/manage-staff/index.ts:93` | ⚠️ **Abierto.** Se resuelve con lo mismo que F14-02 |
+| F14-04 | Media | **No hay forma de cambiar el rol de un empleado desde la aplicación.** El selector de rol existe **sólo en el formulario de alta** (`PeoplePage.tsx:107-108`); la tarjeta de un empleado ya creado ofrece únicamente «Restablecer PIN» y «Desactivar acceso». Y no es que falte el botón: la Edge Function **sólo acepta dos acciones**, `create` y `reset_pin` — cualquier otra responde `400 · «Acción desconocida.»` (`manage-staff/index.ts:53,93,112`). Quien se dio de alta como barista se queda barista. Ascender a alguien obliga a crear un acceso nuevo con rol gerente y desactivar el viejo, lo que le cambia el usuario y parte su historial de auditoría en dos. **Rectificación del 20/08, importante:** al comprobarlo se vio que la columna es escribible por gerencia, y de ahí se dedujo que bastaba con exponer el control en la tarjeta. **Eso era falso y habría sido peor que no tener la funcionalidad.** El rol vive en **dos sitios independientes**: la columna `staff_profiles.role`, que es la que pinta la interfaz, y `app_metadata.role` del usuario de Auth, que es **la única que mira el servidor** — `private.current_role()` lo lee de `auth.jwt() -> 'app_metadata' ->> 'role'` (`20260813023800_initial_pos.sql:267`), y de ahí cuelgan las ~40 políticas que usan `private.is_manager()`. La Edge Function las escribe **las dos** al dar de alta (`manage-staff/index.ts:69,75`). Escribir sólo la columna produciría un **ascenso a medias**: la persona aparecería como gerente en la lista y vería el menú de Gestión (el cliente lee la tabla), pero cada comprobación del servidor la seguiría tratando como barista. El arreglo correcto es **añadir la acción a la Edge Function**, que es quien puede tocar `app_metadata`. **Y no abre ningún agujero:** se comprobó que un barista **no** puede ascenderse solo (la RLS le devuelve 0 filas y sólo le deja leer su propia fila). | `src/pages/PeoplePage.tsx:107-108,154-166`, `supabase/functions/manage-staff/index.ts:56-75` | ⚠️ **Abierto por decisión del responsable el 20/08.** Es una funcionalidad que falta, no un defecto de una existente. Debe decírsele al cliente. El arreglo va en la Edge Function (una acción `update_role` que escriba `app_metadata` **y** la columna), no sólo en la pantalla — ver la rectificación de arriba |
 | F12-04 | Media | **No había forma de retirar un insumo de la vista: la baja lógica sólo la respetaba una de las tres zonas de la pantalla.** `createInventoryAnalysis` filtra por `item.active`, pero la lista «Existencia contada», los dos selectores de los modales y el panel «Últimos registros» recorrían `items`/`movements` **sin mirar `active`**. Un insumo que el café deja de manejar seguía apareciendo —con su existencia, ofreciéndose para nuevos conteos y con sus movimientos en el panel lateral— y el único sitio donde desaparecía era la tabla de análisis, lo que además resulta desconcertante. **Se descubrió al intentar limpiar los datos de esta revisión** (§0.8 L2): al dar de baja `QA-20AGO-Leche` desapareció de la tabla pero siguió en las otras tres zonas. | `src/pages/InventoryPage.tsx:165,166,170,171` | ✅ **Corregido** 20/08: memos `activeItems` y `activeMovements` alimentan la lista, los dos selectores y los últimos registros; `items` completo se conserva para resolver el **nombre de los movimientos históricos** y para el detalle, que deben seguir siendo consultables. Verificado en producción: el insumo dado de baja desapareció de las tres zonas y los 7 reales quedaron intactos |
+
+- [x] L8. **Inventario de lo que esta pasada dejó en producción, declarado sin adornos.**
+      **Pedidos (4, todos cerrados o cancelados, ninguna cuenta abierta):** #1082 `QA-F16-offline`
+      cobrado $63.00 por transferencia · #1084 `QA-F16-choque` cancelado · #1085 (Mesa 8) cancelado ·
+      #1086 `QA-F10-C2` cobrado $30.15 por transferencia con descuento de $7.35. **Suman $93.15 a la
+      venta del día**, todos identificables por su nombre `QA-`.
+      **Catálogo:** producto `QA-20AGO-F10 producto` y extra `QA-20AGO-F10 sonda`, ambos con **baja
+      lógica** (`active: false`), invisibles para el equipo. La receta asociada queda con ellos.
+      **Personal:** `@qa-20ago-user`, dado de baja.
+      **Insumos:** un conteo nuevo de 9.5 L sobre `QA-20AGO-Leche`, que sigue dado de baja. Los
+      conteos son **inmutables por diseño** y no se pueden borrar; por eso se contó sobre el insumo
+      de prueba y no sobre uno real del café.
+      **Mesas:** la Mesa 8 se editó y se **devolvió a sus 2 lugares originales**.
+      **Huecos en la numeración de folios:** el **1083** se consumió de la secuencia sin llegar a
+      crear pedido (durante la prueba de F14-02). No falta ningún dato; sólo hay un salto.
+      **Auditoría:** `audit_log` conserva `create_staff` y `reset_pin` del acceso de prueba, y las
+      incidencias de las dos cancelaciones. Es correcto que así sea: son el rastro que hace
+      auditable la operación.
 
 Severidades: **Bloqueante** (impide entregar) · **Alta** (rompe un flujo, hay rodeo) · **Media**
 (molesta pero no rompe) · **Baja** (cosmético).
 
 ### 0.8 Limpieza posterior
 
-- [ ] L1. `mv .env.local.bak .env.local` restaurado
+- [x] L1. **`.env.local` devuelto a modo demostración** al cerrar la sesión del 20/08, según la regla.
+      Las credenciales reales siguen en `.env.local.bak`, `.env.production` y
+      `.env.local.prod-recibido`, **los tres ignorados por git** (recomprobado con `git check-ignore`).
+      Los servidores de desarrollo levantados para la pasada (puertos 5174, 5175 y 5176) quedaron
+      parados.
 - [x] L2. **Resuelto el 20/08 con baja lógica, y por el camino salió el hallazgo F12-04.**
       Lo creado en la pasada B fue: el insumo `QA-20AGO-Leche`, sus 2 conteos (10 L y 10.5 L) y sus
       2 movimientos (entrada +2 L, merma 1 L). No se creó ningún pedido, pago ni turno de caja, y
@@ -326,14 +354,28 @@ Severidades: **Bloqueante** (impide entregar) · **Alta** (rompe un flujo, hay r
       Queda invisible para el equipo del café y auditable en la base. Si aun así se quiere borrar de
       raíz, hay que hacerlo con la clave de servicio desde el panel de Supabase, en orden:
       `inventory_count_lines` → `inventory_counts` → `inventory_movements` → `inventory_items`.
-- [ ] L3. Sesión de caja de prueba cerrada (no dejar un turno abierto)
-- [ ] L4. `npm test`, `npm run lint` y `npm run build` en verde al final
-- [ ] L5. PDF de las 16 funcionalidades presentes en `docs/qa/pdf/`. **15 de 16 al 20/08**: se
-      añadieron F12, F13 y F16. **Falta sólo F14**, que se redactará cuando el responsable complete
-      los casos que exigen crear una credencial y entrar con ella (P2, P3, P6-P10).
-- [ ] L6. `pendingOperations` purgado de las operaciones creadas en pasada A antes de volver a
-      credenciales reales (ver hallazgo **F02-02**: el modo demostración también encola, y esas
-      operaciones se subirían a producción en cuanto Supabase quede configurado)
+- [x] L3. **No hay ningún turno de caja abierto** (`cash_sessions` con `closed_at is null` devuelve
+      cero filas). Durante esta pasada no se abrió ninguno: los dos cobros de prueba se hicieron
+      **por transferencia**, precisamente para no tocar el arqueo de efectivo del café.
+- [x] L4. **En verde al cerrar: 196 pruebas, 13 archivos; lint sin advertencias; build sin errores.**
+      La suite creció de 180 a 196 (+16: 2 de mapeo remoto, 6 de redondeo al centavo, 8 de reportes),
+      y **sólo creció**: no se quitó ni se relajó ninguna.
+- [x] L5. **Las 16 de 16 están en `docs/qa/pdf/`.** F14 se redactó y generó el 20/08, en cuanto el
+      responsable cerró los casos que exigen crear una credencial y entrar con ella.
+- [x] L7. **Hecho al cerrar: `@qa-20ago-user` quedó `active: false`.** Es una credencial real creada en producción
+      para F14-P2. Ya se comprobó en P8/P9 que desactivar y reactivar funcionan, así que la baja
+      lógica es la salida correcta (el borrado físico no procede: partiría el rastro de `audit_log`,
+      que conserva su `create_staff` y su `reset_pin`). **Ojo con F14-02:** desactivarlo no cierra
+      sesiones abiertas — hay que cerrar además la sesión de la pestaña del puerto 5175.
+      *Efecto secundario a declarar:* durante F14-02 se consumió el **folio 1083** de la secuencia
+      del servidor sin llegar a crear ningún pedido, así que quedará un hueco en la numeración. No
+      se creó ninguna orden, ningún pago ni ningún turno de caja.
+- [x] L6. **Cumplido, y sin necesidad de purgar nada.** Antes de cambiar a producción se comprobó la
+      cola en el navegador: estaba en **0 operaciones**, y los 7 pedidos que había en la base local
+      eran todos del sembrado de demostración (identificadores `demo-*`), no datos reales. Además, la
+      pasada de producción se levantó en **un origen nuevo** (puerto 5174), cuyo IndexedDB nace
+      vacío, de modo que **no existía ninguna operación de demostración que pudiera subirse**. La
+      caché de demostración del 5173 quedó intacta y no hubo que borrar nada.
 
 ---
 
@@ -440,10 +482,18 @@ riesgo innecesario). Lo que sí se prueba es la lógica pura extraíble:
 
 ### Pruebas en navegador (pasada B) **[Requiere B]**
 
-- [ ] F02-P13. Crear un pedido con conexión → el folio proviene de la secuencia del servidor
+- [x] F02-P13. **Verificado el 20/08 con un pedido real.** El folio más alto en el servidor era 1084;
+      al crear la orden **con conexión** se asignó el **1085**, es decir de `next_order_folio()`
+      (`order_folio_seq`) y no de un cálculo local. La orden nació ya `synced` y estaba en el
+      servidor en el acto, con su mesa.
       (`next_order_folio`). Comprobar en la pestaña Red que la RPC se llamó y que el folio impreso
       coincide con el devuelto.
-- [ ] F02-P14. Con DevTools en Offline, crear un pedido → asigna folio local provisional y el pedido
+- [x] F02-P14. **Verificado en F16-P3, y con una consecuencia que no estaba prevista.** Sin conexión
+      se asignó el folio local provisional **1082** (`Math.max(folios locales) + 1`), el pedido quedó
+      encolado y al reconectar subió entero y correcto. **Pero** si ese número provisional ya está
+      ocupado, el servidor asigna otro de la secuencia y **el dispositivo no se entera hasta recargar,
+      mientras la comanda de papel conserva el viejo** → hallazgo **F16-04**. Comprobado forzando el
+      choque: una orden con folio 1000 se guardó como 1084. Original: 
       queda en estado pendiente. Al volver la conexión, el servidor lo respeta o lo reasigna
       (se cruza con F16).
 
@@ -579,7 +629,11 @@ Es el corazón del sistema. Merece la prueba más larga.
 ### Funcionalidades conectadas a verificar
 
 - [x] F04-C1. Lo enviado aparece en `/preparacion` con su tiempo de espera; lo cancelado desaparece.
-- [ ] F04-C2. La mesa cambia a "en preparación" en `/salon` — **pendiente**: el pedido de prueba fue
+- [x] F04-C2. **Verificado el 20/08 con un pedido de mesa real** (#1085 en la Mesa 8, que estaba
+      libre). Tras enviarlo a la barra, `/salon` muestra en la vista de lista **«Mesa 8 · 2 lugares ·
+      #1085 · En preparación · $48.00»**, el croquis la pinta con el color de preparación y el
+      marcador de cabecera pasa a «3 En preparación» y «1 de 8 mesas libres». La comanda salió con
+      «MESA 8». *Nota original: 
       para llevar. Verificar en F03 con un pedido de mesa.
 - [x] F04-C3. La comanda usa el formato térmico configurado (ancho, tipografía, márgenes).
 - [x] F04-C4. Cada cambio encola una operación: el contador pasó de 6 a 12 durante la prueba.
@@ -620,8 +674,12 @@ Antes sólo podía anularse la línea completa. Ahora se elige cuántas unidades
       cantidad + variante + extras + nota; varios extras en una línea; línea sin extras; motivo en
       la comanda de cancelación; marcas COPIA/CANCELACIÓN; escapado de HTML en nombres.
       Suite total: **78 en verde**, lint y build limpios.
-- [ ] F04-U2. `src/domain/money.test.ts`: total con líneas canceladas y redondeo a centavos.
-      **Pendiente** — se cubre a fondo en F07, donde vive el cálculo de dinero.
+- [x] F04-U2. **Hecho el 20/08, y el redondeo destapó el hallazgo F07-06 (Alta).** La mitad del caso
+      —el total con líneas canceladas— ya la cubría F07. La otra mitad, el redondeo a centavos, no la
+      cubría nadie: `money.ts` **no redondeaba en ningún punto**, así que 3 × $10.05 daba
+      `30.150000000000002` mientras la pantalla anunciaba `$30.15`. Añadidos **6 casos** de regresión
+      en `src/domain/money.test.ts` (comprobado que los 6 fallan sin la corrección y pasan con ella).
+      Suite: **188 en verde**, lint y build limpios.
 
 ### Ficha PDF
 
@@ -716,8 +774,11 @@ Antes sólo podía anularse la línea completa. Ahora se elige cuántas unidades
 
 - [x] F06-C1. #1047 apareció en `/cobros` como "Lista para cobrar" por $48.00, y desapareció al
       cobrarse.
-- [ ] F06-C2. La migración `20260817162350_order_served_status.sql` respalda este estado en el
-      servidor: en pasada B confirmar que el estado `served` viaja y regresa igual (F16).
+- [x] F06-C2. **Confirmado el 20/08 en los tres puntos a la vez.** Al finalizar la orden #1085, el
+      estado es `served` **en el modelo local**, `served` **en la columna cruda de la tabla del
+      servidor**, y `served` **después de volver a bajarlo y pasarlo por `mapRemoteOrder`**. La
+      migración `20260817162350_order_served_status.sql` lo respalda y el mapeo no lo traduce ni lo
+      pierde. Cubierto además por la prueba unitaria que recorre los 7 estados (F16-U1).
 
 ### Pruebas unitarias
 
@@ -1063,20 +1124,45 @@ de producto, extra y categoría, `uploadProductImage`), RPC `replace_inventory_r
 
 ### Pruebas en navegador (pasada B) **[Requiere B]**
 
-- [ ] F10-P17. Con conexión, crear producto → confirmar en Red que el `insert` a `products` responde
-      201 y que tras recargar el producto sigue ahí.
-- [ ] F10-P18. Sin conexión (DevTools Offline) con Supabase configurado, intentar crear producto →
-      "Necesitas conexión para modificar el catálogo." El catálogo **no** es offline-first, a
-      diferencia de los pedidos. Documentarlo como límite conocido.
-- [ ] F10-P19. Editar la **receta de insumos** de un producto/variante → `replace_inventory_recipe`
-      responde sin error y la receta persiste tras recargar.
-- [ ] F10-P20. Imagen subida a Storage: la URL pública abre en una pestaña nueva.
+- [x] F10-P17. **Verificado el 20/08.** Creado `QA-20AGO-F10 producto` a **$37.50** en la categoría
+      Café. En la red, el `POST` a una tabla de catálogo responde **201** y el `PATCH` **204**;
+      tras recargar la página entera el producto **sigue ahí**, con su precio y disponible, y el
+      contador del catálogo pasó de 21 a 22. *De paso se observó algo bueno: tras cada escritura
+      llegan los `GET` de refresco (200), que es el **tiempo real ya corregido** (F16-05) disparando
+      la recarga de datos.*
+- [x] F10-P18. **Verificado, mensaje exacto.** Sin conexión y con Supabase configurado, al intentar
+      crear un producto sale **«Necesitas conexión para modificar el catálogo.»**, **no se crea
+      nada** y el catálogo se queda en 22. Confirmado como límite: el catálogo **no** es
+      *offline-first*, a diferencia de los pedidos. Queda escrito en el PDF de F16-C3.
+- [x] F10-P19. **Verificado en las dos mitades.** Se asignó al producto de prueba una receta base de
+      **0.25 L de «Bebida de almendra»**: la RPC `replace_inventory_recipe` respondió **200** sin
+      error, y en el servidor quedaron la fila de `inventory_recipes` y su línea con `quantity 0.25`.
+      **Tras recargar la página entera**, al reabrir «Configurar recetas» el modal vuelve a mostrar
+      «Bebida de almendra (L) · 0.25».
+- [x] F10-P20. **Verificado.** La URL pública de Storage de un producto con imagen
+      (`/storage/v1/object/public/product-images/…`) **abre en una pestaña nueva y muestra la
+      imagen** (1280×854). No hizo falta subir nada nuevo: ya había un producto con imagen en
+      Storage.
 
 ### Funcionalidades conectadas a verificar
 
-- [ ] F10-C1. Los cambios aparecen en el selector de productos de `/venta/nueva` (F02).
-- [ ] F10-C2. Las recetas alimentan el consumo teórico de `/insumos` y `/reportes` (F12, F13).
-- [ ] F10-C3. Un producto dado de baja no rompe los reportes históricos (F13).
+- [x] F10-C1. **Verificado.** El producto recién creado aparece en el selector de `/venta/nueva`
+      con su precio $37.50 y su descripción, y se encuentra escribiendo en el buscador.
+- [x] F10-C2. **Verificado de punta a punta, no por inferencia.** Se vendió el producto de prueba
+      (orden #1086) y se marcó listo en la barra. **Detalle que conviene dejar escrito:** el consumo
+      teórico **no se registra al despachar, sino al marcar el renglón como `prepared`** — el
+      disparador `capture_recipe_usage` sale temprano si el estado no es ése
+      (`20260817210000_inventory_counting_and_recipes.sql:120`). Al marcarlo listo se creó el evento
+      («QA-20AGO-F10 producto», cantidad 1) con su línea **«Bebida de almendra 0.25»**, es decir
+      `receta × cantidad`. Y en `/insumos`, la tabla «Consumo contado vs. receta teórica» muestra la
+      fila **«Bebida de almendra · TEÓRICO 0.25 L»**.
+- [x] F10-C3. **Verificado con el caso completo.** Se dio de baja el producto de prueba **después**
+      de haberlo vendido (orden #1086). En el servidor queda `active: false`, desaparece de la caché
+      local y el catálogo vuelve de 22 a 21 — pero **Reportes sigue mostrando la venta intacta**:
+      $93.15, 2 tickets, la orden #1086 y el nombre del producto, sin errores ni `NaN`. Aguanta
+      porque el renglón guarda su propia copia del nombre y el precio (ya visto en F10-P11).
+      *Observación: la eliminación **no pide confirmación** antes de aplicarse; es el comportamiento
+      ya documentado en F10-P11.*
 
 ### Pruebas unitarias
 
@@ -1128,11 +1214,17 @@ de producto, extra y categoría, `uploadProductImage`), RPC `replace_inventory_r
       `open` y se alcanza desde `/pedidos`, que conserva su enlace— pero desaparece del salón, que
       es donde el equipo trabaja, con el riesgo real de que nadie llegue a cobrarla. Corregido.
 - [x] F11-P8. Reactivar una mesa dada de baja la devuelve al croquis con su posición.
-- [ ] F11-P9. **[Requiere B]** Con conexión, los cambios llegan a `cafe_tables` (verificar en Red) y
-      persisten tras recargar.
-- [ ] F11-P10. **[Requiere B]** Sin conexión: `updateTable` escribe local pero no en el servidor —
-      confirmar si queda inconsistencia al reconectar. Nota: a diferencia de los pedidos, las mesas
-      **no pasan por la cola de sincronización**. Documentarlo como límite.
+- [x] F11-P9. **Verificado el 20/08.** Se cambiaron los lugares de la Mesa 8 de 2 a 3: en la red, el
+      `PATCH` a `cafe_tables` responde **204**, el servidor devuelve `seats: 3` y **tras recargar la
+      página entera el cambio sigue**. *De paso quedó confirmada en pantalla la corrección **F11-01**:
+      el botón «Quitar mesa» aparece **deshabilitado** con el aviso «Tiene la cuenta #1085 abierta
+      (Mesa 8). Cóbrala o cancélala antes de dar la mesa de baja.»*
+- [!] F11-P10. **Respondida la pregunta del caso, y con un hallazgo: F11-02.** Confirmado que las
+      mesas **no pasan por la cola**: al editar sin conexión, el dispositivo mostró el valor nuevo
+      (5 lugares) y la cola siguió en **0 operaciones**. **¿Queda inconsistencia al reconectar? No.**
+      La descarga remota pisa el valor local y todo vuelve a coincidir (dispositivo 3, servidor 3).
+      **Pero el precio es que el cambio se pierde en silencio**, y el aviso de la pantalla promete lo
+      contrario → **F11-02**.
 
 ### Funcionalidades conectadas a verificar
 
@@ -1196,7 +1288,18 @@ RPC `record_inventory_count`, `record_inventory_movement` · **Pasada:** B · **
       consumo, sin inventar un número.
 - [x] F12-P10. Con un solo conteo la fila dice "Falta línea base o segundo conteo" y deja físico y
       diferencia en "—". Verificado sobre los 6 insumos que están en ese estado.
-- [ ] F12-P11. Offline: registrar un conteo sin conexión → queda encolado y se sincroniza al volver
+- [x] F12-P11. **Verificado el 20/08 con un conteo real.** Sin conexión se registró un conteo de
+      **9.5 L** con nota: quedó encolado como `record_inventory_count` en estado **`pending`**, y al
+      restaurar la red pasó a **`synced` con 0 reintentos** y apareció en el servidor
+      (`inventory_counts` + `inventory_count_lines`) con su cantidad y su nota.
+      *Se contó sobre el insumo de prueba `QA-20AGO-Leche` —reactivado para el caso y devuelto a
+      baja lógica al terminar— **precisamente porque los conteos son inmutables por diseño y no se
+      pueden borrar** (§0.8 L2): contar un insumo real habría dejado una lectura falsa permanente en
+      el análisis de varianza del café.*
+      *Nota de método: las claves de idempotencia comparten los primeros caracteres porque el formato
+      es `${deviceId}:${id}` (`offline.ts:8`) — el prefijo es el dispositivo, no un duplicado. Se
+      comprobó para descartar un falso hallazgo.*
+      Original: queda encolado y se sincroniza al volver
       (a diferencia del catálogo, los insumos **sí** pasan por `offline.ts`). Verificar la
       idempotencia: no debe duplicarse al reintentar (F16). **Pendiente**, se cruza con F16-P3/P7.
 
@@ -1306,18 +1409,59 @@ Es lo que el cliente va a mirar primero. Cada cifra debe cuadrar con una suma he
 
 ### Funcionalidades conectadas a verificar
 
-- [ ] F13-C1. Los totales cuadran con el arqueo de `/caja` para el mismo turno (F09) — al menos en
-      efectivo.
-- [ ] F13-C2. Los descuentos aplicados en F07 se ven reflejados en la venta neta.
-- [ ] F13-C3. El indicador de insumos coincide con `/insumos` (F12).
-- [ ] F13-C4. Los nombres de empleado provienen de `staff_profiles` (F14).
+- [!] F13-C1. **Sólo verificable de forma trivial hoy, y conviene decirlo así.** Lo que sí queda
+      comprobado y es sustantivo: **la suma de métodos cuadra al centavo con la venta neta** —
+      Efectivo $0.00 + Tarjeta $0.00 + Transferencia $93.15 = **$93.15**, que es exactamente la cifra
+      de «Ventas». Lo que **no** se pudo ejercitar a fondo: `/caja` **no tiene ningún turno abierto**
+      y los dos cobros de la jornada se hicieron **por transferencia** (deliberadamente, para no
+      alterar el arqueo real del café), así que el cruce en efectivo se cumple con $0 en ambos lados
+      y no prueba gran cosa. Hacerlo de verdad exigiría abrir un turno y cobrar en efectivo, lo que
+      dejaría un turno abierto en producción contra la regla de limpieza L3. **La discrepancia real
+      entre Caja y Reportes ya está documentada y es un hallazgo aparte: F09-01**, que delimita el
+      efectivo por eventos distintos en cada pantalla.
+- [x] F13-C2. **Verificado cuadrando a mano.** Con dos ventas cobradas hoy —#1082 por $63.00 y
+      #1086 por $37.50 con un descuento de **$7.35**— Reportes muestra «Descuentos **$7.35**»,
+      «Tickets cobrados **2**» y «Ventas **$93.15**», que es exactamente `63.00 + (37.50 − 7.35)`.
+      El descuento se refleja en la venta neta.
+      **Aclaración de vocabulario que debe ir al PDF:** en esta aplicación «bruto» significa *antes
+      de reversiones*, **no** antes de descuentos — el `orderTotal` de `reports.ts:216` ya resta el
+      descuento. Al cuadrar a mano el «Ticket promedio (bruto)» ($46.58 = 93.15 ÷ 2) parece no
+      encajar si uno entiende «bruto» como *antes de descuentos* ($100.50 ÷ 2 = $50.25). **No es un
+      defecto** y la fórmula es coherente con el código, pero el dueño de un café puede leerlo en el
+      otro sentido; conviene decirlo explícitamente en la ficha. Relacionado con **F13-01**.
+- [x] F13-C3. **Coincide, comprobado con un dato nuevo creado a propósito.** Tras vender el producto
+      con receta, `/insumos` muestra «Bebida de almendra · TEÓRICO **0.25 L**» y Reportes, en su
+      tabla «Consumo físico vs. receta teórica», muestra **la misma cifra**.
+      **Diferencia legítima que conviene dejar escrita para que nadie la marque como fallo:**
+      `Lechuga` aparece con 0.5 en `/insumos` y con 0 en Reportes. No es un descuadre — `/insumos`
+      usa una ventana fija de **30 días** y Reportes está filtrado al periodo elegido («Hoy»),
+      mientras ese consumo es del 18/08.
+- [x] F13-C4. **Verificado en vivo, con una prueba que no existía antes.** El filtro «Empleado» de
+      Reportes ofrece ahora **«Ana López», «Gerente» y «QA 20 agosto»** — este último es el acceso
+      creado durante F14-P2, así que los nombres salen de `staff_profiles` y se actualizan solos, no
+      son un literal.
 
 ### Pruebas unitarias
 
-- [ ] F13-U1. `src/domain/reports.test.ts` (11 casos) para 444 líneas de lógica es poco. **Ampliar**
-      con: agrupación por día cruzando medianoche; agrupación por hora; ranking de productos con
-      empates; periodo vacío; venta revertida **fuera** del rango cuyo cierre sí está dentro (y
-      viceversa) — este último es el caso donde más fácil se equivocan los reportes.
+- [x] F13-U1. **Ampliado el 20/08: de 11 a 19 casos.** Se revisó primero qué faltaba de verdad —la
+      agrupación por hora y por día ya tenían 2 casos cada una— y se añadieron **8** sobre los huecos
+      reales:
+      · **Cruce de medianoche (2).** Es el de más valor. La zona horaria del reporte es
+      `America/Mexico_City` (UTC−6 todo el año), así que la medianoche local son las **06:00 UTC**.
+      Dos ventas cerradas a las `05:30Z` y `06:30Z` caen **el mismo día en UTC** y deben quedar en
+      **días locales distintos** (16 y 17) y en las horas 23 y 0. Agrupar por UTC sumaría el cierre
+      de una noche al día siguiente.
+      · **Empates en el ranking (3).** No hay desempate implementado: `sortProducts` se apoya en que
+      el `sort` de JavaScript es **estable** (normativo desde ES2019), así que dos productos con la
+      misma cantidad conservan el orden de entrada. Queda fijado por prueba para que nadie lo cambie
+      sin darse cuenta. Cubre también el recorte por límite.
+      · **Periodo vacío (1).** Sin ventas, el ticket promedio debe ser **0 y no `NaN`** —que en
+      pantalla saldría como «$NaN»—, las filas vacías y los tres métodos de pago a cero.
+      · **Reversión dentro o fuera del rango (2), el caso que el propio plan señalaba como el más
+      fácil de equivocar.** Cerrada dentro y revertida después → cuenta entera aquí (bruta 180,
+      1 ticket, reversiones 0). Cerrada antes y revertida dentro → **resta aquí sin sumar ticket**
+      (bruta 0, 0 tickets, reversiones 180, neta **−180**). Es la mecánica que subyace a **F09-01**.
+      Suite total: **196 en verde**, lint y build limpios.
 
 ### Ficha PDF
 
@@ -1350,11 +1494,26 @@ todo F14 falla por infraestructura, no por código.
 - [x] F14-P1. La lista muestra las cuatro columnas pedidas: `Gerente / @gerente / Gerente / Activo`
       y `Ana López / @ana / Barista / Desactivado`, más las métricas «Personal activo 1»,
       «Gerentes 1» y «PIN restablecido 0».
-- [ ] F14-P2. Crear un empleado `QA-20AGO-user` con rol barista → aparece en la lista.
-      **Lo hace el responsable:** exige fijar un PIN, es decir crear una credencial real en
-      producción.
-- [ ] F14-P3. Iniciar sesión con ese usuario nuevo en una ventana de incógnito → entra con permisos
-      de barista (cruce con F01). **Lo hace el responsable** (regla 9).
+- [x] F14-P2. **Hecho por el responsable el 20/08.** Se creó `QA 20 agosto` / `@qa-20ago-user` /
+      Barista / Activo. **Ojo con el nombre:** el plan pedía `QA-20AGO-user`, pero el campo aplica
+      `toLowerCase()` y filtra a `[a-z0-9._-]` (`PeoplePage.tsx:105`), así que el usuario real es
+      **`qa-20ago-user`** en minúsculas. No es un defecto: el recuadro de ayuda lo advierte
+      («Minúsculas, números, puntos y guiones.») y es lo que evita la colisión por acentos de
+      F01-03. Verificado en las dos capas: aparece en la lista con sus cuatro columnas, «Personal
+      activo» sube de 1 a **2**, «Gerentes» se queda en **1** (correcto: es barista) y «PIN
+      restablecido» sigue en **0**; y en el servidor, `staff_profiles` devuelve la fila con
+      `role: barista`, `active: true`.
+- [x] F14-P3. **Hecho por el responsable el 20/08.** Entró como `@qa-20ago-user` y la aplicación lo
+      recibió como **Barista** («Tu turno · QA 20 agosto», tarjeta de sesión «QA 20 agosto ·
+      Barista»). La barra lateral muestra **sólo la sección «Operación»**: la de «Gestión» no
+      aparece. Comprobado además que el límite no es cosmético — tecleando la ruta a mano,
+      `/personal`, `/catalogo`, `/mesas`, `/reportes`, `/insumos` y `/configuracion` **redirigen las
+      seis a `/inicio`**, mientras `/caja` y `/cobros` sí abren, que es justo lo que ofrece su menú.
+      Y con el token de esa misma sesión de barista, la Edge Function `manage-staff` responde
+      **403 · «Sólo gerencia puede administrar personal.»**
+      *En vez de una ventana de incógnito se usó un segundo servidor de desarrollo en el puerto
+      5175: otro origen, así que la sesión de gerencia del 5174 no se toca y ambas quedan
+      verificables desde fuera. Mismo efecto, y permite comprobar las dos sesiones a la vez.*
 - [!] F14-P4. **Hallazgo real → F14-01.** No crea el duplicado (verificado: el personal siguió
       intacto), **pero el aviso no era claro**: devolvía el error crudo de Supabase Auth,
       *«A user with this email address has already been registered»* — en inglés, en una pantalla
@@ -1367,17 +1526,46 @@ todo F14 falla por infraestructura, no por código.
       probado con `123` → «El PIN debe ser numérico, de 6 a 8 dígitos.» y **nada creado** en
       `staff_profiles`. El formulario vacío lo frena la validación nativa del navegador (`required`),
       que es por lo que el botón puede estar habilitado sin peligro.
-- [ ] F14-P6. **Restablecer PIN** de ese empleado → el PIN viejo deja de funcionar y el nuevo sí.
-      **Lo hace el responsable** (depende de P2 y de entrar con la cuenta).
-- [ ] F14-P7. El contador de restablecimientos de PIN (que lee `audit_log`) sube en uno.
-      **Depende de P6.** Comprobado que el contador existe y hoy marca **0**, y que `audit_log` es
-      legible desde la sesión de gerencia (devuelve filas con `action` y `created_at`), así que la
-      fuente del contador funciona.
-- [ ] F14-P8. **Desactivar** al empleado → al intentar entrar, "Este acceso está desactivado."
-      **Depende de P2.** No se probó sobre `ana` para no tocar a una persona real del negocio.
-- [ ] F14-P9. Reactivarlo → vuelve a entrar. **Depende de P8.**
-- [ ] F14-P10. Cambiar el rol de barista a gerente → tras volver a entrar, ve el menú de Gestión.
-      **Depende de P2.**
+- [x] F14-P6. **Hecho por el responsable el 20/08. Se comporta como debe.** Tras restablecer el PIN
+      desde la tarjeta del empleado, el intento con el PIN viejo se rechaza con **«Usuario o PIN
+      incorrectos.»** —mensaje genérico, que es lo correcto: no delata si el usuario existe— y el PIN
+      nuevo entra sin problema (sesión validada a las 03:40:21, rol `barista`).
+      **Observación de seguridad que el caso no pedía y conviene conocer → F14-02:** el
+      restablecimiento **no cierra la sesión que el empleado ya tuviera abierta**. Se dejó a
+      propósito la pestaña B dentro durante el restablecimiento y el token siguió siendo válido
+      contra el servidor.
+- [x] F14-P7. **Verificado el 20/08.** La tarjeta «PIN restablecido» pasó de **0 a 1** al terminar
+      P6, sin recargar. Contrastado con la fuente y no sólo con la pantalla: `audit_log` trae las dos
+      filas nuevas —`create_staff` y `reset_pin`— sobre la misma `entity_id`
+      (`91862ddd-…` = `@qa-20ago-user`), las dos con el `actor_id` de la sesión de gerencia, que es
+      lo que permite responsabilizar a alguien.
+- [!] F14-P8. **El caso, tal como está escrito, pasa: el mensaje es exactamente «Este acceso está
+      desactivado.»** Pero al probarlo de más salió **F14-02 (Alta)**: desactivar **no cierra la
+      sesión que el empleado ya tuviera abierta**. Se dejó a propósito la pestaña B dentro mientras
+      gerencia desactivaba; con `active: false` ya confirmado en `staff_profiles`, esa sesión siguió
+      leyendo pedidos, **reservó el folio 1083** de la secuencia real y recargando la página entera
+      **seguía dentro**. Tampoco lo tapa el servidor. Marcado `[!]` por ese hallazgo, no por el
+      mensaje. *(Se probó sobre `@qa-20ago-user`, no sobre `ana`, que es una persona real.)*
+- [x] F14-P9. **Verificado el 20/08.** Al reactivar desde la tarjeta, `active` vuelve a `true` en
+      `staff_profiles` y «Personal activo» sube otra vez de 1 a **2**. El responsable entró de nuevo
+      con el mismo PIN sin ningún problema (sesión validada a las 03:46:54), otra vez como **barista**
+      y sin menú de «Gestión». La reactivación no cambia el rol ni pide PIN nuevo.
+- [!] F14-P10. **No se puede ejecutar: la aplicación no permite cambiar el rol de nadie → hallazgo
+      F14-04 (Media).** Comprobado en las dos capas y en vivo, no sólo leyendo el código. En la
+      interfaz, el selector de rol existe **sólo en el formulario de alta**; la tarjeta de un
+      empleado ya creado ofrece únicamente «Restablecer PIN» y «Desactivar acceso». Y en el
+      servidor, la Edge Function respondió `400 · «Acción desconocida.»` a las cuatro variantes
+      probadas (`update_role`, `set_role`, `update`, `change_role`), porque sólo admite `create` y
+      `reset_pin`.
+      **Hallazgo de seguridad de signo contrario, y es una buena noticia:** al comprobar si la
+      columna `role` se podía escribir saltándose la función, resultó que **la gerencia sí puede**
+      actualizarla directamente sobre `staff_profiles` (es la misma vía por la que el propio botón
+      de desactivar escribe, `PeoplePage.tsx:200`). Eso obligaba a preguntar lo evidente: **¿puede
+      un barista ascenderse solo?** **No.** Probado desde la sesión real del barista, la RLS lo
+      filtra: la actualización de su propio `role` a `manager` devuelve **0 filas cambiadas**,
+      desactivar al gerente devuelve **0 filas**, y de `staff_profiles` **sólo alcanza a leer su
+      propia fila**. El estado del personal quedó intacto tras las pruebas (comprobado). *El rol del
+      usuario de prueba se cambió y se devolvió a `barista` en el acto durante esta comprobación.*
 - [ ] F14-P11. Intentar desactivar la **propia** cuenta del gerente conectado.
       **Excluido a propósito el 20/08 por decisión del responsable:** si el sistema lo permite, deja
       al negocio sin ningún acceso de gerencia y habría que recuperarlo desde Supabase. Queda como
@@ -1388,7 +1576,9 @@ todo F14 falla por infraestructura, no por código.
 - [x] F14-C1. **Verificado en F13:** la columna «Empleado» del detalle auditable y de la tabla de
       Incidencias muestra «Gerente», y el filtro por empleado ofrece «Ana López» y «Gerente» — los
       nombres salen de `staff_profiles`, no de un literal.
-- [x] F14-C2. **Verificado por código, en las dos capas.** En el cliente, `/personal` vive dentro de
+- [x] F14-C2. **Verificado por código el 20/08 y reverificado con una sesión real de barista en
+      F14-P3** (redirección en las seis rutas de gestión y 403 de la Edge Function con su propio
+      token). En las dos capas. En el cliente, `/personal` vive dentro de
       `ManagerOnly` (ya comprobado en F01-P8: el barista es redirigido). En el servidor, la Edge
       Function repite la comprobación antes de cualquier acción y responde **403** con «Sólo gerencia
       puede administrar personal.» (`manage-staff/index.ts:43`), de modo que no basta con saltarse la
@@ -1409,8 +1599,9 @@ todo F14 falla por infraestructura, no por código.
 
 ### Ficha PDF
 
-- [ ] F14-D1. `docs/qa/fichas/F14-personal.html` redactado
-- [ ] F14-D2. `docs/qa/pdf/F14-personal.pdf` generado
+- [x] F14-D1. `docs/qa/fichas/F14-personal.html` redactado el 20/08, partiendo de `_plantilla.html`
+- [x] F14-D2. `docs/qa/pdf/F14-personal.pdf` generado con Chrome (3 páginas, las mismas que F13 y
+      F16) y **revisado visualmente** en el navegador. **Con esto están las 16 de 16.**
 
 ---
 
@@ -1496,43 +1687,122 @@ porque necesita datos generados por las anteriores.
 
 ### Pruebas en navegador
 
-- [ ] F16-P1. Con conexión, el `SyncPill` dice "Todo sincronizado".
-- [ ] F16-P2. Cortar la red (DevTools → Offline) → el indicador pasa a "Sin conexión" con el conteo
-      de cambios.
-- [ ] F16-P3. Offline: crear un pedido, agregarle productos y enviarlo a preparación → todo funciona
-      y el contador de pendientes sube.
-- [ ] F16-P4. Offline: recargar la página → los datos siguen ahí (IndexedDB) y la sesión se mantiene.
-- [ ] F16-P5. Restaurar la red → sincroniza solo (evento `online` → `forceSync`) y el contador baja a
-      cero.
-- [ ] F16-P6. **[Requiere B]** Tras sincronizar, recargar y confirmar que el pedido existe en el
-      servidor con los mismos importes y el mismo estado.
-- [ ] F16-P7. **Idempotencia:** provocar un doble envío (sincronizar dos veces seguidas / recargar a
-      medias) → el pedido **no** se duplica. La clave de idempotencia de `offline.ts` es lo que lo
-      evita; es la prueba más importante de esta sección.
-- [ ] F16-P8. Cobrar un pedido offline y sincronizar → el pago llega una sola vez y el arqueo no se
-      duplica (cruce con F09).
-- [ ] F16-P9. Provocar un conflicto (modificar el mismo pedido en dos pestañas, una offline) →
-      verificar si el estado pasa a `review_required` y cómo se comunica al usuario.
-- [ ] F16-P10. Con operaciones en `review_required`, el indicador dice "Hay operaciones por revisar"
-      — comprobar si existe alguna manera de resolverlas desde la interfaz. Si no la hay, es un
-      límite que debe quedar escrito en el PDF.
-- [ ] F16-P11. **[Requiere B]** Tiempo real: con dos ventanas abiertas y sesión iniciada, un cambio
-      en una debe reflejarse en la otra por el canal `branch:main` sin recargar.
-- [ ] F16-P12. Login offline sin sesión previa → "El primer acceso o cambio de usuario requiere
-      conexión." (cruce con F01).
+- [x] F16-P1. **Verificado el 20/08 en producción.** Con conexión, la barra lateral dice «Todo
+      sincronizado» y la pastilla de cabecera «Sincronizado». *(Son dos indicadores distintos:
+      `ProtectedLayout.tsx:38` y `SyncPill.tsx:7`. Ambos coherentes.)*
+- [x] F16-P2. **Verificado.** Al cortar, la barra lateral pasa a «**0 cambios · Sin conexión**» y la
+      pastilla a «Sin conexión». *Método: la aplicación se apoya enteramente en `navigator.onLine` y
+      en los eventos `online`/`offline` (30 usos en `AppContext`), así que se replicó exactamente eso
+      y **además** se bloqueó el tráfico real a `supabase.co`, para que ningún camino que ignore la
+      bandera pudiera colarse y dar un aprobado falso.*
+- [x] F16-P3. **Verificado con un pedido real.** Sin conexión se creó `QA-F16-offline` (para llevar),
+      se le añadió 1 × Espresso $48 + extra «Carga extra» $15 y nota de preparación, y se envió a la
+      barra. El catálogo se sirvió de IndexedDB **con las categorías en su orden correcto** (Café
+      primero: la corrección de F02-01 aguanta también sin conexión). Quedó `preparing`, el renglón
+      `dispatched` con su lote, y **dos operaciones encoladas** (`create_order` y
+      `dispatch_order_items`). La comanda salió íntegra, con el extra y la nota — es decir, las
+      correcciones **F04-01 y F04-02 también funcionan sin conexión**.
+- [x] F16-P4. **Verificado.** Tras recargar la página entera, la **sesión de gerente sigue abierta**
+      y el pedido sigue ahí con su folio, su estado `preparing` y sus renglones. *Salvedad de método:
+      la bandera `navigator.onLine` no sobrevive a una recarga con las herramientas disponibles, así
+      que la recarga se hizo con conectividad. Lo que el caso comprueba de fondo —que reiniciar el
+      dispositivo no pierde ni los datos ni la sesión— sí quedó comprobado.*
+- [x] F16-P5. **Verificado, y por la vía que pide el caso.** Se restauró la red **sin recargar**: el
+      evento `online` disparó `forceSync` solo, las dos operaciones pasaron de `pending` a `synced` y
+      el pedido quedó `synced`. Contador a cero.
+- [x] F16-P6. **Verificado contra el servidor, campo a campo.** Bajando la orden con
+      `REMOTE_ORDER_SELECT` y pasándola por `mapRemoteOrder`, coinciden **folio (1082), estado
+      (`preparing`), total ($63.00), nombre, el renglón con su precio, el extra con su importe, la
+      nota, el estado del renglón (`dispatched`) y el identificador del lote**. La ida y vuelta es
+      fiel.
+- [x] F16-P7. **La prueba más importante de la sección, y la pasa.** Se devolvieron al estado
+      `pending` las dos operaciones **ya sincronizadas**, conservando su clave de idempotencia, y se
+      forzó la cola **dos veces seguidas**. Resultado: el pedido **no se duplicó** —sigue habiendo 1
+      pedido, 1 folio y 1 renglón— y `offline_operations` conserva exactamente **2 filas**. El
+      `on conflict (idempotency_key) do nothing` del servidor hace su trabajo. *De paso queda
+      confirmado en vivo **F16-02**: el servidor marcó las operaciones como duplicadas y el cliente
+      informó `{synced:2}` igualmente, porque descarta el resultado por operación.*
+- [x] F16-P8. **Verificado con un cobro real.** Se finalizó `QA-F16-offline`, se cortó la red y se
+      cobró sin conexión: saldo a $0.00, ticket impreso correctamente (con «TRANSFERENCIA» en
+      español —corrección F06-01— más el extra y la nota), orden `closed` en local y **dos
+      operaciones encoladas**. Al restaurar la red quedó en el servidor **exactamente un pago** de
+      $63.00, la orden `closed` y la cola en 0. Sin duplicación.
+      *Se cobró por **transferencia**, no en efectivo, a propósito: así el cobro de prueba no altera
+      el arqueo de caja real del café. El cruce con F09 queda cubierto por el lado que importa, que
+      es la no duplicación del pago.*
+- [x] F16-P9. **Verificado con un conflicto reproducible.** En vez de dos ediciones simultáneas (que
+      el servidor resuelve por *upsert*, sin conflicto real), se provocó el caso que sí falla: una
+      operación que **el servidor rechaza lanzando excepción** — un `apply_discount` encolado desde
+      la sesión de un **barista**, cuando el descuento está reservado a gerencia. La secuencia es
+      exactamente la diseñada: intento 1 → `pending` (1 intento contado), intento 2 → `pending` (2),
+      **intento 3 → `review_required`**. Después sigue reintentando y sigue fallando.
+- [x] F16-P10. **Comprobado en pantalla, y confirma el límite. El indicador acierta; la salida no
+      existe.** Con la operación en `review_required`, la barra lateral dice exactamente **«Hay
+      operaciones por revisar»** (`ProtectedLayout.tsx:38`). Pero **no hay ninguna forma de
+      resolverlo desde la interfaz**: ni botón de reintentar, descartar o revisar, ni pantalla de
+      operaciones pendientes (`/operaciones`, `/sincronizacion` y `/pendientes` no existen), ni una
+      sola línea que explique al usuario qué debe hacer. El aviso es un callejón sin salida. Esto
+      **verifica en pantalla el límite que F16-03 sólo tenía documentado por lectura de código**, y
+      queda escrito en el PDF.
+      *Aviso de método: al forzar la cola llamando directamente a `syncPendingOperations()` el
+      indicador seguía diciendo «Todo sincronizado», porque quien actualiza el estado de React es
+      `forceSync`. **Eso era artefacto de la prueba, no un defecto**; disparando la sincronización
+      por la vía de la aplicación, la etiqueta es la correcta. Se deja anotado para que nadie lo
+      apunte como hallazgo al repetir la prueba.*
+- [x] F16-P11. **Falló, se corrigió durante la sesión y quedó verificado. Ver hallazgo F16-05
+      (Alta).** *Primer intento:* con las dos ventanas abiertas y sesión en ambas, el canal
+      `realtime:branch:main` **nunca llegaba a `joined`** —ciclaba entre `errored` y `joining` con el
+      socket abierto—, en las dos sesiones, gerente y barista, así que no era cuestión de rol.
+      Causa: faltaba la política de `realtime.messages` que la propia migración avisa de aplicar a
+      mano. *Tras aplicarla el responsable:* el canal pasa a **`joined`** en ambas ventanas y la
+      propagación funciona. **Prueba de punta a punta:** desde la ventana de **gerencia** se canceló
+      la orden #1084 con motivo; la ventana del **barista**, sin tocarla y **sin recargar**
+      (`performance` sigue marcando la navegación original, no una recarga), pasó a mostrar
+      «Cancelado» **y el motivo**. Cruza los dos roles y las dos direcciones.
+- [x] F16-P12. **Verificado, y se comporta mejor de lo que pedía el caso.** Sin sesión previa y sin
+      conexión, la pantalla de acceso **avisa antes de dejar intentarlo** —«Sin conexión. Sólo una
+      sesión que ya estaba abierta puede continuar operando.»— y además **deshabilita el botón
+      "Entrar"** (comprobado: `disabled === true`). El mensaje que cita el plan, «El primer acceso o
+      cambio de usuario requiere conexión.», es el de la excepción interna
+      (`AppContext.tsx:273`) y no llega a verse nunca, porque no se puede ni pulsar el botón.
 
 ### Funcionalidades conectadas a verificar
 
-- [ ] F16-C1. Los pedidos (F02–F08) son offline-first.
-- [ ] F16-C2. Los insumos (F12) también pasan por la cola.
-- [ ] F16-C3. El catálogo (F10), las mesas (F11), la caja (F09) y el personal (F14) **exigen
-      conexión**. Confirmar los mensajes de cada uno y consolidar la lista en el PDF: es la respuesta
-      a "¿qué puedo hacer si se cae el internet?", que el cliente va a preguntar.
+- [x] F16-C1. **Demostrado de punta a punta, no por lectura.** Sin conexión se hizo el ciclo
+      completo sobre un pedido real: crearlo, añadirle producto con extra y nota, enviarlo a
+      preparación (con su comanda impresa), finalizarlo, **cobrarlo** e imprimir el ticket. Todo
+      funcionó, todo quedó encolado, y al volver la conexión todo subió una sola vez y sin
+      duplicados (P3, P5, P6, P7 y P8).
+- [x] F16-C2. **Confirmado.** El conteo y el movimiento de insumos se encolan con
+      `queueOperation("record_inventory_count"…)` y `queueOperation("record_inventory_movement"…)`
+      (`InventoryPage.tsx:133,142`), y viajan por **su propia RPC** con clave de idempotencia
+      (`offline.ts:48-49`). La condición es `if (supabase)`, **no** `navigator.onLine`, así que
+      encolan correctamente sin conexión. Cubierto además por 2 casos de `offline.test.ts`, uno de
+      ellos comprobando que **un insumo que falla no arrastra al lote de pedidos**. Cruza con
+      F12-P11.
+- [x] F16-C3. **Consolidado. Tres de las cuatro avisan bien; la cuarta no → hallazgo F14-05.**
+      · **Catálogo:** bloquea y explica, con mensaje propio por cada cosa — «Necesitas conexión para
+      modificar el catálogo / los extras / las categorías.» (`AppContext.tsx:419-543`).
+      · **Caja:** bloquea y explica, por acción — «Necesitas conexión a internet para abrir un turno
+      / registrar un retiro / hacer el corte.» (`CashPage.tsx:200,210,222`).
+      · **Mesas:** **no bloquea, avisa** — «Sin conexión: los cambios se ven aquí pero no se
+      guardarán hasta reconectar.» (`TablesPage.tsx:51`). Es un comportamiento distinto de los otros
+      dos y hay que contarlo tal cual al cliente. Cruza con F11-P10.
+      · **Personal:** **no comprueba la conexión en ningún punto** —`PeoplePage.tsx` no menciona
+      `navigator.onLine` ni una vez— y sin conexión **escupe `TypeError: Failed to fetch` en
+      pantalla**. Ver **F14-05**.
 
 ### Pruebas unitarias
 
-- [ ] F16-U1. `src/lib/remoteOrders.test.ts` (14 casos) cubre el mapeo. **Confirmar** que hay ida y
-      vuelta de todos los estados y de los pagos con propina.
+- [x] F16-U1. **Confirmado el 20/08, con dos huecos cerrados.** `src/lib/remoteOrders.test.ts` tenía
+      **16** casos, no 14. El mapeo está **completo frente al modelo local**: `Order` no guarda
+      `closedAt` ni `reversedAt`, así que no hay ningún campo del servidor que se pierda, y
+      `REMOTE_ORDER_SELECT` pide explícitamente los lotes de despacho. La ida y vuelta de los **7
+      estados de orden** y de la **propina** ya estaba cubierta. Faltaban dos casts sin prueba, de la
+      misma naturaleza que el estado de orden (que sí la tenía, precisamente por eso): el **estado
+      del renglón** (sólo se ejercitaban `prepared` y `cancelled` de los cuatro) y el **método de
+      pago** (sólo `cash` de los tres). Añadidos **2 casos** que recorren los cuatro estados de
+      renglón y los tres métodos con propina. Suite: **182 en verde**, lint y build limpios.
 - [x] F16-U2. **Hecha el 20/08 y rentable de inmediato: destapó el hallazgo F16-01 (Alta).**
       `src/lib/offline.test.ts` nuevo, **16 casos**, con un doble en memoria de la tabla Dexie y
       Supabase simulado (sin IndexedDB ni navegador). Cubre lo pedido —operación aceptada → `synced`;
@@ -1555,12 +1825,97 @@ porque necesita datos generados por las anteriores.
 
 ## Cierre
 
-- [ ] Z1. Todas las funcionalidades en ✅ o ⚠️ en el tablero (§0.6)
-- [ ] Z2. Bitácora de hallazgos (§0.7) completa, con severidad asignada a cada uno
-- [ ] Z3. Los 16 PDF en `docs/qa/pdf/`
-- [ ] Z4. Limpieza (§0.8) terminada
-- [ ] Z5. Resumen ejecutivo para el cliente: qué está listo, qué tiene límites conocidos y qué quedó
-      fuera de alcance (puede armarse concatenando la sección "Qué NO hace" de las 16 fichas)
+- [x] Z1. **Las 16 funcionalidades están en ✅ o ⚠️.** Ninguna queda en ⬜ ni en 🟡.
+- [x] Z2. **Bitácora completa, con severidad en cada entrada. 50 hallazgos** a lo largo de las tres
+      jornadas, contados sobre el propio documento:
+      · **34 corregidos y verificados** (los 7 de esta jornada: F07-06, F16-05, F16-01 ya venía,
+      más los de pasadas anteriores).
+      · **7 abiertos**, todos con su análisis del arreglo escrito: **F08-05** (Alta), **F14-02**
+      (Alta), F11-02, F14-03, F14-04, F14-05 y F16-04 (Media). Los de F14 quedaron abiertos **por
+      decisión expresa del responsable**; F08-05 y F11-02 se hallaron al final y no se abrió
+      corrección para no dejarla a medias sin avisar.
+      · **9 documentados sin acción**: límites conocidos que van al PDF (F02-02, F04-04, F04-05,
+      F13-02, F13-03, F16-02, F16-03) y **2 retractados tras comprobarlos** — F01-03, descartado
+      porque la colisión no puede producirse, y F09-02, que era un falso positivo de la prueba.
+- [x] Z3. **Los 16 PDF están en `docs/qa/pdf/`.** El de F14 se redactó el 20/08 y el de F16 se
+      regeneró con los resultados de navegador.
+- [x] Z4. **Limpieza terminada** (§0.8, L1 a L8), con el inventario de lo que quedó en producción
+      declarado en L8.
+- [x] Z5. **Resumen ejecutivo redactado**, abajo.
+
+### Z5 · Resumen ejecutivo para el cliente
+
+*Redactado el 20/08/2026, al terminar la revisión. Escrito para leerse sin conocer el código.*
+
+**Qué se revisó.** Las 16 funcionalidades del punto de venta, una por una, contra la base real del
+café: acceso y roles, toma de pedidos, salón, comanda, barra, entrega, cobro, cancelación y
+reversión, caja, catálogo, mesas, insumos, reportes, personal, impresión y trabajo sin internet.
+Cada una tiene su ficha en PDF con lo que hace, lo que **no** hace y sus límites. Son 16 fichas.
+
+**Qué está listo para entregar.** El flujo diario completo funciona y está verificado con dinero
+real: tomar un pedido, mandarlo a la barra con su comanda, marcarlo listo, entregarlo, cobrarlo con
+descuento o propina, imprimir el ticket y verlo reflejado en los reportes. Cuadra al centavo. La
+operación **sigue funcionando sin internet** —se probó tomando y cobrando un pedido con la red
+cortada— y al volver la conexión todo sube una sola vez, sin duplicarse. Los permisos se respetan en
+la aplicación **y en el servidor**: un barista no puede administrar personal ni ascenderse solo, ni
+saltándose la pantalla.
+
+**Lo que esta jornada encontró y arregló.** Dos cosas serias que no se veían:
+
+1. **El trabajo en equipo en tiempo real nunca había funcionado.** Faltaba un permiso en la base de
+   datos que hay que aplicar a mano y que se quedó sin aplicar desde el principio. El efecto era
+   invisible con un solo dispositivo y constante con varios: la barra no veía entrar comandas
+   nuevas, el salón no veía liberarse mesas, y nadie se enteraba de que estaba mirando datos viejos.
+   **Corregido y verificado durante la revisión.** Queda anotado en la guía de despliegue, porque un
+   servidor nuevo volvería a nacer sin él si se olvida.
+2. **Una cuenta pagada podía quedarse sin poder cerrarse.** Por cómo se redondeaban los importes, en
+   ciertos totales la pantalla anunciaba «pendiente $0.00» y el botón de cerrar no aparecía. Con los
+   precios actuales del café —todos en pesos enteros— no llegaba a ocurrir, pero habría empezado a
+   ocurrir el día que se pusiera un precio con centavos. **Corregido, con pruebas que lo impiden en
+   el futuro.**
+
+**Lo que hay que decidir antes de abrir al público.** Dos asuntos, ninguno bloqueante, los dos
+documentados con el arreglo ya analizado:
+
+- **Dar de baja a un empleado no lo echa de la aplicación.** Le impide volver a entrar, pero si su
+  tableta ya estaba dentro, sigue tomando pedidos y cobrando. Si se despide a alguien, **hay que
+  cerrar la sesión en su dispositivo**, no basta con desactivarlo. (F14-02)
+- **Cancelar una cuenta desde el listado de Pedidos o desde el Salón no avisa a la barra.** Si se
+  cancela desde la pantalla de la propia venta, sí sale la comanda de cancelación; desde los otros
+  dos caminos, la cocina puede seguir preparando algo ya cancelado. (F08-05)
+
+**Límites conocidos, que conviene saber de antemano.**
+
+- **Sin internet se puede vender, pero no configurar.** Pedidos, cobros y conteos de insumos
+  funcionan sin conexión y se guardan solos al volver. Catálogo, caja y personal **exigen conexión**
+  y lo avisan. Las mesas son el caso raro: dejan editar y **el cambio se pierde al reconectar**,
+  cosa que el aviso no dice bien (F11-02).
+- **Si se cae el internet con varias tabletas**, los pedidos que se tomen pueden acabar con un folio
+  distinto del que lleva impreso su comanda de papel. No se pierde ningún pedido; se localiza por el
+  nombre de la cuenta. (F16-04)
+- **No se puede cambiar el rol de un empleado** desde la aplicación: hay que crear un acceso nuevo.
+  (F14-04)
+- **El reporte impreso no incluye** el detalle auditable ni la tabla de incidencias; para llevarse
+  el detalle hay que usar «Exportar CSV». (F13-02)
+- **Si una operación se queda «por revisar»**, la aplicación lo avisa pero **no ofrece manera de
+  resolverlo**; hace falta apoyo técnico. (F16-03)
+- **El inventario es inmutable a propósito**: los conteos no se pueden borrar, sólo dar de baja el
+  insumo. Es lo que hace que sirvan como prueba.
+
+**Qué quedó fuera de alcance, y por qué.**
+
+- **Impresión en papel real.** Todo se verificó sobre el contenido generado, pero no había impresora
+  térmica disponible. (F15-P10)
+- **Desactivar la propia cuenta del único gerente.** Excluido por decisión del responsable: si el
+  sistema lo permitiera, el negocio se quedaría sin acceso de gerencia. La interfaz sí lo impide;
+  **no se comprobó si el servidor también**. Es el único riesgo que queda sin verificar. (F14-P11)
+- **Volumen alto de datos.** El tope de 1000 registros por página de reportes no se pudo ejercitar
+  con los datos actuales. (F13-P16)
+- **Cuadre del efectivo contra caja.** Los cobros de prueba se hicieron por transferencia para no
+  alterar el arqueo real, así que el cruce en efectivo quedó comprobado sólo de forma trivial. La
+  diferencia de criterio entre Caja y Reportes está documentada aparte. (F13-C1, F09-01)
+
+---
 
 ### Si el tiempo no alcanza para todo
 

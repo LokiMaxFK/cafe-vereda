@@ -70,7 +70,17 @@
     <tr><td>Recuperación tras el arreglo</td><td>Al recargar, la operación atrapada vuelve a <code>pending</code> <b>con su clave intacta</b> y el contador pasa de 27 a 28</td><td class="ok">Correcto</td><td>Navegador</td></tr>
     <tr><td>Operación inválida en el lote</td><td>La RPC procesa el lote en una transacción: una sola operación que falle aborta el lote entero y arrastra a las sanas</td><td class="warn">Hallazgo F16-03</td><td>Documentado</td></tr>
     <tr><td>Resultado por operación del servidor</td><td>La RPC devuelve un estado por operación que el cliente descarta (las dos ramas del ternario son idénticas)</td><td class="warn">Hallazgo F16-02</td><td>Documentado</td></tr>
-    <tr><td>Pruebas de navegador P1-P12</td><td>Indicador de conexión, creación de pedidos sin red, recarga offline, reconexión, conflicto entre pestañas y tiempo real</td><td class="warn">Pendiente</td><td>—</td></tr>
+    <tr><td>P1-P2. Indicador de conexión</td><td>Con red, «Todo sincronizado». Al cortarla, «0 cambios · Sin conexión» y la pastilla «Sin conexión»</td><td class="ok">Correcto</td><td>Navegador, producción</td></tr>
+    <tr><td>P3. Pedido completo sin conexión</td><td>Se crea, se le añade producto con extra y nota, y se envía a la barra. La comanda sale íntegra. Dos operaciones encoladas</td><td class="ok">Correcto</td><td>Pedido real #1082</td></tr>
+    <tr><td>P4. Recargar y reiniciar</td><td>La sesión y los datos siguen ahí tras recargar la página entera</td><td class="ok">Correcto</td><td>Navegador</td></tr>
+    <tr><td>P5. Volver la conexión</td><td>Sincroniza <b>solo</b>, por el evento del navegador y sin recargar; el contador baja a cero</td><td class="ok">Correcto</td><td>Navegador</td></tr>
+    <tr><td>P6. Contraste contra el servidor</td><td>Folio, estado, total, nombre, renglón, extra, nota, estado del renglón y lote: <b>todo coincide</b></td><td class="ok">Correcto</td><td>Consulta directa</td></tr>
+    <tr><td>P7. Doble envío (idempotencia)</td><td>Dos reenvíos de las mismas operaciones: <b>el pedido no se duplica</b> y el registro del servidor conserva dos filas, no cuatro</td><td class="ok">Correcto</td><td>Pedido real #1082</td></tr>
+    <tr><td>P8. Cobrar sin conexión</td><td>Al reconectar llega <b>exactamente un pago</b> y la orden queda cobrada. Sin duplicación</td><td class="ok">Correcto</td><td>Cobro real $63.00</td></tr>
+    <tr><td>P9-P10. Operación rechazada</td><td>Al tercer intento pasa a «por revisar» y el indicador lo dice. <b>Pero no existe ninguna forma de resolverlo desde la interfaz</b></td><td class="warn">Hallazgo F16-03</td><td>Navegador</td></tr>
+    <tr><td>P11. Tiempo real entre ventanas</td><td><b>No funcionaba en absoluto</b>: faltaba una política que la migración avisa de aplicar a mano. Corregido durante la revisión y verificado entre dos sesiones</td><td class="ok">Corregido</td><td>Hallazgo F16-05</td></tr>
+    <tr><td>P12. Entrar sin conexión y sin sesión previa</td><td>Avisa antes de intentarlo y <b>deshabilita el botón</b> de entrar</td><td class="ok">Correcto</td><td>Navegador</td></tr>
+    <tr><td>Folio de un pedido tomado sin conexión</td><td>Si el número provisional ya está ocupado el servidor asigna otro, pero <b>la comanda impresa conserva el viejo</b></td><td class="warn">Hallazgo F16-04</td><td>Choque forzado</td></tr>
   </tbody>
 </table>
 
@@ -95,7 +105,8 @@
   <ul>
   <li><b>Era el riesgo más serio de toda la revisión y estaba oculto.</b> F16-01 hacía que una sincronización interrumpida abandonara ventas para siempre <b>mientras la aplicación anunciaba «Todo sincronizado»</b>. En una tableta de café con wifi inestable es el peor modo de fallo posible, porque es silencioso. Ya está corregido, pero conviene que el cliente sepa que existió: es la razón por la que esta prueba unitaria era la de mayor valor del plan.</li>
   <li><b>Una operación atascada bloquea la cola del dispositivo</b> (F16-03) y no hay salida desde la interfaz. Si aparece «Hay operaciones por revisar» de forma persistente, hoy hace falta intervención técnica. Resolverlo bien exige una migración SQL, que no se pudo probar en local por no haber Docker en el equipo de la revisión.</li>
-  <li><b>Las pruebas de navegador (P1-P12) siguen pendientes:</b> el corte de red real, el conflicto entre dos pestañas y la sincronización en tiempo real no se han ejercitado en vivo. Lo verificado hasta ahora es la lógica de la cola y la recuperación tras interrupción.</li>
+  <li><b class="fail">Un pedido tomado sin conexión puede acabar con un folio distinto del que lleva impreso su comanda</b> (F16-04). Si se cae el internet, todas las tabletas calculan el mismo número siguiente; al volver la línea una se lo queda y el resto son reasignadas. La pantalla se corrige al recargar, <b>el papel no</b>. Se localiza el pedido por su nombre.</li>
+  <li><b>El tiempo real no había funcionado nunca</b> (F16-05): faltaba una política que las migraciones no pueden crear y que hay que aplicar a mano en el panel de Supabase. Se aplicó y se verificó durante la revisión. <b>Un despliegue en un proyecto Supabase nuevo volverá a nacer sin tiempo real</b> si se olvida ese paso; queda documentado en la guía de despliegue.</li>
   <li><b>Las mesas no pasan por la cola:</b> un cambio de croquis sin conexión se escribe en el dispositivo pero no llega al servidor, sin aviso.</li>
   </ul>
 </div>
