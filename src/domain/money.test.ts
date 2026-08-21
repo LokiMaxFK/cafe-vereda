@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyPaymentCap, itemTotal, mxn, orderSubtotal, orderTotal, paidTotal } from "./money";
+import { applyPaymentCap, itemTotal, mxn, orderSubtotal, orderTotal, paidTotal, roundToCents } from "./money";
 import type { Order } from "./types";
 
 const order: Order = {
@@ -81,5 +81,54 @@ describe("money calculations", () => {
   it("formats MXN amounts with two decimal places", () => {
     expect(mxn.format(100)).toBe("$100.00");
     expect(mxn.format(100.01)).toBe("$100.01");
+  });
+});
+
+// F04-U2: el total con líneas canceladas y el redondeo a centavos. Lo segundo destapó F07-06.
+describe("cent rounding (regression for F07-06)", () => {
+  const priced = (unitPrice: number, quantity: number, status: "pending" | "cancelled" = "pending") =>
+    ({ ...order.items[0], unitPrice, quantity, modifiers: [], status });
+
+  it("squares an amount to the cent without touching one already exact", () => {
+    expect(roundToCents(30.150000000000002)).toBe(30.15);
+    expect(roundToCents(30.15)).toBe(30.15);
+    expect(roundToCents(0)).toBe(0);
+  });
+
+  it("returns exactly the amount the screen announces for a common line", () => {
+    // 3 × $10.05 daba 30.150000000000002. Nadie lo veía: la pantalla siempre redondea a dos
+    // decimales. Pero era el residuo el que se comparaba contra lo pagado.
+    const cuenta = { items: [priced(10.05, 3)], discount: 0 };
+    expect(orderTotal(cuenta)).toBe(30.15);
+    expect(mxn.format(orderTotal(cuenta))).toBe("$30.15");
+  });
+
+  it("leaves no balance when the cashier pays the amount shown on screen", () => {
+    // El caso que rompía: la cuenta quedaba cubierta, el recuadro decía "Saldo pendiente $0.00",
+    // y como el saldo real seguía siendo mayor que cero el botón de cerrar no llegaba a aparecer.
+    const cuenta = { items: [priced(10.05, 3)], discount: 0 };
+    const total = orderTotal(cuenta);
+    const tecleado = Number(mxn.format(total).replace(/[^0-9.]/g, ""));
+    const pagado = applyPaymentCap(tecleado, total);
+    expect(total - pagado).toBe(0);
+    expect(paidTotal({ payments: [{ ...order.payments[0], amount: pagado, tip: 0 }] })).toBe(total);
+  });
+
+  it("does not let the residue survive a discount either", () => {
+    // 30 − 25.90 daba 4.100000000000001, con el mismo desenlace.
+    const cuenta = { items: [priced(15, 2)], discount: 25.9 };
+    expect(orderTotal(cuenta)).toBe(4.1);
+  });
+
+  it("squares the total of an order that mixes cancelled lines with cents", () => {
+    const cuenta = { items: [priced(10.05, 3), priced(0.7, 3, "cancelled")], discount: 0 };
+    expect(orderSubtotal(cuenta)).toBe(30.15);
+    expect(orderTotal(cuenta)).toBe(30.15);
+    expect(itemTotal(cuenta.items[1])).toBe(2.1);
+  });
+
+  it("adds partial payments in cents without drifting", () => {
+    const pagos = [10.05, 10.05, 10.05].map((amount, index) => ({ ...order.payments[0], id: `p${index}`, amount, tip: 0 }));
+    expect(paidTotal({ payments: pagos })).toBe(30.15);
   });
 });

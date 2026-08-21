@@ -367,7 +367,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [orders, persistOrder]);
 
   const closeOrder = useCallback(async (orderId: string) => {
-    const order = orders.find((item) => item.id === orderId); if (!order || order.payments.reduce((s, p) => s + p.amount, 0) < orderTotal(order)) return;
+    const order = orders.find((item) => item.id === orderId); if (!order || paidTotal(order) < orderTotal(order)) return;
     await persistOrder({ ...order, status: "closed" }, "close_order");
   }, [orders, persistOrder]);
 
