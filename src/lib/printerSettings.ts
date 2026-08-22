@@ -19,12 +19,27 @@ export interface PrinterSettings {
   ticketShowLineTotal: boolean;
 }
 
+/**
+ * El diseño universal que gerencia comparte entre estaciones. No incluye el margen
+ * inferior: ése depende de cuántos milímetros separan el cabezal de la barra de corte
+ * de cada impresora, y compartirlo hacía que un valor viejo guardado en Supabase
+ * pisara el de todas las demás estaciones, incluido el nuevo valor por defecto.
+ */
 export type TicketDesign = Pick<PrinterSettings,
-  "paperWidthMm" | "printableWidthMm" | "marginMm" | "bottomMarginMm" | "fontScale" |
+  "paperWidthMm" | "printableWidthMm" | "marginMm" | "fontScale" |
   "ticketImageDataUrl" | "ticketQrUrl" | "ticketQrDataUrl" | "ticketFooterText" | "ticketShowQuantity" |
   "ticketShowVariant" | "ticketShowModifiers" | "ticketShowNotes" |
   "ticketShowUnitPrice" | "ticketShowLineTotal"
 >;
+
+export const STATION_ONLY_SETTINGS = ["bottomMarginMm"] as const;
+type StationOnlySetting = typeof STATION_ONLY_SETTINGS[number];
+
+function withoutStationOnlySettings<T extends object>(value: T) {
+  const shared = { ...value } as Record<string, unknown>;
+  for (const key of STATION_ONLY_SETTINGS) delete shared[key];
+  return shared as Omit<T, StationOnlySetting>;
+}
 
 // El margen inferior admite más holgura que el superior: sirve para sacar el ticket
 // más allá de la barra de corte antes de arrancarlo.
@@ -127,11 +142,14 @@ export function savePrinterSettings(settings: PrinterSettings): PrinterSettings 
 }
 
 export function ticketDesignFrom(settings: PrinterSettings): TicketDesign {
-  return { ...settings };
+  return withoutStationOnlySettings(settings);
 }
 
 export function mergeTicketDesign(settings: PrinterSettings, design: Partial<TicketDesign>): PrinterSettings {
-  return normalizePrinterSettings({ ...settings, ...design });
+  // Los diseños guardados en Supabase antes de este cambio siguen trayendo el margen
+  // inferior dentro del JSON. Se descarta en tiempo de ejecución para que gane el de
+  // la estación; si no, el ticket seguiría saliendo con el margen viejo.
+  return normalizePrinterSettings({ ...settings, ...withoutStationOnlySettings(design) });
 }
 
 export function loadCachedTicketDesign(): TicketDesign {

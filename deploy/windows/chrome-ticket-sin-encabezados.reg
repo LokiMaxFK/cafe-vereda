@@ -1,0 +1,15 @@
+Windows Registry Editor Version 5.00
+
+; Apaga "Encabezados y pies de página" del diálogo de impresión de Chrome y deja la
+; casilla bloqueada. Sin esto, cada ticket sale con una línea de basura arriba (la
+; fecha y el título que el driver térmico redibuja con su codificación) y con la
+; dirección del sitio y un "1/1" pegados al final del papel.
+;
+; Se aplica una sola vez por estación: clic derecho > Combinar, aceptar el aviso de
+; Windows y cerrar Chrome por completo antes de volver a abrirlo. Requiere permisos
+; de administrador porque escribe en HKEY_LOCAL_MACHINE.
+;
+; Para revertirlo, borra el valor PrintHeaderFooter de esa misma clave.
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Google\Chrome]
+"PrintHeaderFooter"=dword:00000000
