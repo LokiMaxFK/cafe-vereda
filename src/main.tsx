@@ -8,6 +8,7 @@ import "@fontsource/plus-jakarta-sans/latin-700.css";
 import "../design-system/styles.css";
 import "./styles.css";
 import App from "./App";
+import { watchForAppUpdates } from "./lib/appUpdates";
 import { AppProvider } from "./state/AppContext";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
@@ -15,5 +16,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
 );
 
 if ("serviceWorker" in navigator && import.meta.env.PROD) {
-  window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js"));
+  window.addEventListener("load", () => {
+    void navigator.serviceWorker.register("/sw.js").then(watchForAppUpdates).catch(() => undefined);
+  });
 }

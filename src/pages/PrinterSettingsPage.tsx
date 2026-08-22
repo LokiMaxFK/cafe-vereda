@@ -205,7 +205,9 @@ export function PrinterSettingsPage() {
             <div className="flex gap-3"><span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary-fixed text-primary"><Printer /></span><div><h2 className="font-bold">Impresión local del navegador</h2><p className="mt-1 text-sm text-on-surface-variant">El ticket se genera en esta computadora y Windows se encarga de enviarlo a la impresora.</p></div></div>
             <span className="inline-flex shrink-0 items-center gap-2 rounded-full bg-tertiary-fixed px-3 py-1.5 text-xs font-bold text-tertiary"><CheckCircle2 size={15} /> Lista para imprimir</span>
           </div>
-          <p className="mt-4 text-sm text-on-surface-variant">Al imprimir, elige la Suzwip en el diálogo de Windows, usa el tamaño de papel correcto y desactiva encabezados y pies de página. Chrome normalmente conserva la última impresora seleccionada.</p>
+          <p className="mt-4 text-sm text-on-surface-variant">Al imprimir, elige la impresora en el diálogo de Windows y usa el tamaño de papel correcto. Chrome normalmente conserva la última impresora seleccionada.</p>
+          <p className="mt-2 text-sm text-on-surface-variant">Si en el papel salen la fecha, la dirección del sitio o un «1/1», son el encabezado y el pie que agrega Chrome: ábrelo en <span className="font-semibold">Más opciones de configuración</span> y desmarca <span className="font-semibold">Encabezados y pies de página</span>. Queda recordado para las siguientes impresiones.</p>
+          <p className="mt-3 text-xs text-on-surface-variant">Versión de esta estación: <span className="font-semibold">{__BUILD_ID__}</span>. Si no coincide con la del último despliegue, recarga con Ctrl+Shift+R.</p>
           {error && <div className="mt-4"><InlineAlert>{error}</InlineAlert></div>}
           {success && <div className="mt-4"><InlineAlert tone="success">{success}</InlineAlert></div>}
         </Panel>
