@@ -17,6 +17,16 @@ describe("ticket printing", () => {
     expect(document.html).toContain("html,body{width:48mm;min-width:48mm}");
   });
 
+  it("applies the top and bottom margins independently", () => {
+    const document = createTicketDocument(order, "58", { ...defaultPrinterSettings, marginMm: 3, bottomMarginMm: 15 });
+    expect(document.html).toContain("padding:3mm 0 15mm;");
+  });
+
+  it("respects a bottom margin of zero without falling back to the old 4 mm floor", () => {
+    const document = createTicketDocument(order, "58", { ...defaultPrinterSettings, marginMm: 6, bottomMarginMm: 0 });
+    expect(document.html).toContain("padding:6mm 0 0mm;");
+  });
+
   it("honors configured ticket fields and footer", () => {
     const document = createTicketDocument(order, "58", { ...defaultPrinterSettings, ticketFooterText: "Gracias, vuelve pronto", ticketShowVariant: false, ticketShowModifiers: false, ticketShowNotes: false, ticketShowUnitPrice: true });
     expect(document.html).toContain("Gracias, vuelve pronto");

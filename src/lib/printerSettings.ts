@@ -5,6 +5,7 @@ export interface PrinterSettings {
   paperWidthMm: PaperWidthMm;
   printableWidthMm: number;
   marginMm: number;
+  bottomMarginMm: number;
   fontScale: PrintFontScale;
   ticketImageDataUrl: string;
   ticketQrUrl: string;
@@ -19,11 +20,15 @@ export interface PrinterSettings {
 }
 
 export type TicketDesign = Pick<PrinterSettings,
-  "paperWidthMm" | "printableWidthMm" | "marginMm" | "fontScale" |
+  "paperWidthMm" | "printableWidthMm" | "marginMm" | "bottomMarginMm" | "fontScale" |
   "ticketImageDataUrl" | "ticketQrUrl" | "ticketQrDataUrl" | "ticketFooterText" | "ticketShowQuantity" |
   "ticketShowVariant" | "ticketShowModifiers" | "ticketShowNotes" |
   "ticketShowUnitPrice" | "ticketShowLineTotal"
 >;
+
+// El margen inferior admite más holgura que el superior: sirve para sacar el ticket
+// más allá de la barra de corte antes de arrancarlo.
+export const MAX_BOTTOM_MARGIN_MM = 25;
 
 const STORAGE_KEY = "vereda-printer-settings:v3";
 const PREVIOUS_STORAGE_KEY = "vereda-printer-settings:v2";
@@ -34,6 +39,7 @@ export const defaultPrinterSettings: PrinterSettings = {
   paperWidthMm: 58,
   printableWidthMm: 48,
   marginMm: 2,
+  bottomMarginMm: 4,
   fontScale: "normal",
   ticketImageDataUrl: "",
   ticketQrUrl: "",
@@ -80,10 +86,15 @@ export function normalizePrinterSettings(value: Partial<PrinterSettings> | null 
   const maxPrintableWidth = paperWidthMm - 4;
   const defaultPrintableWidth = paperWidthMm === 58 ? 48 : 72;
   const ticketQrUrl = isTicketUrl(value?.ticketQrUrl) ? value.ticketQrUrl.trim() : "";
+  const marginMm = Number.isFinite(margin) ? Math.max(0, Math.min(8, margin)) : defaultPrinterSettings.marginMm;
+  const bottomMargin = Number(value?.bottomMarginMm);
   return {
     paperWidthMm,
     printableWidthMm: Number.isFinite(printableWidth) ? Math.max(32, Math.min(maxPrintableWidth, printableWidth)) : defaultPrintableWidth,
-    marginMm: Number.isFinite(margin) ? Math.max(0, Math.min(8, margin)) : defaultPrinterSettings.marginMm,
+    marginMm,
+    // Los ajustes guardados antes de separar el margen inferior no traen el campo.
+    // En ese caso se reconstruye el valor que ya se imprimía: el mayor entre 4 mm y el margen superior.
+    bottomMarginMm: Number.isFinite(bottomMargin) ? Math.max(0, Math.min(MAX_BOTTOM_MARGIN_MM, bottomMargin)) : Math.max(4, marginMm),
     fontScale: isFontScale(value?.fontScale) ? value.fontScale : defaultPrinterSettings.fontScale,
     ticketImageDataUrl: isImageDataUrl(value?.ticketImageDataUrl) ? value.ticketImageDataUrl : "",
     ticketQrUrl,

@@ -5,7 +5,7 @@ import { Button, FieldLabel, InlineAlert, Page, PageHeader, Panel, SelectField, 
 import type { Order } from "../domain/types";
 import { printErrorMessage } from "../lib/browserPrinting";
 import { createCommandDocument, createTicketDocument, paperFromWidth, printDocumentLocally } from "../lib/printing";
-import { loadPrinterSettings, mergeTicketDesign, savePrinterSettings, ticketDesignFrom, type PrinterSettings } from "../lib/printerSettings";
+import { loadPrinterSettings, mergeTicketDesign, MAX_BOTTOM_MARGIN_MM, savePrinterSettings, ticketDesignFrom, type PrinterSettings } from "../lib/printerSettings";
 import { loadUniversalTicketDesign, saveUniversalTicketDesign } from "../lib/ticketDesign";
 
 const testOrder: Order = {
@@ -215,7 +215,8 @@ export function PrinterSettingsPage() {
           <div className="grid gap-4 sm:grid-cols-2">
             <FieldLabel label="Ancho de papel"><SelectField value={settings.paperWidthMm} onChange={(event) => updateSettings({ paperWidthMm: Number(event.target.value) as 58 | 80, printableWidthMm: Number(event.target.value) === 58 ? 48 : 72 })}><option value="58">58 mm</option><option value="80">80 mm</option></SelectField></FieldLabel>
             <FieldLabel label="Ancho útil de impresión (mm)" hint="58 mm suele imprimir solo 48 mm útiles. Reduce este valor si se corta a la derecha."><TextField type="number" min="32" max={settings.paperWidthMm - 4} step="0.5" value={settings.printableWidthMm} onChange={(event) => updateSettings({ printableWidthMm: Number(event.target.value) })} /></FieldLabel>
-            <FieldLabel label="Margen superior (mm)" hint="Espacio antes y después del contenido."><TextField type="number" min="0" max="8" step="0.5" value={settings.marginMm} onChange={(event) => updateSettings({ marginMm: Number(event.target.value) })} /></FieldLabel>
+            <FieldLabel label="Margen superior (mm)" hint="Espacio en blanco antes del contenido."><TextField type="number" min="0" max="8" step="0.5" value={settings.marginMm} onChange={(event) => updateSettings({ marginMm: Number(event.target.value) })} /></FieldLabel>
+            <FieldLabel label="Margen inferior (mm)" hint={`Espacio en blanco después del contenido. Súbelo si el ticket se corta antes de tiempo (máximo ${MAX_BOTTOM_MARGIN_MM} mm).`}><TextField type="number" min="0" max={MAX_BOTTOM_MARGIN_MM} step="0.5" value={settings.bottomMarginMm} onChange={(event) => updateSettings({ bottomMarginMm: Number(event.target.value) })} /></FieldLabel>
             <FieldLabel label="Tamaño de texto"><SelectField value={settings.fontScale} onChange={(event) => updateSettings({ fontScale: event.target.value as PrinterSettings["fontScale"] })}><option value="compact">Compacto</option><option value="normal">Normal</option><option value="large">Grande</option></SelectField></FieldLabel>
           </div>
         </Panel>
