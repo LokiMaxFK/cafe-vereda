@@ -44,44 +44,41 @@ async function createTicketQr(url: string) {
   });
 }
 
-async function createThermalLogo(imageBlob: Blob) {
-  const source = URL.createObjectURL(imageBlob);
-  try {
-    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
-      const element = new Image();
-      element.onload = () => resolve(element);
-      element.onerror = reject;
-      element.src = source;
-    });
-    // El encabezado del ticket ya muestra “VEREDA CAFÉ”. Recortamos ese texto del
-    // raster para dedicar los píxeles útiles al emblema que sí debe leerse en 58 mm.
-    const sourceWidth = image.width * 0.72;
-    const sourceHeight = image.height * 0.77;
-    const sourceX = (image.width - sourceWidth) / 2;
-    const sourceY = image.height * 0.05;
-    const longestSide = 384;
-    const scale = Math.min(1, longestSide / Math.max(sourceWidth, sourceHeight));
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.max(1, Math.round(sourceWidth * scale));
-    canvas.height = Math.max(1, Math.round(sourceHeight * scale));
-    const context = canvas.getContext("2d", { willReadFrequently: true });
-    if (!context) throw new Error("Canvas no disponible");
-    context.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, canvas.width, canvas.height);
-    const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
-    for (let index = 0; index < pixels.data.length; index += 4) {
-      const alpha = pixels.data[index + 3];
-      const brightness = (pixels.data[index] * 0.299) + (pixels.data[index + 1] * 0.587) + (pixels.data[index + 2] * 0.114);
-      const tone = alpha < 20 || brightness > 190 ? 255 : 0;
-      pixels.data[index] = tone;
-      pixels.data[index + 1] = tone;
-      pixels.data[index + 2] = tone;
-      pixels.data[index + 3] = 255;
-    }
-    context.putImageData(pixels, 0, 0);
-    return canvas.toDataURL("image/png");
-  } finally {
-    URL.revokeObjectURL(source);
+async function createThermalLogo(imageSrc: string) {
+  // Se carga por URL directa (no vía blob:) porque la CSP de producción
+  // restringe img-src y bloquearía una URL creada con createObjectURL.
+  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const element = new Image();
+    element.onload = () => resolve(element);
+    element.onerror = () => reject(new Error("No se pudo cargar la imagen del logo."));
+    element.src = imageSrc;
+  });
+  // El encabezado del ticket ya muestra “VEREDA CAFÉ”. Recortamos ese texto del
+  // raster para dedicar los píxeles útiles al emblema que sí debe leerse en 58 mm.
+  const sourceWidth = image.width * 0.72;
+  const sourceHeight = image.height * 0.77;
+  const sourceX = (image.width - sourceWidth) / 2;
+  const sourceY = image.height * 0.05;
+  const longestSide = 384;
+  const scale = Math.min(1, longestSide / Math.max(sourceWidth, sourceHeight));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(sourceWidth * scale));
+  canvas.height = Math.max(1, Math.round(sourceHeight * scale));
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  if (!context) throw new Error("Canvas no disponible");
+  context.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, canvas.width, canvas.height);
+  const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
+  for (let index = 0; index < pixels.data.length; index += 4) {
+    const alpha = pixels.data[index + 3];
+    const brightness = (pixels.data[index] * 0.299) + (pixels.data[index + 1] * 0.587) + (pixels.data[index + 2] * 0.114);
+    const tone = alpha < 20 || brightness > 190 ? 255 : 0;
+    pixels.data[index] = tone;
+    pixels.data[index + 1] = tone;
+    pixels.data[index + 2] = tone;
+    pixels.data[index + 3] = 255;
   }
+  context.putImageData(pixels, 0, 0);
+  return canvas.toDataURL("image/png");
 }
 
 export function PrinterSettingsPage() {
@@ -149,10 +146,7 @@ export function PrinterSettingsPage() {
 
   async function applyCafeVeredaLogo() {
     try {
-      const response = await fetch("/logo-termico.png");
-      if (!response.ok) throw new Error();
-      const image = await response.blob();
-      const ticketImageDataUrl = await createThermalLogo(image);
+      const ticketImageDataUrl = await createThermalLogo("/logo-termico.png");
       const normalized = savePrinterSettings({ ...settings, ticketImageDataUrl });
       setSettings(normalized);
       try {
