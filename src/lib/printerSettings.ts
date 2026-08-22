@@ -39,7 +39,9 @@ export const defaultPrinterSettings: PrinterSettings = {
   paperWidthMm: 58,
   printableWidthMm: 48,
   marginMm: 2,
-  bottomMarginMm: 4,
+  // La barra de corte queda unos centímetros por delante del cabezal: con 4 mm la
+  // última línea se arrancaba antes de salir. 12 mm la dejan pasar el corte.
+  bottomMarginMm: 12,
   fontScale: "normal",
   ticketImageDataUrl: "",
   ticketQrUrl: "",
@@ -92,9 +94,9 @@ export function normalizePrinterSettings(value: Partial<PrinterSettings> | null 
     paperWidthMm,
     printableWidthMm: Number.isFinite(printableWidth) ? Math.max(32, Math.min(maxPrintableWidth, printableWidth)) : defaultPrintableWidth,
     marginMm,
-    // Los ajustes guardados antes de separar el margen inferior no traen el campo.
-    // En ese caso se reconstruye el valor que ya se imprimía: el mayor entre 4 mm y el margen superior.
-    bottomMarginMm: Number.isFinite(bottomMargin) ? Math.max(0, Math.min(MAX_BOTTOM_MARGIN_MM, bottomMargin)) : Math.max(4, marginMm),
+    // Los ajustes guardados antes de separar el margen inferior no traen el campo; esas
+    // estaciones estrenan el valor por defecto en vez de heredar el margen superior.
+    bottomMarginMm: Number.isFinite(bottomMargin) ? Math.max(0, Math.min(MAX_BOTTOM_MARGIN_MM, bottomMargin)) : defaultPrinterSettings.bottomMarginMm,
     fontScale: isFontScale(value?.fontScale) ? value.fontScale : defaultPrinterSettings.fontScale,
     ticketImageDataUrl: isImageDataUrl(value?.ticketImageDataUrl) ? value.ticketImageDataUrl : "",
     ticketQrUrl,

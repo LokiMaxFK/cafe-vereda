@@ -23,14 +23,13 @@ describe("printer settings", () => {
   it("uses safe defaults for invalid saved values", () => {
     expect(normalizePrinterSettings({ paperWidthMm: 70 as 58, marginMm: 99, fontScale: "huge" as "normal" })).toEqual({
       ...defaultPrinterSettings,
-      marginMm: 8,
-      bottomMarginMm: 8
+      marginMm: 8
     });
   });
 
-  it("recreates the printed bottom margin for settings saved before the field existed", () => {
-    expect(normalizePrinterSettings({ marginMm: 1 }).bottomMarginMm).toBe(4);
-    expect(normalizePrinterSettings({ marginMm: 6 }).bottomMarginMm).toBe(6);
+  it("gives settings saved before the field existed the current default bottom margin", () => {
+    expect(normalizePrinterSettings({ marginMm: 1 }).bottomMarginMm).toBe(defaultPrinterSettings.bottomMarginMm);
+    expect(normalizePrinterSettings({ marginMm: 8 }).bottomMarginMm).toBe(defaultPrinterSettings.bottomMarginMm);
   });
 
   it("keeps an explicit bottom margin, including zero, and clamps out-of-range values", () => {
