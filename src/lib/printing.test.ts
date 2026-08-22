@@ -13,8 +13,20 @@ const order: Order = {
 describe("ticket printing", () => {
   it("uses a safe printable width for 58 mm paper", () => {
     const document = createTicketDocument(order, "58", { ...defaultPrinterSettings, printableWidthMm: 48 });
-    expect(document.html).toContain("@page{size:48mm auto;margin:0}");
     expect(document.html).toContain("html,body{width:48mm;min-width:48mm}");
+  });
+
+  it("leaves the page height to the printer harness instead of emitting invalid CSS", () => {
+    // "size:48mm auto" no es sintaxis válida: Chrome descartaba la regla completa y el
+    // ticket salía con el papel por defecto del driver, cortado a media hoja.
+    const html = createTicketDocument(order, "58", { ...defaultPrinterSettings, printableWidthMm: 48 }).html;
+    expect(html).toContain("@page{margin:0}");
+    expect(html).not.toContain("auto;margin:0");
+  });
+
+  it("names monospace fonts that exist on the Windows stations", () => {
+    const html = createTicketDocument(order).html;
+    expect(html).toContain('Consolas,"Courier New"');
   });
 
   it("applies the top and bottom margins independently", () => {
@@ -110,7 +122,7 @@ describe("ticket printing", () => {
     // Detalle a tener presente: la firma toma papel de 80 mm por defecto, pero la configuración
     // por defecto fija 48 mm útiles (los de la impresora de 58 mm). Gana la configuración, que es
     // la opción conservadora: nunca se imprime más ancho del que el papel real admite.
-    expect(html).toContain("@page{size:48mm auto;margin:0}");
+    expect(html).toContain("html,body{width:48mm;min-width:48mm}");
     expect(defaultPrinterSettings.printableWidthMm).toBe(48);
   });
 

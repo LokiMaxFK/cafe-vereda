@@ -5,6 +5,11 @@ import { defaultPrinterSettings, loadPrinterSettings, mergeTicketDesign, MAX_BOT
 import { loadUniversalTicketDesign } from "./ticketDesign";
 
 export type PrintPaper = "58" | "80";
+
+// Las estaciones corren Windows y la pila anterior sólo nombraba tipografías de macOS
+// (ui-monospace, SFMono-Regular, Menlo), así que caía en la monoespaciada genérica.
+// Consolas y Courier New existen en Windows y traen los acentos y la “ñ”.
+const MONOSPACE_STACK = 'Consolas,"Courier New",ui-monospace,SFMono-Regular,Menlo,monospace';
 type PrintLayoutOptions = Pick<PrinterSettings, "marginMm" | "bottomMarginMm" | "fontScale" | "printableWidthMm">;
 
 function escapeHtml(value: string) {
@@ -24,7 +29,11 @@ function printDocument(title: string, body: string, paper: PrintPaper, options: 
   const bottomMargin = Math.max(0, Math.min(MAX_BOTTOM_MARGIN_MM, options.bottomMarginMm ?? 4));
   return {
     title,
-    html: `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>@page{size:${printableWidth}mm auto;margin:0}*{box-sizing:border-box}html,body{width:${printableWidth}mm;min-width:${printableWidth}mm}body{font:${bodyFont} ui-monospace,SFMono-Regular,Menlo,monospace;color:#111;margin:0;padding:${topMargin}mm 0 ${bottomMargin}mm;overflow-wrap:anywhere}.center{text-align:center}.row{display:flex;justify-content:space-between;align-items:flex-start;gap:4px}.row>span:first-child,.row>strong:first-child{min-width:0;overflow-wrap:anywhere}.row>span.pay-method{overflow-wrap:normal;white-space:nowrap}.tip-row>span:first-child{padding-left:6px}.row>span:last-child,.row>strong:last-child{flex:none;text-align:right}.muted{color:#555}.line{border-top:1px dashed #111;margin:8px 0}h1{font-size:16px;margin:0 0 3px}h2{font-size:13px;margin:0 0 8px}p{margin:3px 0}.item{margin:7px 0}.item-detail{margin:2px 0 0;color:#444}.copy{border:2px solid #111;padding:4px;font-weight:700;text-align:center}.ticket-image{display:block;width:36mm;height:38mm;margin:0 auto 5px;object-fit:contain;filter:grayscale(1) contrast(2.4)}.ticket-qr{display:block;width:25mm;height:25mm;margin:0 auto 3px;image-rendering:pixelated}.qr-caption{font-size:9px;margin:0}</style></head><body>${body}</body></html>`
+    // El alto de página no se declara aquí: "size:${printableWidth}mm auto" es sintaxis
+    // inválida y Chrome descartaba la regla entera, así que el ticket se imprimía con el
+    // papel por defecto del driver y se cortaba. printWithBrowser mide el contenido ya
+    // maquetado y escribe un @page válido con el alto exacto del ticket.
+    html: `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>@page{margin:0}*{box-sizing:border-box}html,body{width:${printableWidth}mm;min-width:${printableWidth}mm}body{font:${bodyFont} ${MONOSPACE_STACK};color:#111;margin:0;padding:${topMargin}mm 0 ${bottomMargin}mm;overflow-wrap:anywhere}.center{text-align:center}.row{display:flex;justify-content:space-between;align-items:flex-start;gap:4px}.row>span:first-child,.row>strong:first-child{min-width:0;overflow-wrap:anywhere}.row>span.pay-method{overflow-wrap:normal;white-space:nowrap}.tip-row>span:first-child{padding-left:6px}.row>span:last-child,.row>strong:last-child{flex:none;text-align:right}.muted{color:#555}.line{border-top:1px dashed #111;margin:8px 0}h1{font-size:16px;margin:0 0 3px}h2{font-size:13px;margin:0 0 8px}p{margin:3px 0}.item{margin:7px 0}.item-detail{margin:2px 0 0;color:#444}.copy{border:2px solid #111;padding:4px;font-weight:700;text-align:center}.ticket-image{display:block;width:36mm;height:38mm;margin:0 auto 5px;object-fit:contain;filter:grayscale(1) contrast(2.4)}.ticket-qr{display:block;width:25mm;height:25mm;margin:0 auto 3px;image-rendering:pixelated}.qr-caption{font-size:9px;margin:0}</style></head><body>${body}</body></html>`
   };
 }
 
