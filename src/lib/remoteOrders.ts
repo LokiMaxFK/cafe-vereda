@@ -1,4 +1,4 @@
-import type { Order, OrderItem, PaymentMethod } from "../domain/types";
+import type { Order, OrderItem, OrderItemShare, PaymentMethod, SplitMode } from "../domain/types";
 
 /**
  * Traducción de las filas que devuelve Supabase al modelo local de órdenes.
@@ -49,10 +49,23 @@ export function mapRemoteOrderItem(item: Row): OrderItem {
   };
 }
 
+/**
+ * Las participaciones llegan anidadas bajo cada renglón —es como las devuelve PostgREST— pero el
+ * modelo local las guarda planas en la orden, porque el reparto es de la cuenta, no del artículo.
+ */
+export function mapRemoteItemShares(items: Row[]): OrderItemShare[] {
+  return items.flatMap((item) => ((item.order_item_shares as Row[] | null) ?? []).map((share) => ({
+    itemId: String(item.id),
+    subaccountId: String(share.subaccount_id),
+    units: Number(share.units)
+  })));
+}
+
 export function mapRemoteOrder(row: Row): Order {
   const table = row.cafe_tables as { number?: number } | null;
   const items = (row.order_items as Row[] | null) ?? [];
   const payments = (row.payments as Row[] | null) ?? [];
+  const subaccounts = (row.order_subaccounts as Row[] | null) ?? [];
   return {
     id: String(row.id),
     folio: Number(row.folio),
@@ -67,12 +80,18 @@ export function mapRemoteOrder(row: Row): Order {
     openedAt: String(row.opened_at),
     updatedAt: String(row.updated_at),
     syncStatus: "synced",
+    splitMode: (text(row.split_mode) as SplitMode | undefined),
+    subaccounts: subaccounts
+      .map((subaccount) => ({ id: String(subaccount.id), label: String(subaccount.label), position: Number(subaccount.position) }))
+      .sort((a, b) => a.position - b.position),
+    itemShares: mapRemoteItemShares(items),
     items: items.map(mapRemoteOrderItem),
     payments: payments.map((payment) => ({
       id: String(payment.id),
       method: payment.method as PaymentMethod,
       amount: cents(payment.amount_cents),
       tip: cents(payment.tip_cents),
+      subaccountId: text(payment.subaccount_id),
       createdAt: String(payment.created_at)
     }))
   };
@@ -80,4 +99,4 @@ export function mapRemoteOrder(row: Row): Order {
 
 /** Columnas y relaciones que `mapRemoteOrder` necesita para no perder información. */
 export const REMOTE_ORDER_SELECT =
-  "*, cafe_tables(number), order_items(*, dispatch_batch_items(batch_id, dispatch_batches(batch_type))), payments(*)";
+  "*, cafe_tables(number), order_subaccounts(id, label, position), order_items(*, order_item_shares(subaccount_id, units), dispatch_batch_items(batch_id, dispatch_batches(batch_type))), payments(*)";

@@ -5,9 +5,10 @@ import { CASH_SESSION_REQUIRED_MESSAGE, canTakeOrders } from "../domain/cash";
 import { productImageError, sortCategories } from "../domain/catalog";
 import { cancellableStatuses, markItemsPrepared, nextLocalFolio } from "../domain/order";
 import { nextFreeSlot } from "../domain/tables";
-import { applyPaymentCap, orderSubtotal, orderTotal, paidTotal } from "../domain/money";
+import { applyPaymentCap, orderSubtotal, orderTotal, paidTotal, roundToCents } from "../domain/money";
 import { cancelItemUnits, mergeOrAddItem, type OrderItemInput } from "../domain/orderItem";
-import type { AppRole, CafeTable, CashSession, CatalogExtra, Category, Order, OrderItem, PaymentMethod, Product, StaffSession, SyncStatus } from "../domain/types";
+import { assignUnits, createSubaccounts, hasSubaccountPayments, pruneShares, subaccountBalance, subaccountTotal } from "../domain/splitBill";
+import type { AppRole, CafeTable, CashSession, CatalogExtra, Category, Order, OrderItem, PaymentMethod, Product, SplitMode, StaffSession, SyncStatus } from "../domain/types";
 import { fetchOpenCashSession } from "../lib/cashSessions";
 import { db } from "../lib/db";
 import { queueOperation, reclaimStalledOperations, syncPendingOperations } from "../lib/offline";
@@ -100,7 +101,12 @@ interface AppContextValue {
   dispatchPending: (orderId: string) => Promise<string | null>;
   markOrderReady: (orderId: string) => Promise<void>;
   finalizeOrder: (orderId: string) => Promise<void>;
-  addPayment: (orderId: string, method: PaymentMethod, amount: number, tip: number) => Promise<void>;
+  addPayment: (orderId: string, method: PaymentMethod, amount: number, tip: number, subaccountId?: string) => Promise<void>;
+  splitOrder: (orderId: string, mode: SplitMode, people: number) => Promise<void>;
+  renameSubaccount: (orderId: string, subaccountId: string, label: string) => Promise<void>;
+  assignItemUnits: (orderId: string, itemId: string, subaccountId: string, units: number) => Promise<void>;
+  reassignItemUnits: (orderId: string, itemId: string, fromId: string, toId: string, units: number, reason: string) => Promise<void>;
+  clearSplit: (orderId: string) => Promise<void>;
   closeOrder: (orderId: string) => Promise<void>;
   setDiscount: (orderId: string, amount: number, reason: string) => Promise<void>;
   cancelOrder: (orderId: string, reason: string) => Promise<void>;
@@ -283,10 +289,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (session && isSupabaseConfigured && navigator.onLine) void forceSync();
   }, [session, forceSync]);
 
-  const persistOrder = useCallback(async (order: Order, operation: string) => {
+  /**
+   * `extra` son datos que sólo tienen sentido para el servidor en esa operación concreta —el motivo
+   * de una reasignación, por ejemplo—. Viajan en el payload pero no se guardan en la orden: si
+   * entraran en Dexie se quedarían pegados al siguiente cambio, atribuyéndole un motivo ajeno.
+   */
+  const persistOrder = useCallback(async (order: Order, operation: string, extra?: Record<string, unknown>) => {
     const next = { ...order, updatedAt: new Date().toISOString(), syncStatus: isSupabaseConfigured && navigator.onLine ? "syncing" as const : "pending" as const };
     await db.orders.put(next);
-    await queueOperation(operation, order.id, next);
+    await queueOperation(operation, order.id, extra ? { ...next, ...extra } : next);
     setOrders((current) => current.map((item) => item.id === order.id ? next : item));
     const count = await db.pendingOperations.where("status").anyOf("pending", "review_required").count();
     setPendingCount(count);
@@ -388,17 +399,80 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await persistOrder({ ...order, status: "served" }, "finalize_order");
   }, [orders, persistOrder]);
 
-  const addPayment = useCallback(async (orderId: string, method: PaymentMethod, amount: number, tip: number) => {
+  const addPayment = useCallback(async (orderId: string, method: PaymentMethod, amount: number, tip: number, subaccountId?: string) => {
     const order = orders.find((item) => item.id === orderId); if (!order || amount <= 0) return;
-    const balance = orderTotal(order) - paidTotal(order);
+    // Con la cuenta dividida el tope es el saldo de esa persona, no el de la cuenta: sin él, quien
+    // paga primero con un billete grande absorbería el saldo de los demás y sus tickets saldrían
+    // en cero. El saldo de la cuenta se mantiene como cota exterior.
+    const orderBalance = orderTotal(order) - paidTotal(order);
+    const balance = subaccountId ? Math.min(subaccountBalance(order, subaccountId), orderBalance) : orderBalance;
     if (balance <= 0) return;
     const appliedAmount = applyPaymentCap(amount, balance);
-    await persistOrder({ ...order, payments: [...order.payments, { id: crypto.randomUUID(), method, amount: appliedAmount, tip, createdAt: new Date().toISOString() }] }, "record_payment");
+    await persistOrder({ ...order, payments: [...order.payments, { id: crypto.randomUUID(), method, amount: appliedAmount, tip, subaccountId, createdAt: new Date().toISOString() }] }, "record_payment");
   }, [orders, persistOrder]);
 
   const closeOrder = useCallback(async (orderId: string) => {
     const order = orders.find((item) => item.id === orderId); if (!order || paidTotal(order) < orderTotal(order)) return;
     await persistOrder({ ...order, status: "closed" }, "close_order");
+  }, [orders, persistOrder]);
+
+  /**
+   * Divide la cuenta entre `people` personas. Rehacer el reparto borra el anterior, así que se
+   * bloquea en cuanto alguien pagó: mover el importe de una persona que ya se fue con su ticket
+   * en la mano dejaría la cuenta sin cuadrar y sin forma de explicarlo.
+   */
+  const splitOrder = useCallback(async (orderId: string, mode: SplitMode, people: number) => {
+    const order = orders.find((item) => item.id === orderId); if (!order) return;
+    if (hasSubaccountPayments(order)) throw new Error("La cuenta ya tiene cobros: no se puede volver a dividir.");
+    const subaccounts = createSubaccounts(people);
+    if (!subaccounts.length) throw new Error("Una cuenta separada necesita al menos dos personas.");
+    await persistOrder({ ...order, splitMode: mode, subaccounts, itemShares: [] }, "split_order");
+  }, [orders, persistOrder]);
+
+  const renameSubaccount = useCallback(async (orderId: string, subaccountId: string, label: string) => {
+    const order = orders.find((item) => item.id === orderId); if (!order || !label.trim()) return;
+    await persistOrder({ ...order, subaccounts: (order.subaccounts ?? []).map((subaccount) => subaccount.id === subaccountId ? { ...subaccount, label: label.trim() } : subaccount) }, "split_order");
+  }, [orders, persistOrder]);
+
+  const assignItemUnits = useCallback(async (orderId: string, itemId: string, subaccountId: string, units: number) => {
+    const order = orders.find((item) => item.id === orderId); if (!order) return;
+    const item = order.items.find((candidate) => candidate.id === itemId); if (!item || item.status === "cancelled") return;
+    // Si esa persona ya pagó, cambiar lo suyo es una reasignación con motivo, no un reparto normal.
+    if (order.payments.some((payment) => payment.subaccountId === subaccountId)) throw new Error("Esa persona ya pagó: usa «Reasignar» para mover sus artículos.");
+    const itemShares = assignUnits(pruneShares(order.items, order.itemShares ?? []), item, subaccountId, units);
+    await persistOrder({ ...order, itemShares }, "assign_split_units");
+  }, [orders, persistOrder]);
+
+  /**
+   * Mueve unidades de una persona a otra cuando el reparto ya empezó a cobrarse. Reescribe una
+   * cuenta que alguien dio por cerrada, así que pide gerencia y motivo y el servidor lo registra
+   * como incidencia; el mismo trato que una reversión de venta.
+   */
+  const reassignItemUnits = useCallback(async (orderId: string, itemId: string, fromId: string, toId: string, units: number, reason: string) => {
+    const order = orders.find((item) => item.id === orderId); if (!order || !reason.trim()) return;
+    const item = order.items.find((candidate) => candidate.id === itemId); if (!item || item.status === "cancelled") return;
+    if (fromId === toId) return;
+    if (hasSubaccountPayments(order) && session?.role !== "manager") throw new Error("Sólo gerencia puede reasignar artículos de una cuenta que ya empezó a cobrarse.");
+
+    const current = pruneShares(order.items, order.itemShares ?? []);
+    const held = current.filter((share) => share.itemId === itemId && share.subaccountId === fromId).reduce((sum, share) => sum + share.units, 0);
+    const moved = Math.min(Math.max(0, Math.trunc(units)), held);
+    if (!moved) return;
+    const taken = current.filter((share) => share.itemId === itemId && share.subaccountId === toId).reduce((sum, share) => sum + share.units, 0);
+    const itemShares = assignUnits(assignUnits(current, item, fromId, held - moved), item, toId, taken + moved);
+
+    const before = subaccountTotal(order, toId);
+    const after = subaccountTotal({ ...order, itemShares }, toId);
+    await persistOrder({ ...order, itemShares }, "reassign_split_item", {
+      splitReassignmentReason: reason.trim(),
+      splitReassignmentAmount: Math.abs(roundToCents(after - before))
+    });
+  }, [orders, persistOrder, session]);
+
+  const clearSplit = useCallback(async (orderId: string) => {
+    const order = orders.find((item) => item.id === orderId); if (!order) return;
+    if (hasSubaccountPayments(order)) throw new Error("La cuenta ya tiene cobros por persona: no se puede volver a juntar.");
+    await persistOrder({ ...order, splitMode: undefined, subaccounts: [], itemShares: [] }, "clear_split");
   }, [orders, persistOrder]);
 
   const setDiscount = useCallback(async (orderId: string, amount: number, reason: string) => {
@@ -607,12 +681,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     cashSession, cashSessionRequired, canTakeOrders: ordersAllowed, refreshCashSession,
     login, logout, startOrder, addItem, changeQuantity, cancelCommandedItem, dispatchPending, markOrderReady, finalizeOrder, addPayment,
     closeOrder, setDiscount, cancelOrder, reverseSale, forceSync, addTable, updateTable,
+    splitOrder, renameSubaccount, assignItemUnits, reassignItemUnits, clearSplit,
     createProduct, updateProduct, deleteProduct, createExtra, updateExtra, deleteExtra, createCategory, updateCategory, deleteCategory, uploadProductImage
   }), [
     session, hydrated, orders, tables, products, categories, extras, online, syncStatus, pendingCount,
     cashSession, cashSessionRequired, ordersAllowed, refreshCashSession,
     login, logout, startOrder, addItem, changeQuantity, cancelCommandedItem, dispatchPending, markOrderReady, finalizeOrder, addPayment,
     closeOrder, setDiscount, cancelOrder, reverseSale, forceSync, addTable, updateTable,
+    splitOrder, renameSubaccount, assignItemUnits, reassignItemUnits, clearSplit,
     createProduct, updateProduct, deleteProduct, createExtra, updateExtra, deleteExtra, createCategory, updateCategory, deleteCategory, uploadProductImage
   ]);
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

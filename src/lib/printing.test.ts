@@ -204,3 +204,75 @@ describe("command printing", () => {
     expect(html).toContain("Té &lt;b&gt;verde&lt;/b&gt;");
   });
 });
+
+describe("ticket of a separate account", () => {
+  const split: Order = {
+    ...order,
+    folio: 1052,
+    discount: 50,
+    discountReason: "cortesía por demora",
+    items: [
+      { id: "latte", productId: "p-latte", name: "Latte", quantity: 2, unitPrice: 60, modifiers: [], status: "prepared" },
+      { id: "jugo", productId: "p-jugo", name: "Jugo", quantity: 1, unitPrice: 55, modifiers: [], status: "prepared" }
+    ],
+    payments: [
+      { id: "ana", method: "cash", amount: 45, tip: 10, createdAt: "2026-08-24T11:00:00Z", subaccountId: "ana" },
+      { id: "beto", method: "card", amount: 80, tip: 0, createdAt: "2026-08-24T11:01:00Z", subaccountId: "beto" }
+    ]
+  };
+
+  const anaContext = {
+    label: "Ana", position: 1, count: 2,
+    items: [{ ...split.items[1] }],
+    discount: 8.6,
+    total: 46.4,
+    payments: [split.payments[0]]
+  };
+
+  it("says which of the separate accounts it is", () => {
+    const html = createTicketDocument(split, "58", defaultPrinterSettings, anaContext).html;
+    expect(html).toContain("TICKET NO FISCAL #1052 (1/2)");
+    expect(html).toContain("Ana");
+  });
+
+  it("prints only the items of that person", () => {
+    const html = createTicketDocument(split, "58", defaultPrinterSettings, anaContext).html;
+    expect(html).toContain("Jugo");
+    expect(html).not.toContain("Latte");
+  });
+
+  it("shows the discount as prorated, not as the discount of the whole bill", () => {
+    const html = createTicketDocument(split, "58", defaultPrinterSettings, anaContext).html;
+    expect(html).toContain("Descuento (prorrateado)");
+    expect(html).toContain(`-${mxn.format(8.6)}`);
+    expect(html).not.toContain(mxn.format(50));
+  });
+
+  it("charges that person their own total, not the total of the bill", () => {
+    const html = createTicketDocument(split, "58", defaultPrinterSettings, anaContext).html;
+    expect(html).toContain(`<strong>${mxn.format(46.4)}</strong>`);
+  });
+
+  it("keeps each tip with the person who left it", () => {
+    const html = createTicketDocument(split, "58", defaultPrinterSettings, anaContext).html;
+    expect(html).toContain(mxn.format(10));
+    expect(html).toContain("EFECTIVO");
+    expect(html).not.toContain("TARJETA");
+  });
+
+  it("escapes a customer-supplied name, which reaches the ticket verbatim", () => {
+    const html = createTicketDocument(split, "58", defaultPrinterSettings, { ...anaContext, label: "<script>x</script>" }).html;
+    expect(html).not.toContain("<script>x</script>");
+    expect(html).toContain("&lt;script&gt;");
+  });
+
+  // La red de seguridad del módulo: si el ticket completo cambiara al agregar el reparto, las
+  // cuentas sin dividir —que son casi todas— saldrían distintas sin que nadie lo pidiera.
+  it("leaves the whole-bill ticket exactly as it was", () => {
+    const html = createTicketDocument(split, "58", defaultPrinterSettings).html;
+    expect(html).toContain("TICKET NO FISCAL #1052");
+    expect(html).not.toContain("(1/2)");
+    expect(html).toContain("Latte");
+    expect(html).toContain("cortesía por demora");
+  });
+});

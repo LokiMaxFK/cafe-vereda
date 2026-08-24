@@ -245,6 +245,7 @@ con el nombre `FXX-NN-descripcion.png`.
 | F14 | Personal | `/personal` | B | ⚠️ Completada con hallazgos (1 corrección; **F14-02 Alta abierta**, F14-03 y F14-04 abiertas); P11 excluido y sin verificar | [F14](pdf/F14-personal.pdf) |
 | F15 | Configuración e impresión | `/configuracion` | A | ⚠️ Completada salvo impresión en papel real (1 corrección alta) | [F15](pdf/F15-impresion.pdf) |
 | F16 | Offline y sincronización | transversal | A + B | ⚠️ Completada, navegador incluido (2 correcciones altas: F16-01 y **F16-05**; F16-02, F16-03 y **F16-04** abiertas) | [F16](pdf/F16-offline-y-sincronizacion.pdf) |
+| F17 | Cuentas separadas | `/venta/:id` (cobro) | A | ⚠️ Módulo nuevo, verificado en navegador en modo demostración; **la migración SQL no se pudo ejecutar** (sin Docker ni psql) | [F17](fichas/F17-cuentas-separadas.html) |
 
 Estados posibles: ⬜ Pendiente · 🟡 En curso · ✅ Completada · ⚠️ Completada con hallazgos.
 
