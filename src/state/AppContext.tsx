@@ -1,12 +1,14 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { categories as initialCategories, commonModifiers as initialExtras, products as initialProducts } from "../data/menu";
 import { initialTables } from "../data/tables";
+import { CASH_SESSION_REQUIRED_MESSAGE, canTakeOrders } from "../domain/cash";
 import { productImageError, sortCategories } from "../domain/catalog";
 import { cancellableStatuses, markItemsPrepared, nextLocalFolio } from "../domain/order";
 import { nextFreeSlot } from "../domain/tables";
 import { applyPaymentCap, orderSubtotal, orderTotal, paidTotal } from "../domain/money";
 import { cancelItemUnits, mergeOrAddItem, type OrderItemInput } from "../domain/orderItem";
-import type { AppRole, CafeTable, CatalogExtra, Category, Order, OrderItem, PaymentMethod, Product, StaffSession, SyncStatus } from "../domain/types";
+import type { AppRole, CafeTable, CashSession, CatalogExtra, Category, Order, OrderItem, PaymentMethod, Product, StaffSession, SyncStatus } from "../domain/types";
+import { fetchOpenCashSession } from "../lib/cashSessions";
 import { db } from "../lib/db";
 import { queueOperation, reclaimStalledOperations, syncPendingOperations } from "../lib/offline";
 import { mapRemoteOrder, REMOTE_ORDER_SELECT } from "../lib/remoteOrders";
@@ -83,6 +85,12 @@ interface AppContextValue {
   syncStatus: SyncStatus;
   pendingCount: number;
   demoMode: boolean;
+  /** Turno de caja abierto, o `null` si no hay ninguno. */
+  cashSession: CashSession | null;
+  /** El modo demo no tiene tabla de turnos, así que ahí la caja no condiciona los pedidos. */
+  cashSessionRequired: boolean;
+  canTakeOrders: boolean;
+  refreshCashSession: () => Promise<void>;
   login: (username: string, pin: string) => Promise<void>;
   logout: () => Promise<void>;
   startOrder: (type: "table" | "takeaway", target?: string, items?: OrderItem[]) => Promise<Order>;
@@ -136,9 +144,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [online, setOnline] = useState(navigator.onLine);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(navigator.onLine ? "synced" : "pending");
   const [pendingCount, setPendingCount] = useState(0);
+  const [cashSession, setCashSession] = useState<CashSession | null>(null);
 
   useEffect(() => {
-    Promise.all([db.orders.toArray(), db.cafeTables.toArray(), db.sessions.orderBy("validatedAt").last(), db.catalog.toArray(), db.catalogCategories.toArray(), db.catalogExtras.toArray()]).then(async ([savedOrders, savedTables, savedSession, savedProducts, savedCategories, savedExtras]) => {
+    Promise.all([db.orders.toArray(), db.cafeTables.toArray(), db.sessions.orderBy("validatedAt").last(), db.catalog.toArray(), db.catalogCategories.toArray(), db.catalogExtras.toArray(), db.cashSessions.toArray()]).then(async ([savedOrders, savedTables, savedSession, savedProducts, savedCategories, savedExtras, savedCashSessions]) => {
       if (!savedOrders.length && !isSupabaseConfigured) {
         await db.orders.bulkPut(sampleOrders);
         setOrders(sampleOrders);
@@ -158,6 +167,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (savedExtras.length) setExtras(savedExtras);
       else if (!isSupabaseConfigured) { await db.catalogExtras.bulkPut(demoExtras); setExtras(demoExtras); }
       else setExtras([]);
+      // El turno cacheado es la única referencia hasta que llegue el primer sync: sin él, un
+      // arranque sin conexión bloquearía los pedidos aunque la caja esté abierta.
+      setCashSession(savedCashSessions.find((cash) => !cash.closedAt) ?? null);
       await reclaimStalledOperations();
       setPendingCount(await db.pendingOperations.where("status").anyOf("pending", "review_required").count());
     }).finally(() => setHydrated(true));
@@ -226,16 +238,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setExtras(remoteExtras);
   }, []);
 
+  /**
+   * Refresca el turno de caja y lo cachea. Un fallo de red deja intacta la copia local: dar
+   * por cerrada la caja por un error de conexión pararía el servicio entero.
+   */
+  const refreshCashSession = useCallback(async () => {
+    const remote = await fetchOpenCashSession();
+    if (remote === undefined) return;
+    await db.cashSessions.clear();
+    if (remote) await db.cashSessions.put(remote);
+    setCashSession(remote);
+  }, []);
+
   const forceSync = useCallback(async () => {
     if (!navigator.onLine) { setSyncStatus("pending"); return; }
     setSyncStatus("syncing");
     const result = await syncPendingOperations();
     if (!result.review) await pullRemoteOrders();
-    await Promise.all([pullRemoteTables(), pullRemoteCatalog()]);
+    await Promise.all([pullRemoteTables(), pullRemoteCatalog(), refreshCashSession()]);
     const count = await db.pendingOperations.where("status").anyOf("pending", "review_required").count();
     setPendingCount(count);
     setSyncStatus(result.review > 0 ? "review_required" : "synced");
-  }, [pullRemoteOrders, pullRemoteTables, pullRemoteCatalog]);
+  }, [pullRemoteOrders, pullRemoteTables, pullRemoteCatalog, refreshCashSession]);
 
   useEffect(() => {
     const connected = () => { setOnline(true); void forceSync(); };
@@ -304,8 +328,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return error || data == null ? localFolio : Number(data);
   }, [orders]);
 
+  const cashSessionRequired = isSupabaseConfigured;
+  const ordersAllowed = canTakeOrders({ required: cashSessionRequired, session: cashSession });
+
   const startOrder = useCallback(async (type: "table" | "takeaway", target?: string, items: OrderItem[] = []) => {
     if (!session) throw new Error("Sesión requerida");
+    // Última barrera del candado de caja: la UI lo bloquea antes, pero un pedido creado por
+    // una ruta directa seguiría dejando cobros fuera de todo arqueo.
+    if (!ordersAllowed) throw new Error(CASH_SESSION_REQUIRED_MESSAGE);
     const nextFolio = await reserveFolio();
     const order: Order = {
       id: crypto.randomUUID(), folio: nextFolio, type, status: "open", items, payments: [], discount: 0,
@@ -316,7 +346,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setOrders((current) => [...current, order]); setPendingCount((count) => count + 1);
     if (isSupabaseConfigured && navigator.onLine) void forceSync();
     return order;
-  }, [reserveFolio, session, forceSync]);
+  }, [reserveFolio, session, forceSync, ordersAllowed]);
 
   const addItem = useCallback(async (orderId: string, input: OrderItemInput) => {
     const order = orders.find((item) => item.id === orderId); if (!order) return;
@@ -574,11 +604,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo(() => ({
     session, hydrated, orders, tables, products, categories, extras, online, syncStatus, pendingCount, demoMode: !isSupabaseConfigured,
+    cashSession, cashSessionRequired, canTakeOrders: ordersAllowed, refreshCashSession,
     login, logout, startOrder, addItem, changeQuantity, cancelCommandedItem, dispatchPending, markOrderReady, finalizeOrder, addPayment,
     closeOrder, setDiscount, cancelOrder, reverseSale, forceSync, addTable, updateTable,
     createProduct, updateProduct, deleteProduct, createExtra, updateExtra, deleteExtra, createCategory, updateCategory, deleteCategory, uploadProductImage
   }), [
     session, hydrated, orders, tables, products, categories, extras, online, syncStatus, pendingCount,
+    cashSession, cashSessionRequired, ordersAllowed, refreshCashSession,
     login, logout, startOrder, addItem, changeQuantity, cancelCommandedItem, dispatchPending, markOrderReady, finalizeOrder, addPayment,
     closeOrder, setDiscount, cancelOrder, reverseSale, forceSync, addTable, updateTable,
     createProduct, updateProduct, deleteProduct, createExtra, updateExtra, deleteExtra, createCategory, updateCategory, deleteCategory, uploadProductImage
