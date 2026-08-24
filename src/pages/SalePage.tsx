@@ -10,6 +10,7 @@ import { ProductPicker } from "../components/ProductPicker";
 import { OrderStatusBadge } from "../components/StatusBadge";
 import { printErrorMessage } from "../lib/browserPrinting";
 import { cancelOrderNotifyingBar } from "../lib/orderCancellation";
+import { nextCopyNumber, peekCopyNumber, resetCopyNumber } from "../lib/printCopies";
 import { printCommand, printTicket } from "../lib/printing";
 import { useApp } from "../state/AppContext";
 
@@ -27,7 +28,7 @@ const editableStatuses = ["open", "preparing", "ready"];
  * revertida, donde ese botón ni siquiera existe.
  */
 function closedStateCopy(status: Order["status"]): { title: string; description: string } {
-  if (status === "closed") return { title: "Venta cobrada", description: "La cuenta ya está pagada y cerrada. Usa «Reimprimir» si el cliente necesita otra copia del ticket." };
+  if (status === "closed") return { title: "Venta cobrada", description: "La cuenta ya está pagada y cerrada. Usa «Reimprimir» todas las veces que el cliente necesite otra copia del ticket." };
   if (status === "cancelled") return { title: "Cuenta cancelada", description: "El registro se conserva para auditoría, pero ya no se puede modificar ni cobrar." };
   if (status === "reversed") return { title: "Venta revertida", description: "El cobro se anuló y quedó registrado en Reportes. La cuenta ya no se puede modificar." };
   return { title: "Orden finalizada, lista para cobrar", description: "Ya no se pueden agregar productos. Usa el botón «Cobrar» para registrar el pago." };
@@ -104,6 +105,8 @@ export function SalePage() {
     if (!commandItems.length) return;
     const batchId = await dispatchPending(activeOrder.id);
     if (batchId) {
+      // La comanda original no lleva número de copia, así que la cuenta arranca de cero otra vez.
+      resetCopyNumber(activeOrder.id);
       setMessage(`${commandItems.length} artículo${commandItems.length === 1 ? "" : "s"} enviado${commandItems.length === 1 ? "" : "s"} a preparación.`);
       try { await printCommand({ ...activeOrder, items: commandItems.map((item) => ({ ...item, dispatchBatchId: batchId })) }, commandItems.map((item) => ({ ...item, dispatchBatchId: batchId }))); } catch (reason) { setMessage(`Comanda enviada a preparación, pero no se pudo imprimir: ${printErrorMessage(reason)}`); }
     }
@@ -124,11 +127,23 @@ export function SalePage() {
     setCheckoutOpen(false); navigate("/salon");
   }
   async function reprintTicket() {
-    try { await printTicket(activeOrder); } catch (reason) { setMessage(`No se pudo imprimir el ticket: ${printErrorMessage(reason)}`); }
+    setMessage("");
+    try {
+      await printTicket(activeOrder);
+      setMessage("Se abrió el diálogo de impresión del ticket. Puedes repetirlo las veces que haga falta.");
+    } catch (reason) { setMessage(`No se pudo imprimir el ticket: ${printErrorMessage(reason)}`); }
   }
   async function reprintCommand() {
     const items = activeOrder.items.filter((item) => item.dispatchBatchId);
-    try { await printCommand(activeOrder, items, 1); } catch (reason) { setMessage(`No se pudo reimprimir la comanda: ${printErrorMessage(reason)}`); }
+    if (!items.length) return;
+    setMessage("");
+    // El número de copia se reserva antes de imprimir para que dos reimpresiones seguidas no
+    // salgan las dos como COPIA 1 y la barra las confunda con comandas distintas.
+    const copy = nextCopyNumber(activeOrder.id);
+    try {
+      await printCommand(activeOrder, items, copy);
+      setMessage(`Se abrió el diálogo de impresión de la COPIA ${copy} de la comanda.`);
+    } catch (reason) { setMessage(`No se pudo reimprimir la comanda: ${printErrorMessage(reason)}`); }
   }
   async function performOrderAction() {
     if (!orderAction || !orderActionReason.trim()) return;
@@ -147,7 +162,7 @@ export function SalePage() {
     <div className="flex min-h-screen flex-col bg-background">
       <header className="sticky top-0 z-30 flex min-h-16 items-center justify-between gap-3 border-b border-outline-variant/30 bg-background/95 px-4 py-2 backdrop-blur sm:px-6">
         <div className="flex min-w-0 items-center gap-3"><Button size="icon" variant="ghost" onClick={() => navigate("/salon")} aria-label="Volver al salón"><ArrowLeft size={20} /></Button><div><div className="flex items-center gap-2"><h1 className="truncate text-lg font-bold">{order.type === "table" ? `Mesa ${order.tableId?.replace("t", "")}` : order.customerName || "Para llevar"}</h1><OrderStatusBadge status={order.status} /></div><p className="text-xs text-on-surface-variant">Orden #{order.folio} · {new Date(order.openedAt).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}</p></div></div>
-        <div className="relative flex items-center gap-2">{discountable && <Button className="hidden sm:inline-flex" onClick={() => openDiscount(false)} disabled={session?.role !== "manager"}>Descuento</Button>}{order.status === "closed" ? <Button variant="primary" onClick={() => void reprintTicket()}><Printer size={18} /> Reimprimir</Button> : order.status === "served" ? <Button variant="primary" onClick={() => setCheckoutOpen(true)} disabled={!order.items.length || ["cancelled", "reversed"].includes(order.status)}>Cobrar <ChevronRight size={18} /></Button> : <Button variant="success" onClick={() => void finalize()} disabled={!order.items.length || pendingItems.length > 0}><ClipboardCheck size={18} /> Finalizar orden</Button>}<Button size="icon" variant="ghost" aria-label="Más acciones" onClick={() => setActionsOpen((value) => !value)}><MoreVertical size={19} /></Button>{actionsOpen && <div className="absolute right-0 top-12 z-40 w-56 rounded-xl border border-outline-variant/40 bg-surface-container-lowest p-2 shadow-2xl">{cancellableStatuses.includes(order.status) && <button className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-sm font-semibold text-error hover:bg-error-container" onClick={() => { setOrderAction("cancel"); setActionsOpen(false); }}><Trash2 size={17} /> Cancelar cuenta</button>}{order.status === "closed" && session?.role === "manager" && <button className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-sm font-semibold text-error hover:bg-error-container" onClick={() => { setOrderAction("reverse"); setActionsOpen(false); }}><RotateCcw size={17} /> Revertir venta</button>}{order.items.some((item) => item.dispatchBatchId) && <button className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-sm font-semibold hover:bg-surface-container-low" onClick={() => { void reprintCommand(); setActionsOpen(false); }}><Printer size={17} /> Reimprimir COPIA 1</button>}</div>}</div>
+        <div className="relative flex items-center gap-2">{discountable && <Button className="hidden sm:inline-flex" onClick={() => openDiscount(false)} disabled={session?.role !== "manager"}>Descuento</Button>}{order.status === "closed" ? <Button variant="primary" onClick={() => void reprintTicket()}><Printer size={18} /> Reimprimir</Button> : order.status === "served" ? <Button variant="primary" onClick={() => setCheckoutOpen(true)} disabled={!order.items.length || ["cancelled", "reversed"].includes(order.status)}>Cobrar <ChevronRight size={18} /></Button> : <Button variant="success" onClick={() => void finalize()} disabled={!order.items.length || pendingItems.length > 0}><ClipboardCheck size={18} /> Finalizar orden</Button>}<Button size="icon" variant="ghost" aria-label="Más acciones" onClick={() => setActionsOpen((value) => !value)}><MoreVertical size={19} /></Button>{actionsOpen && <div className="absolute right-0 top-12 z-40 w-56 rounded-xl border border-outline-variant/40 bg-surface-container-lowest p-2 shadow-2xl">{cancellableStatuses.includes(order.status) && <button className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-sm font-semibold text-error hover:bg-error-container" onClick={() => { setOrderAction("cancel"); setActionsOpen(false); }}><Trash2 size={17} /> Cancelar cuenta</button>}{order.status === "closed" && session?.role === "manager" && <button className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-sm font-semibold text-error hover:bg-error-container" onClick={() => { setOrderAction("reverse"); setActionsOpen(false); }}><RotateCcw size={17} /> Revertir venta</button>}{order.items.some((item) => item.dispatchBatchId) && <button className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-sm font-semibold hover:bg-surface-container-low" onClick={() => { void reprintCommand(); setActionsOpen(false); }}><Printer size={17} /> Reimprimir comanda (COPIA {peekCopyNumber(order.id)})</button>}{order.items.length > 0 && <button className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-sm font-semibold hover:bg-surface-container-low" onClick={() => { void reprintTicket(); setActionsOpen(false); }}><Printer size={17} /> Imprimir ticket</button>}</div>}</div>
       </header>
       {message && <div className="mx-4 mt-3 sm:mx-6"><InlineAlert tone="success">{message}</InlineAlert></div>}
       <div className="grid flex-1 xl:grid-cols-[180px_minmax(0,1fr)_390px]">
