@@ -1,4 +1,4 @@
-import type { Order, OrderItem, PaymentMethod } from "./types";
+import type { Order, OrderItem, Payment, PaymentMethod } from "./types";
 
 export const mxn = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -40,4 +40,20 @@ export function paidTotal(order: Pick<Order, "payments">) {
 
 export function applyPaymentCap(amount: number, balance: number) {
   return roundToCents(Math.min(amount, Math.max(0, balance)));
+}
+
+/**
+ * Cambio que se devuelve por un pago en efectivo.
+ *
+ * La propina va aparte —el cliente la entrega además del importe de la cuenta—, así que no
+ * descuenta del cambio: pagar $500 una cuenta de $400 devuelve $100 lleve propina o no.
+ */
+export function paymentChange(payment: Pick<Payment, "method" | "amount" | "received">) {
+  if (payment.method !== "cash" || payment.received == null) return 0;
+  return Math.max(0, roundToCents(payment.received - payment.amount));
+}
+
+/** Cambio total de la cuenta; suma el de cada pago en efectivo por si se dividió el cobro. */
+export function orderChange(order: Pick<Order, "payments">) {
+  return roundToCents(order.payments.reduce((sum, payment) => sum + paymentChange(payment), 0));
 }

@@ -204,3 +204,53 @@ describe("command printing", () => {
     expect(html).toContain("Té &lt;b&gt;verde&lt;/b&gt;");
   });
 });
+
+describe("ticket cash change", () => {
+  const cashOrder: Order = {
+    ...order,
+    payments: [{ id: "cash", method: "cash", amount: 400, tip: 0, received: 500, createdAt: "2026-08-17T15:31:00Z" }]
+  };
+
+  it("prints what the customer handed over and the change owed", () => {
+    const html = createTicketDocument(cashOrder).html;
+    expect(html).toContain("Recibido");
+    expect(html).toContain(mxn.format(500));
+    expect(html).toContain("CAMBIO");
+    expect(html).toContain(mxn.format(100));
+  });
+
+  it("omits the change when the cash covers the balance exactly", () => {
+    const html = createTicketDocument({ ...cashOrder, payments: [{ ...cashOrder.payments[0], received: 400 }] }).html;
+    expect(html).not.toContain("CAMBIO");
+    expect(html).not.toContain("Recibido");
+  });
+
+  it("omits the change on a card payment even if a received amount slipped in", () => {
+    const html = createTicketDocument({ ...cashOrder, payments: [{ ...cashOrder.payments[0], method: "card" }] }).html;
+    expect(html).not.toContain("CAMBIO");
+  });
+
+  it("omits the change on a sale recorded before the field existed", () => {
+    const html = createTicketDocument({ ...cashOrder, payments: [{ id: "old", method: "cash", amount: 400, tip: 0, createdAt: "2026-08-17T15:31:00Z" }] }).html;
+    expect(html).not.toContain("CAMBIO");
+  });
+
+  it("keeps the tip out of the change, since it is handed over on top of the bill", () => {
+    const html = createTicketDocument({ ...cashOrder, payments: [{ ...cashOrder.payments[0], tip: 20 }] }).html;
+    expect(html).toContain("Propina");
+    expect(html).toContain(mxn.format(100));
+  });
+
+  it("prints the change of each cash payment when the bill was split", () => {
+    const html = createTicketDocument({
+      ...cashOrder,
+      payments: [
+        { id: "a", method: "cash", amount: 200, tip: 0, received: 250, createdAt: "2026-08-17T15:31:00Z" },
+        { id: "b", method: "cash", amount: 200, tip: 0, received: 300, createdAt: "2026-08-17T15:32:00Z" }
+      ]
+    }).html;
+    expect(html.match(/CAMBIO/g)).toHaveLength(2);
+    expect(html).toContain(mxn.format(50));
+    expect(html).toContain(mxn.format(100));
+  });
+});

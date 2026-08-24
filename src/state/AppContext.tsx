@@ -5,7 +5,7 @@ import { CASH_SESSION_REQUIRED_MESSAGE, canTakeOrders } from "../domain/cash";
 import { productImageError, sortCategories } from "../domain/catalog";
 import { cancellableStatuses, markItemsPrepared, nextLocalFolio } from "../domain/order";
 import { nextFreeSlot } from "../domain/tables";
-import { applyPaymentCap, orderSubtotal, orderTotal, paidTotal } from "../domain/money";
+import { applyPaymentCap, orderSubtotal, orderTotal, paidTotal, roundToCents } from "../domain/money";
 import { cancelItemUnits, mergeOrAddItem, type OrderItemInput } from "../domain/orderItem";
 import type { AppRole, CafeTable, CashSession, CatalogExtra, Category, Order, OrderItem, PaymentMethod, Product, StaffSession, SyncStatus } from "../domain/types";
 import { fetchOpenCashSession } from "../lib/cashSessions";
@@ -393,7 +393,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const balance = orderTotal(order) - paidTotal(order);
     if (balance <= 0) return;
     const appliedAmount = applyPaymentCap(amount, balance);
-    await persistOrder({ ...order, payments: [...order.payments, { id: crypto.randomUUID(), method, amount: appliedAmount, tip, createdAt: new Date().toISOString() }] }, "record_payment");
+    // El importe tecleado es el efectivo que entregó el cliente: `appliedAmount` se recorta al
+    // saldo, así que sin guardarlo aparte el cambio ya no se podría reconstruir en el ticket.
+    const received = method === "cash" ? roundToCents(amount) : undefined;
+    await persistOrder({ ...order, payments: [...order.payments, { id: crypto.randomUUID(), method, amount: appliedAmount, tip, received, createdAt: new Date().toISOString() }] }, "record_payment");
   }, [orders, persistOrder]);
 
   const closeOrder = useCallback(async (orderId: string) => {
