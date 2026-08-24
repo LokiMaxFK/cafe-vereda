@@ -30,11 +30,16 @@ create index if not exists order_subaccounts_order_idx on public.order_subaccoun
 
 -- on delete cascade a propósito: sync_offline_operations borra los order_items 'pending' que no
 -- vengan en el payload, y sin el cascade ese borrado reventaría por la llave foránea.
+-- La llave propia no es decorativa: private.audit_row() escribe coalesce(new.id, old.id) en
+-- audit_log.entity_id, así que una tabla auditada sin columna `id` haría fallar el trigger en
+-- cada escritura con «record "new" has no field "id"». El par (order_item_id, subaccount_id)
+-- sigue siendo único, que es contra lo que concilia el `on conflict` de sync_offline_operations.
 create table if not exists public.order_item_shares (
+  id uuid primary key default gen_random_uuid(),
   order_item_id uuid not null references public.order_items(id) on delete cascade,
   subaccount_id uuid not null references public.order_subaccounts(id) on delete cascade,
   units integer not null check (units > 0),
-  primary key (order_item_id, subaccount_id)
+  unique (order_item_id, subaccount_id)
 );
 create index if not exists order_item_shares_subaccount_idx on public.order_item_shares(subaccount_id);
 
