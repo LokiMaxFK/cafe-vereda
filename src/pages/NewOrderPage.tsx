@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
-import { ArrowLeft, ChevronRight, Coffee, Minus, Plus, ShoppingBag, Trash2 } from "lucide-react";
+import { ArrowLeft, ChevronRight, Coffee, Minus, Plus, ShoppingBag, Trash2, WalletCards } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Badge, Button, SegmentedControl, TextField } from "../../design-system/react";
+import { Badge, Button, EmptyState, InlineAlert, SegmentedControl, TextField } from "../../design-system/react";
 import { Modal } from "../components/Modal";
 import { ProductPicker, type ProductPickerSelection } from "../components/ProductPicker";
 import { TableFloorPlan } from "../components/TableFloorPlan";
@@ -14,7 +14,7 @@ import { useApp } from "../state/AppContext";
 interface NewOrderNavState { type?: "table" | "takeaway"; tableId?: string }
 
 export function NewOrderPage() {
-  const { orders, tables, startOrder } = useApp();
+  const { orders, tables, startOrder, canTakeOrders } = useApp();
   const navigate = useNavigate();
   const location = useLocation();
   const preset = (location.state as NewOrderNavState | null) ?? null;
@@ -24,6 +24,7 @@ export function NewOrderPage() {
   const [selectedTableId, setSelectedTableId] = useState<string | undefined>(preset?.tableId);
   const [customerName, setCustomerName] = useState("");
   const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState("");
 
   const activeTables = useMemo(() => tables.filter((table) => table.active), [tables]);
   // Incluye las cuentas ya finalizadas pero sin cobrar: esa mesa sigue ocupada aunque no admita más comandas.
@@ -45,11 +46,33 @@ export function NewOrderPage() {
   async function confirm() {
     if (destType === "table" && !selectedTableId) return;
     setCreating(true);
+    setCreateError("");
     try {
       const target = destType === "table" ? selectedTableId : customerName.trim() || undefined;
       const created = await startOrder(destType, target, cartItems);
       navigate(`/venta/${created.id}`);
+    } catch (reason) {
+      setCreateError(reason instanceof Error ? reason.message : "No se pudo crear el pedido.");
     } finally { setCreating(false); }
+  }
+
+  // Sin turno de caja no se arma ni el carrito: cobrar sobre una caja cerrada deja el dinero
+  // fuera de todo arqueo, así que el bloqueo va antes de elegir el primer producto.
+  if (!canTakeOrders) {
+    return (
+      <div className="flex min-h-screen flex-col bg-background">
+        <header className="sticky top-0 z-30 flex min-h-16 items-center gap-3 border-b border-outline-variant/30 bg-background/95 px-4 py-2 backdrop-blur sm:px-6">
+          <Button size="icon" variant="ghost" onClick={() => navigate("/salon")} aria-label="Volver al salón"><ArrowLeft size={20} /></Button>
+          <h1 className="text-lg font-bold">Nueva orden</h1>
+        </header>
+        <EmptyState
+          icon={<WalletCards />}
+          title="Primero abre la caja"
+          description="No se pueden tomar pedidos con la caja cerrada. Abre el turno registrando el fondo inicial y vuelve a intentarlo."
+          action={<Button variant="primary" onClick={() => navigate("/caja")}><WalletCards size={18} /> Ir a Caja</Button>}
+        />
+      </div>
+    );
   }
 
   return (
@@ -80,6 +103,7 @@ export function NewOrderPage() {
             <label className="block text-sm font-semibold text-on-surface-variant">Nombre del pedido (opcional)<TextField value={customerName} onChange={(event) => setCustomerName(event.target.value)} placeholder="Ej. Mariana" autoFocus /></label>
           )}
           {visibleItems.length > 0 && <div className="flex flex-wrap gap-2">{visibleItems.map((item) => <Badge key={item.id} tone="neutral">{item.quantity}× {item.name}</Badge>)}</div>}
+          {createError && <InlineAlert>{createError}</InlineAlert>}
           <Button variant="primary" size="lg" className="w-full" disabled={creating || (destType === "table" && !selectedTableId)} onClick={() => void confirm()}><ShoppingBag size={18} /> Crear pedido</Button>
         </div>
       </Modal>}

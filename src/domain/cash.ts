@@ -40,3 +40,21 @@ export function calculateCashDifference(counted: number, expected: number): Cash
     status: difference === 0 ? "exact" : difference > 0 ? "surplus" : "shortage"
   };
 }
+
+export const CASH_SESSION_REQUIRED_MESSAGE =
+  "Abre la caja antes de tomar pedidos: registra el fondo inicial del turno en la pantalla de Caja.";
+
+export interface OrderGateInput {
+  /** Falso en modo demo (sin Supabase), donde no existe la tabla de turnos de caja. */
+  required: boolean;
+  session: { closedAt?: string } | null;
+}
+
+/**
+ * Un pedido sólo puede abrirse con un turno de caja vivo: sin él, el efectivo cobrado no
+ * pertenece a ningún arqueo y el corte del día nunca cuadra.
+ */
+export function canTakeOrders({ required, session }: OrderGateInput): boolean {
+  if (!required) return true;
+  return Boolean(session && !session.closedAt);
+}

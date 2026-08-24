@@ -3,6 +3,7 @@ import { ArrowRight, BarChart3, BookOpen, Boxes, ChefHat, Clock3, Coffee, Layout
 import { Link, useNavigate } from "react-router-dom";
 import { Badge, Button, EmptyState, MetricCard, Page, PageHeader, Panel, SectionHeader } from "../../design-system/react";
 import { mxn, orderTotal } from "../domain/money";
+import { CashClosedNotice } from "../components/CashClosedNotice";
 import { OrderStatusBadge } from "../components/StatusBadge";
 import { SyncPill } from "../components/SyncPill";
 import { useApp } from "../state/AppContext";
@@ -10,7 +11,7 @@ import { useApp } from "../state/AppContext";
 interface QuickAction { key: string; label: string; description: string; icon: ReactNode; onClick: () => void; managerOnly?: boolean; featured?: boolean; }
 
 export function DashboardPage() {
-  const { session, orders } = useApp();
+  const { session, orders, canTakeOrders } = useApp();
   const navigate = useNavigate();
   const manager = session?.role === "manager";
   const activeOrders = orders.filter((order) => !["served", "closed", "cancelled", "reversed"].includes(order.status));
@@ -23,7 +24,7 @@ export function DashboardPage() {
   const greeting = hour < 12 ? "Buenos días" : hour < 19 ? "Buenas tardes" : "Buenas noches";
 
   const quickActions: QuickAction[] = [
-    { key: "new-order", label: "Nuevo Pedido", description: "Elige productos y luego asigna mesa o para llevar", icon: <Plus size={20} />, onClick: () => navigate("/venta/nueva"), featured: true },
+    { key: "new-order", label: "Nuevo Pedido", description: canTakeOrders ? "Elige productos y luego asigna mesa o para llevar" : "Abre la caja para poder tomar pedidos", icon: <Plus size={20} />, onClick: () => navigate(canTakeOrders ? "/venta/nueva" : "/caja"), featured: true },
     { key: "salon", label: "Salón", description: "Ver mesas y pedidos abiertos", icon: <LayoutGrid size={20} />, onClick: () => navigate("/salon") },
     { key: "preparacion", label: "Preparación", description: "Ver la cola de comandas activas", icon: <ChefHat size={20} />, onClick: () => navigate("/preparacion") },
     { key: "pedidos", label: "Pedidos", description: "Historial completo de la operación", icon: <Coffee size={20} />, onClick: () => navigate("/pedidos") },
@@ -52,6 +53,8 @@ export function DashboardPage() {
           ? <MetricCard icon={<WalletCards />} label="Venta del día" value={mxn.format(revenueToday)} detail={`${closedToday.length} tickets cobrados`} tone="success" />
           : <MetricCard icon={<Users />} label="Tu turno" value={session?.name ?? "—"} detail="Sesión validada" />}
       </div>
+
+      <CashClosedNotice className="mt-6" />
 
       <SectionHeader className="mt-8" title="Acciones rápidas" />
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

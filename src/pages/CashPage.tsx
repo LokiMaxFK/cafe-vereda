@@ -5,34 +5,9 @@ import { calculateCashDifference, calculateCashSummary } from "../domain/cash";
 import { mxn } from "../domain/money";
 import type { CashMovement, CashSession } from "../domain/types";
 import { Modal } from "../components/Modal";
+import { mapCashMovement, mapCashSession } from "../lib/cashSessions";
 import { supabase } from "../lib/supabase";
 import { useApp } from "../state/AppContext";
-
-function mapCashSession(row: Record<string, unknown>): CashSession {
-  return {
-    id: String(row.id),
-    openedBy: String(row.opened_by),
-    openingFund: Number(row.opening_fund_cents) / 100,
-    openedAt: String(row.opened_at),
-    closedBy: row.closed_by ? String(row.closed_by) : undefined,
-    closedAt: row.closed_at ? String(row.closed_at) : undefined,
-    countedCash: row.counted_cash_cents != null ? Number(row.counted_cash_cents) / 100 : undefined,
-    expectedCash: row.expected_cash_cents != null ? Number(row.expected_cash_cents) / 100 : undefined,
-    difference: row.difference_cents != null ? Number(row.difference_cents) / 100 : undefined
-  };
-}
-
-function mapCashMovement(row: Record<string, unknown>): CashMovement {
-  return {
-    id: String(row.id),
-    cashSessionId: String(row.cash_session_id),
-    type: row.movement_type as CashMovement["type"],
-    amount: Number(row.amount_cents) / 100,
-    note: row.note ? String(row.note) : undefined,
-    recordedBy: String(row.recorded_by),
-    createdAt: String(row.created_at)
-  };
-}
 
 function rpcErrorMessage(error: { message?: string } | null) {
   if (!error) return "Ocurrió un error inesperado.";
@@ -161,7 +136,7 @@ function CloseSessionModal({ expected, onClose, onSubmit }: { expected: number; 
 }
 
 export function CashPage() {
-  const { session } = useApp();
+  const { session, cashSessionRequired, refreshCashSession } = useApp();
   const [cashSession, setCashSession] = useState<CashSession | null>(null);
   const [movements, setMovements] = useState<CashMovement[]>([]);
   const [cashSalesCents, setCashSalesCents] = useState(0);
@@ -177,7 +152,7 @@ export function CashPage() {
     setError("");
     const { data: sessionRow, error: sessionError } = await supabase.from("cash_sessions").select("*").is("closed_at", null).maybeSingle();
     if (sessionError) { setError(sessionError.message); setLoading(false); return; }
-    if (!sessionRow) { setCashSession(null); setMovements([]); setCashSalesCents(0); setLoading(false); return; }
+    if (!sessionRow) { setCashSession(null); setMovements([]); setCashSalesCents(0); setLoading(false); void refreshCashSession(); return; }
     const session = mapCashSession(sessionRow);
     const [{ data: movementRows, error: movementError }, { data: paymentRows, error: paymentError }] = await Promise.all([
       supabase.from("cash_movements").select("*").eq("cash_session_id", session.id).order("created_at", { ascending: false }),
@@ -191,7 +166,9 @@ export function CashPage() {
     setMovements((movementRows ?? []).map(mapCashMovement));
     setCashSalesCents((paymentRows ?? []).reduce((sum, row) => sum + Number(row.amount_cents), 0));
     setLoading(false);
-  }, []);
+    // El candado de pedidos vive en el contexto: hay que moverlo con cada apertura y cada corte.
+    void refreshCashSession();
+  }, [refreshCashSession]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -238,10 +215,11 @@ export function CashPage() {
       <Page size="wide">
         <PageHeader eyebrow="CONTROL DE EFECTIVO" title="Caja" description="No hay un turno abierto." />
         {error && <div className="mb-4"><InlineAlert>{error}</InlineAlert></div>}
+        {cashSessionRequired && <div className="mb-4"><InlineAlert>Mientras la caja esté cerrada no se pueden tomar pedidos nuevos. Abre el turno para reanudar el servicio.</InlineAlert></div>}
         <EmptyState
           icon={<WalletCards />}
           title="Sin turno abierto"
-          description="Abre un turno con tu fondo inicial para empezar a registrar movimientos de caja."
+          description="Abre un turno con tu fondo inicial para empezar a registrar movimientos de caja y poder tomar pedidos."
           action={<Button variant="primary" onClick={() => setOpenModalOpen(true)}><WalletCards size={18} /> Abrir turno</Button>}
         />
         {openModalOpen && <OpenSessionModal onClose={() => setOpenModalOpen(false)} onOpen={openSession} />}

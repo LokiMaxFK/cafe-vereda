@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { LayoutGrid, ShoppingBag, Users } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Badge, Button, Page, PageHeader, Panel, SegmentedControl } from "../../design-system/react";
+import { CashClosedNotice } from "../components/CashClosedNotice";
 import { OrderPreviewModal } from "../components/OrderPreviewModal";
 import { SyncPill } from "../components/SyncPill";
 import { TableFloorPlan } from "../components/TableFloorPlan";
@@ -25,7 +26,7 @@ function useNow(intervalMs: number) {
 }
 
 export function SalonPage() {
-  const { orders, tables } = useApp();
+  const { orders, tables, canTakeOrders } = useApp();
   const navigate = useNavigate();
   const now = useNow(30_000);
   const [view, setView] = useState<"map" | "list">("map");
@@ -57,7 +58,8 @@ export function SalonPage() {
 
   function handleTable(card: TableCard) {
     if (card.order) setPreviewId(card.order.id);
-    else navigate("/venta/nueva", { state: { type: "table", tableId: card.table.id } });
+    // Una mesa libre sólo lleva a la toma de pedido; con la caja cerrada el atajo es abrirla.
+    else navigate(canTakeOrders ? "/venta/nueva" : "/caja", canTakeOrders ? { state: { type: "table", tableId: card.table.id } } : undefined);
   }
 
   return (
@@ -66,8 +68,10 @@ export function SalonPage() {
         eyebrow="SEGUIMIENTO EN VIVO"
         title="Salón"
         description={`${counts.free} de ${cards.length} mesas libres · ${takeaway.length} pedido${takeaway.length === 1 ? "" : "s"} para llevar en curso`}
-        action={<><SyncPill /><Button variant="primary" onClick={() => navigate("/venta/nueva", { state: { type: "takeaway" } })}><ShoppingBag size={18} /> Para llevar</Button></>}
+        action={<><SyncPill /><Button variant="primary" disabled={!canTakeOrders} title={canTakeOrders ? undefined : "Abre la caja para tomar pedidos"} onClick={() => navigate("/venta/nueva", { state: { type: "takeaway" } })}><ShoppingBag size={18} /> Para llevar</Button></>}
       />
+
+      <CashClosedNotice className="mb-5" />
 
       {/* La tira de estados funciona a la vez como métrica y como leyenda del croquis. */}
       <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
