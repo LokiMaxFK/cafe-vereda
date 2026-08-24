@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { applyPaymentCap, itemTotal, mxn, orderSubtotal, orderTotal, paidTotal, roundToCents } from "./money";
+import { applyPaymentCap, itemTotal, mxn, orderChange, orderSubtotal, orderTotal, paidTotal, paymentChange, roundToCents } from "./money";
+import type { Payment } from "./types";
 import type { Order } from "./types";
 
 const order: Order = {
@@ -130,5 +131,48 @@ describe("cent rounding (regression for F07-06)", () => {
   it("adds partial payments in cents without drifting", () => {
     const pagos = [10.05, 10.05, 10.05].map((amount, index) => ({ ...order.payments[0], id: `p${index}`, amount, tip: 0 }));
     expect(paidTotal({ payments: pagos })).toBe(30.15);
+  });
+});
+
+describe("cash change", () => {
+  const cash: Payment = { id: "pay", method: "cash", amount: 400, tip: 0, received: 500, createdAt: "2026-08-24T15:00:00Z" };
+
+  it("returns what is handed back when the customer overpays in cash", () => {
+    expect(paymentChange(cash)).toBe(100);
+  });
+
+  it("returns zero when the cash covers the balance exactly", () => {
+    expect(paymentChange({ ...cash, received: 400 })).toBe(0);
+  });
+
+  it("ignores the tip, which the customer hands over on top of the bill", () => {
+    const withTip: Payment = { ...cash, tip: 20 };
+    expect(paymentChange(withTip)).toBe(100);
+  });
+
+  it("returns zero for card and transfer, where there is nothing to hand back", () => {
+    expect(paymentChange({ ...cash, method: "card" })).toBe(0);
+    expect(paymentChange({ ...cash, method: "transfer" })).toBe(0);
+  });
+
+  it("returns zero for a cash payment recorded before the field existed", () => {
+    const legacy: Payment = { id: "old", method: "cash", amount: 400, tip: 0, createdAt: "2026-08-24T15:00:00Z" };
+    expect(paymentChange(legacy)).toBe(0);
+  });
+
+  it("never returns a negative change", () => {
+    expect(paymentChange({ ...cash, received: 300 })).toBe(0);
+  });
+
+  it("adds up the change of every cash payment in a split bill", () => {
+    expect(orderChange({ payments: [
+      { id: "a", method: "cash", amount: 200, tip: 0, received: 250, createdAt: "" },
+      { id: "b", method: "card", amount: 100, tip: 0, createdAt: "" },
+      { id: "c", method: "cash", amount: 100, tip: 0, received: 130, createdAt: "" }
+    ] })).toBe(80);
+  });
+
+  it("rounds to cents instead of dragging a floating point residue", () => {
+    expect(paymentChange({ method: "cash", amount: 30.15, received: 100.05 })).toBe(69.9);
   });
 });

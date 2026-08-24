@@ -73,6 +73,7 @@ export function mapRemoteOrder(row: Row): Order {
       method: payment.method as PaymentMethod,
       amount: cents(payment.amount_cents),
       tip: cents(payment.tip_cents),
+      received: payment.received_cents != null ? cents(payment.received_cents) : undefined,
       createdAt: String(payment.created_at)
     }))
   };
