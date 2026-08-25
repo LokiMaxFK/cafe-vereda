@@ -121,8 +121,11 @@ create trigger broadcast_order_subaccounts after insert or update or delete on p
 drop trigger if exists broadcast_order_item_shares on public.order_item_shares;
 create trigger broadcast_order_item_shares after insert or update or delete on public.order_item_shares for each row execute function private.broadcast_order_changes();
 
--- Séptima reescritura de sync_offline_operations. Respecto a la versión anterior
--- (20260818140000_incident_amount_includes_modifiers.sql) sólo cambia lo relativo al reparto:
+-- Octava reescritura de sync_offline_operations. Parte de la versión anterior
+-- (20260824093500_payment_received_cash_change.sql, que agregó received_cents) y le suma lo
+-- relativo al reparto. Es importante que conserve received_cents: esta migración corre después,
+-- así que omitirlo habría dejado de guardar el efectivo entregado sin que nada fallara.
+-- Cambios respecto a esa versión:
 --   - cuatro tipos de operación nuevos: split_order, assign_split_units, reassign_split_item y clear_split;
 --   - orders.split_mode entra en el upsert;
 --   - subcuentas y participaciones se sincronizan desde el payload ANTES de los pagos, porque
@@ -314,9 +317,10 @@ begin
       end if;
 
       for v_payment in select * from jsonb_array_elements(coalesce(v_payload->'payments','[]'::jsonb)) loop
-        insert into public.payments(id, order_id, method, amount_cents, tip_cents, subaccount_id, recorded_by, idempotency_key, created_at)
+        insert into public.payments(id, order_id, method, amount_cents, tip_cents, received_cents, subaccount_id, recorded_by, idempotency_key, created_at)
         values ((v_payment->>'id')::uuid, v_entity, (v_payment->>'method')::public.payment_method,
           round((v_payment->>'amount')::numeric * 100)::integer, round(coalesce((v_payment->>'tip')::numeric,0) * 100)::integer,
+          round(nullif(v_payment->>'received','')::numeric * 100)::integer,
           nullif(v_payment->>'subaccountId','')::uuid,
           auth.uid(), (v_operation->>'idempotencyKey') || ':payment:' || (v_payment->>'id'), (v_payment->>'createdAt')::timestamptz)
         on conflict (id) do nothing;

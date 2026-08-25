@@ -23,7 +23,9 @@ const testOrder: Order = {
     { id: "test-latte", productId: "latte", name: "Latte avellana", quantity: 2, unitPrice: 85, variant: "Frío", modifiers: [], notes: "Poco hielo · leche de avena", status: "dispatched", dispatchBatchId: "prueba-001" },
     { id: "test-toast", productId: "toast", name: "Toast de aguacate", quantity: 1, unitPrice: 110, modifiers: [], status: "dispatched", dispatchBatchId: "prueba-001" }
   ],
-  payments: [{ id: "test-payment", method: "card", amount: 270, tip: 20, createdAt: "2026-08-17T15:32:00.000Z" }]
+  // Pago en efectivo con cambio: es el ticket más largo que se imprime, así que sirve para
+  // calibrar el papel con los renglones de «Recibido» y «CAMBIO» ya en su sitio.
+  payments: [{ id: "test-payment", method: "cash", amount: 270, tip: 20, received: 500, createdAt: "2026-08-17T15:32:00.000Z" }]
 };
 
 function isValidTicketUrl(value: string) {

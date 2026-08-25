@@ -49,7 +49,14 @@ export interface OrderItem {
   dispatchBatchId?: string;
   cancellationBatchId?: string;
 }
-export interface Payment { id: string; method: PaymentMethod; amount: number; tip: number; createdAt: string; subaccountId?: string; }
+/**
+ * `received` es el efectivo que entregó el cliente, que puede superar a `amount`: `amount` se
+ * limita al saldo (`applyPaymentCap`) porque es lo que se queda en el cajón, y la diferencia
+ * entre ambos es el cambio. Sólo aplica a pagos en efectivo.
+ *
+ * `subaccountId` dice de quién es el pago cuando la cuenta se dividió entre varias personas.
+ */
+export interface Payment { id: string; method: PaymentMethod; amount: number; tip: number; received?: number; createdAt: string; subaccountId?: string; }
 
 /** Una de las personas entre las que se reparte una cuenta. Su importe no se guarda: se deriva. */
 export interface OrderSubaccount {

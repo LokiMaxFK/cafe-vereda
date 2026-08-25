@@ -408,7 +408,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const balance = subaccountId ? Math.min(subaccountBalance(order, subaccountId), orderBalance) : orderBalance;
     if (balance <= 0) return;
     const appliedAmount = applyPaymentCap(amount, balance);
-    await persistOrder({ ...order, payments: [...order.payments, { id: crypto.randomUUID(), method, amount: appliedAmount, tip, subaccountId, createdAt: new Date().toISOString() }] }, "record_payment");
+    // El importe tecleado es el efectivo que entregó el cliente: `appliedAmount` se recorta al
+    // saldo, así que sin guardarlo aparte el cambio ya no se podría reconstruir en el ticket.
+    const received = method === "cash" ? roundToCents(amount) : undefined;
+    await persistOrder({ ...order, payments: [...order.payments, { id: crypto.randomUUID(), method, amount: appliedAmount, tip, received, subaccountId, createdAt: new Date().toISOString() }] }, "record_payment");
   }, [orders, persistOrder]);
 
   const closeOrder = useCallback(async (orderId: string) => {

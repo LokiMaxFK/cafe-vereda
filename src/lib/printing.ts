@@ -1,4 +1,4 @@
-import { itemTotal, mxn, orderTotal, paymentMethodLabel } from "../domain/money";
+import { itemTotal, mxn, orderTotal, paymentChange, paymentMethodLabel } from "../domain/money";
 import { subaccountDiscount, subaccountItems, subaccountTotal } from "../domain/splitBill";
 import type { Order, OrderItem, OrderSubaccount, Payment } from "../domain/types";
 import { printWithBrowser, type ThermalPrintDocument } from "./browserPrinting";
@@ -60,6 +60,15 @@ function ticketItem(item: OrderItem, settings: PrinterSettings) {
   return `<div class="item"><div class="row"><strong>${description}</strong>${settings.ticketShowLineTotal ? `<strong>${mxn.format(itemTotal(item))}</strong>` : ""}</div>${settings.ticketShowUnitPrice ? `<p class="item-detail">Precio unitario: ${mxn.format(item.unitPrice)}</p>` : ""}${settings.ticketShowVariant && item.variant ? `<p class="item-detail">${escapeHtml(item.variant)}</p>` : ""}${settings.ticketShowModifiers && item.modifiers.length ? `<p class="item-detail">${item.modifiers.map((modifier) => `+ ${escapeHtml(modifier.name)}`).join(" · ")}</p>` : ""}${settings.ticketShowNotes && item.notes ? `<p class="item-detail">NOTA: ${escapeHtml(item.notes)}</p>` : ""}</div>`;
 }
 
+function paymentRows(payment: Order["payments"][number]) {
+  const change = paymentChange(payment);
+  return `<div class="row muted"><span class="pay-method">${escapeHtml(paymentMethodLabel[payment.method] ?? payment.method).toUpperCase()}</span><span>${mxn.format(payment.amount)}</span></div>`
+    + (payment.tip > 0 ? `<div class="row muted tip-row"><span class="pay-method">Propina</span><span>${mxn.format(payment.tip)}</span></div>` : "")
+    // El cambio se imprime junto al efectivo que lo generó, no al final: con la cuenta dividida
+    // en varios pagos, un solo renglón al pie no diría de cuál de ellos salió.
+    + (change > 0 ? `<div class="row muted tip-row"><span class="pay-method">Recibido</span><span>${mxn.format(payment.received ?? 0)}</span></div><div class="row"><strong class="pay-method">CAMBIO</strong><strong>${mxn.format(change)}</strong></div>` : "");
+}
+
 /**
  * Lo que distingue al ticket de una persona del de la cuenta entera. Se recibe ya calculado, en vez
  * de derivarlo aquí, porque el reparto y el prorrateo viven en `src/domain/splitBill.ts` y este
@@ -109,7 +118,7 @@ export function createTicketDocument(order: Order, paper: PrintPaper = "80", opt
     <div class="line"></div>
     ${items.map((item) => ticketItem(item, settings)).join("")}
     <div class="line"></div>${discount > 0 ? `<div class="row"><span>${discountLabel}</span><span>-${mxn.format(discount)}</span></div>` : ""}<div class="row"><strong>TOTAL</strong><strong>${mxn.format(total)}</strong></div>
-    ${payments.map((payment) => `<div class="row muted"><span class="pay-method">${escapeHtml(paymentMethodLabel[payment.method] ?? payment.method).toUpperCase()}</span><span>${mxn.format(payment.amount)}</span></div>${payment.tip > 0 ? `<div class="row muted tip-row"><span class="pay-method">Propina</span><span>${mxn.format(payment.tip)}</span></div>` : ""}`).join("")}
+    ${payments.map((payment) => paymentRows(payment)).join("")}
     ${qr}${footer}
   `, paper, settings);
 }
