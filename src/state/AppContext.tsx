@@ -294,6 +294,36 @@ export function AppProvider({ children }: { children: ReactNode }) {
    * de una reasignación, por ejemplo—. Viajan en el payload pero no se guardan en la orden: si
    * entraran en Dexie se quedarían pegados al siguiente cambio, atribuyéndole un motivo ajeno.
    */
+  /**
+   * La sesión que se restaura de Dexie dice quién usaba esta estación, no que el acceso al servidor
+   * siga vivo. El JWT de Supabase caduca por su cuenta, y cuando eso pasaba la aplicación seguía
+   * enseñando la pantalla de alguien con sesión iniciada mientras cada llamada viajaba como
+   * anónima. El primer tropiezo era abrir la caja —`anon` tiene revocado el EXECUTE de los RPC de
+   * caja—, así que el barista recibía «permission denied for function open_cash_session» con la
+   * fila esperando, y con la caja obligatoria eso deja el punto de venta entero sin poder vender.
+   *
+   * Sin conexión no se toca nada: ahí la sesión guardada es justo lo que sostiene el turno. Y un
+   * error de red tampoco expulsa a nadie; sólo se cierra cuando el servidor dice que no hay sesión.
+   */
+  useEffect(() => {
+    if (!hydrated || !session || !supabase || !navigator.onLine) return;
+    let cancelled = false;
+    void supabase.auth.getSession().then(({ data, error }) => {
+      if (cancelled || error) return;
+      if (!data.session) void db.sessions.clear().then(() => setSession(null));
+    });
+    return () => { cancelled = true; };
+  }, [hydrated, session]);
+
+  /** Si Supabase cierra la sesión por su cuenta, la estación vuelve al acceso en vez de fingir. */
+  useEffect(() => {
+    if (!supabase) return;
+    const { data } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_OUT") void db.sessions.clear().then(() => setSession(null));
+    });
+    return () => data.subscription.unsubscribe();
+  }, []);
+
   const persistOrder = useCallback(async (order: Order, operation: string, extra?: Record<string, unknown>) => {
     const next = { ...order, updatedAt: new Date().toISOString(), syncStatus: isSupabaseConfigured && navigator.onLine ? "syncing" as const : "pending" as const };
     await db.orders.put(next);

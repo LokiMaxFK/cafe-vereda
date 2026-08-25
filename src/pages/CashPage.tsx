@@ -18,6 +18,9 @@ function rpcErrorMessage(error: { message?: string } | null) {
   if (error.message?.includes("Invalid counted amount")) return "El efectivo contado no es válido.";
   if (error.message?.includes("Idempotency key already used")) return "Este movimiento ya fue registrado.";
   if (error.message?.includes("one_open_cash_session")) return "Ya hay un turno abierto.";
+  // Jerga de Postgres que llegaba tal cual a la pantalla: le pasa a una sesión cuyo acceso al
+  // servidor caducó, así que lo accionable es volver a entrar, no el nombre de la función.
+  if (error.message?.includes("permission denied")) return "Tu sesión expiró. Vuelve a entrar para abrir el turno.";
   return error.message ?? "Ocurrió un error inesperado.";
 }
 
