@@ -1,5 +1,6 @@
 import { itemTotal, mxn, orderTotal, paymentChange, paymentMethodLabel } from "../domain/money";
-import type { Order, OrderItem } from "../domain/types";
+import { subaccountDiscount, subaccountItems, subaccountTotal } from "../domain/splitBill";
+import type { Order, OrderItem, OrderSubaccount, Payment } from "../domain/types";
 import { printWithBrowser, type ThermalPrintDocument } from "./browserPrinting";
 import { defaultPrinterSettings, loadPrinterSettings, mergeTicketDesign, MAX_BOTTOM_MARGIN_MM, type PrintFontScale, type PrinterSettings, type PaperWidthMm } from "./printerSettings";
 import { loadUniversalTicketDesign } from "./ticketDesign";
@@ -68,17 +69,56 @@ function paymentRows(payment: Order["payments"][number]) {
     + (change > 0 ? `<div class="row muted tip-row"><span class="pay-method">Recibido</span><span>${mxn.format(payment.received ?? 0)}</span></div><div class="row"><strong class="pay-method">CAMBIO</strong><strong>${mxn.format(change)}</strong></div>` : "");
 }
 
-export function createTicketDocument(order: Order, paper: PrintPaper = "80", options?: Partial<PrinterSettings>) {
+/**
+ * Lo que distingue al ticket de una persona del de la cuenta entera. Se recibe ya calculado, en vez
+ * de derivarlo aquí, porque el reparto y el prorrateo viven en `src/domain/splitBill.ts` y este
+ * módulo sólo maqueta: así el importe impreso es exactamente el que la pantalla cobró.
+ */
+export interface TicketSubaccountContext {
+  label: string;
+  position: number;
+  count: number;
+  items: OrderItem[];
+  discount: number;
+  total: number;
+  payments: Payment[];
+}
+
+/**
+ * Arma el contexto del ticket de una persona a partir de la orden. Vive aquí y no en la pantalla
+ * para que reimprimir desde cualquier punto produzca exactamente el mismo ticket que se entregó.
+ */
+export function ticketContextFor(order: Order, subaccount: OrderSubaccount): TicketSubaccountContext {
+  const ordered = [...(order.subaccounts ?? [])].sort((a, b) => a.position - b.position);
+  return {
+    label: subaccount.label,
+    position: ordered.findIndex((candidate) => candidate.id === subaccount.id) + 1,
+    count: ordered.length,
+    items: subaccountItems(order, subaccount.id),
+    discount: subaccountDiscount(order, subaccount.id),
+    total: subaccountTotal(order, subaccount.id),
+    payments: order.payments.filter((payment) => payment.subaccountId === subaccount.id)
+  };
+}
+
+export function createTicketDocument(order: Order, paper: PrintPaper = "80", options?: Partial<PrinterSettings>, subaccount?: TicketSubaccountContext) {
   const settings: PrinterSettings = { ...defaultPrinterSettings, ...options };
+  const items = subaccount ? subaccount.items : order.items.filter((item) => item.status !== "cancelled");
+  const discount = subaccount ? subaccount.discount : order.discount;
+  const discountLabel = subaccount ? "Descuento (prorrateado)" : `Descuento${order.discountReason ? ` · ${escapeHtml(order.discountReason)}` : ""}`;
+  const total = subaccount ? subaccount.total : orderTotal(order);
+  const payments = subaccount ? subaccount.payments : order.payments;
+  const heading = subaccount ? `TICKET NO FISCAL #${order.folio} (${subaccount.position}/${subaccount.count})` : `TICKET NO FISCAL #${order.folio}`;
   const footer = settings.ticketFooterText ? `<div class="line"></div><p class="center">${escapeHtml(settings.ticketFooterText)}</p>` : "";
   const qr = settings.ticketQrDataUrl ? `<div class="line"></div><div class="center"><img class="ticket-qr" src="${escapeHtml(settings.ticketQrDataUrl)}" alt="Código QR"><p class="qr-caption">Escanea para visitarnos</p></div>` : "";
   return printDocument(`Ticket ${order.folio}`, `
-    <div class="center">${settings.ticketImageDataUrl ? `<img class="ticket-image" src="${escapeHtml(settings.ticketImageDataUrl)}" alt="Imagen del negocio">` : ""}<h1>VEREDA CAFÉ</h1><h2>TICKET NO FISCAL #${order.folio}</h2></div>
+    <div class="center">${settings.ticketImageDataUrl ? `<img class="ticket-image" src="${escapeHtml(settings.ticketImageDataUrl)}" alt="Imagen del negocio">` : ""}<h1>VEREDA CAFÉ</h1><h2>${heading}</h2></div>
+    ${subaccount ? `<div class="center"><p class="copy">${escapeHtml(subaccount.label)}</p></div>` : ""}
     <div class="row"><span>${order.type === "table" ? `Mesa ${order.tableId?.replace("t", "")}` : escapeHtml(order.customerName || "Para llevar")}</span><span>${new Date(order.openedAt).toLocaleString("es-MX")}</span></div>
     <div class="line"></div>
-    ${order.items.filter((item) => item.status !== "cancelled").map((item) => ticketItem(item, settings)).join("")}
-    <div class="line"></div>${order.discount > 0 ? `<div class="row"><span>Descuento${order.discountReason ? ` · ${escapeHtml(order.discountReason)}` : ""}</span><span>-${mxn.format(order.discount)}</span></div>` : ""}<div class="row"><strong>TOTAL</strong><strong>${mxn.format(orderTotal(order))}</strong></div>
-    ${order.payments.map((payment) => paymentRows(payment)).join("")}
+    ${items.map((item) => ticketItem(item, settings)).join("")}
+    <div class="line"></div>${discount > 0 ? `<div class="row"><span>${discountLabel}</span><span>-${mxn.format(discount)}</span></div>` : ""}<div class="row"><strong>TOTAL</strong><strong>${mxn.format(total)}</strong></div>
+    ${payments.map((payment) => paymentRows(payment)).join("")}
     ${qr}${footer}
   `, paper, settings);
 }
@@ -90,11 +130,11 @@ export async function printCommand(order: Order, items: OrderItem[], copyNumber 
   await printDocumentLocally(document);
 }
 
-export async function printTicket(order: Order, paper?: PrintPaper) {
+export async function printTicket(order: Order, paper?: PrintPaper, subaccount?: TicketSubaccountContext) {
   const localSettings = loadPrinterSettings();
   const design = await loadUniversalTicketDesign().catch(() => undefined);
   const settings = design ? mergeTicketDesign(localSettings, design) : localSettings;
-  const document = createTicketDocument(order, paper ?? paperFromWidth(settings.paperWidthMm), settings);
+  const document = createTicketDocument(order, paper ?? paperFromWidth(settings.paperWidthMm), settings, subaccount);
   await printDocumentLocally(document);
 }
 

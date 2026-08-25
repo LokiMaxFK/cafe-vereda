@@ -7,6 +7,8 @@ export type CashMovementType = "opening" | "withdrawal" | "adjustment" | "closin
 export type InventoryMovementType = "entry" | "daily_consumption" | "waste" | "withdrawal" | "adjustment";
 export type InventoryUnit = "g" | "kg" | "ml" | "L" | "pza" | "paquete" | "bolsa";
 export type SyncStatus = "pending" | "syncing" | "synced" | "review_required";
+/** Cómo se repartió una cuenta entre varias personas. Sin valor, la cuenta se cobra entera. */
+export type SplitMode = "even" | "items";
 
 export interface StaffSession {
   id: string;
@@ -51,8 +53,28 @@ export interface OrderItem {
  * `received` es el efectivo que entregó el cliente, que puede superar a `amount`: `amount` se
  * limita al saldo (`applyPaymentCap`) porque es lo que se queda en el cajón, y la diferencia
  * entre ambos es el cambio. Sólo aplica a pagos en efectivo.
+ *
+ * `subaccountId` dice de quién es el pago cuando la cuenta se dividió entre varias personas.
  */
-export interface Payment { id: string; method: PaymentMethod; amount: number; tip: number; received?: number; createdAt: string; }
+export interface Payment { id: string; method: PaymentMethod; amount: number; tip: number; received?: number; createdAt: string; subaccountId?: string; }
+
+/** Una de las personas entre las que se reparte una cuenta. Su importe no se guarda: se deriva. */
+export interface OrderSubaccount {
+  id: string;
+  label: string;
+  position: number;
+}
+
+/**
+ * Unidades de un renglón que pertenecen a una persona. Vive fuera de `OrderItem` porque una misma
+ * línea de tres cafés puede repartirse entre tres personas, y porque `OrderItem` viaja tal cual a
+ * las comandas inmutables de la barra, donde el reparto no pinta nada.
+ */
+export interface OrderItemShare {
+  itemId: string;
+  subaccountId: string;
+  units: number;
+}
 export interface Order {
   id: string;
   folio: number;
@@ -65,6 +87,9 @@ export interface Order {
   discount: number;
   discountReason?: string;
   cancellationReason?: string;
+  splitMode?: SplitMode;
+  subaccounts?: OrderSubaccount[];
+  itemShares?: OrderItemShare[];
   openedBy: string;
   openedAt: string;
   updatedAt: string;

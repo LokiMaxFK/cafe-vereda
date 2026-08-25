@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>F17 · Cuentas separadas</title>
+<style>
+  @page { size: Letter; margin: 16mm 14mm; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; color: #1b1b1f; font-size: 10.5pt; line-height: 1.45; margin: 0; }
+  header { border-bottom: 3px solid #6b4423; padding-bottom: 10px; margin-bottom: 18px; }
+  .eyebrow { font-size: 8pt; letter-spacing: .12em; text-transform: uppercase; color: #6b4423; font-weight: 700; margin: 0; }
+  h1 { font-size: 19pt; margin: 4px 0 6px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 8.5pt; color: #55525a; }
+  .meta b { color: #1b1b1f; }
+  h2 { font-size: 11.5pt; margin: 20px 0 8px; padding-bottom: 4px; border-bottom: 1px solid #dcd7d1; }
+  ul { margin: 0 0 0 16px; padding: 0; }
+  li { margin-bottom: 4px; }
+  table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-top: 6px; }
+  th { background: #f4efe9; text-align: left; font-size: 8pt; letter-spacing: .06em; text-transform: uppercase; color: #55525a; }
+  th, td { border: 1px solid #dcd7d1; padding: 6px 8px; vertical-align: top; }
+  .ok { color: #1b6b3a; font-weight: 700; }
+  .fail { color: #b3261e; font-weight: 700; }
+  .warn { color: #8a5a00; font-weight: 700; }
+  .box { background: #f7f4f0; border-left: 4px solid #6b4423; padding: 10px 12px; margin-top: 8px; }
+  .alert { background: #fdf0ef; border-left: 4px solid #b3261e; padding: 10px 12px; margin-top: 8px; }
+  code { font-size: 9pt; background: #f4efe9; padding: 1px 4px; border-radius: 3px; }
+  pre { background: #f4efe9; padding: 8px 10px; font-size: 8.5pt; margin: 6px 0; white-space: pre-wrap; }
+  footer { margin-top: 24px; padding-top: 8px; border-top: 1px solid #dcd7d1; font-size: 8pt; color: #7a767e; }
+</style>
+</head>
+<body>
+<header>
+  <p class="eyebrow">Vereda Café · Punto de venta · Ficha de funcionalidad</p>
+  <h1>F17 · Cuentas separadas</h1>
+  <div class="meta">
+    <span><b>Rutas:</b> /venta/:orden (modal de cobro)</span>
+    <span><b>Roles:</b> Gerente y Barista (reasignar con cobros: sólo Gerente)</span>
+    <span><b>Modo revisado:</b> Demostración (navegador real)</span>
+    <span><b>Fecha:</b> 24/08/2026</span>
+    <span><b>Versión:</b> rama <code>cuentas-separadas</code></span>
+  </div>
+</header>
+
+<h2>Qué hace</h2>
+<ul>
+  <li><b>Divide una cuenta entre varias personas</b> sin duplicar la orden. Las subcuentas cuelgan de la orden: el folio sigue siendo uno y la mesa sigue teniendo una sola cuenta activa.</li>
+  <li><b>Dos modos.</b> «Partes iguales» reparte el total entre N; «Por producto» permite decidir qué artículos son de cada quien.</li>
+  <li><b>Reparte unidades de una misma línea.</b> Dos Aeropress en un renglón pueden ir uno a cada persona, sin cancelar ni recapturar.</li>
+  <li><b>Prorratea el descuento</b> en proporción a lo que consumió cada quien, y reparte el residuo para que la suma de las partes dé el descuento exacto.</li>
+  <li><b>Cobra persona por persona</b> con su propio método de pago y su propia propina. El importe se topa al saldo de esa persona, no al de la cuenta.</li>
+  <li><b>Imprime un ticket por persona</b> con la marca (n/N), sólo sus artículos, su descuento prorrateado, su total y su propina.</li>
+  <li><b>Cierra la cuenta y libera la mesa</b> automáticamente cuando la última subcuenta queda cubierta.</li>
+  <li><b>Congela el reparto en cuanto alguien paga.</b> No se puede volver a dividir, ni juntar, ni cambiar el descuento; mover un artículo exige Gerente, motivo e incidencia.</li>
+</ul>
+
+<h2>Qué NO hace</h2>
+<ul>
+  <li><b>No permite artículos compartidos a medias.</b> Una unidad pertenece a una sola persona; una botella para tres no se puede partir en tercios.</li>
+  <li><b>No reasigna pagos.</b> <code>payments</code> es append-only (sólo <code>select, insert</code> en los grants), así que un cobro hecho a la persona equivocada sigue requiriendo reversión de venta.</li>
+  <li><b>No divide una cuenta ya cerrada.</b> El reparto ocurre en estado <code>served</code>, al ir a cobrar.</li>
+  <li><b>No separa el arqueo por persona.</b> Caja y Reportes siguen viendo los pagos de la orden; las propinas por persona se agregan solas.</li>
+</ul>
+
+<h2>Resultado de las pruebas</h2>
+<table>
+  <thead><tr><th style="width:36%">Caso probado</th><th style="width:48%">Resultado obtenido</th><th style="width:16%">Estado</th></tr></thead>
+  <tbody>
+    <tr><td>F17-P1 · Botón en el cobro</td><td>«Cuentas separadas» aparece en el modal de cobro mientras haya saldo; con la cuenta ya dividida, «Cobrar» entra directo al reparto</td><td class="ok">Correcto</td></tr>
+    <tr><td>F17-P2 · División por producto entre 3</td><td>Orden #1043 ($305 − $50 = $255) repartida en Chilaquiles+1 Aeropress / 1 Aeropress / Americano</td><td class="ok">Correcto</td></tr>
+    <tr><td>F17-P3 · Reparto de unidades</td><td>La línea «2 × Aeropress» se repartió una unidad a Persona 1 y otra a Persona 2; el contador «sin asignar» bajó de 2 a 0</td><td class="ok">Correcto</td></tr>
+    <tr><td>F17-P4 · Bloqueo con unidades sin dueño</td><td>Mientras faltaba asignar, se listó «Faltan por asignar: …» y no se ofreció ningún botón «Cobrar»</td><td class="ok">Correcto</td></tr>
+    <tr><td>F17-P5 · Descuento prorrateado</td><td>$154.68 + $54.35 + $45.97 = <b>$255.00 exacto</b>. Partes del descuento: $30.32 + $10.65 + $9.03 = $50.00</td><td class="ok">Correcto</td></tr>
+    <tr><td>F17-P6 · Cobro por persona con propina</td><td>Persona 1 pagó $154.68 en efectivo + $20 de propina; las otras dos quedaron intactas con su saldo</td><td class="ok">Correcto</td></tr>
+    <tr><td>F17-P7 · Ticket por persona</td><td>Salió «TICKET NO FISCAL #1043 (1/3) · Persona 1» con Chilaquiles y 1 Aeropress, «Descuento (prorrateado) −$30.32», TOTAL $154.68, EFECTIVO y Propina $20.00. No incluyó los artículos de los demás</td><td class="ok">Correcto</td></tr>
+    <tr><td>F17-P8 · Cierre y liberación de mesa</td><td>Al cubrirse la tercera subcuenta apareció «Cerrar la cuenta»; la orden pasó a cerrada, se navegó a Salón y la mesa 6 quedó libre (7 de 8)</td><td class="ok">Correcto</td></tr>
+    <tr><td>F17-P9 · Partes iguales con residuo</td><td>Orden #1042 ($275) entre 3 dio $91.66 + $91.66 + <b>$91.68</b>; el centavo sobrante va a la última persona y la suma es exacta</td><td class="ok">Correcto</td></tr>
+    <tr><td>F17-P10 · Congelación tras el primer cobro</td><td>Desapareció «Descuento» del encabezado y «Volver a juntar la cuenta»; se mostró el aviso de reasignación gerencial</td><td class="ok">Correcto</td></tr>
+    <tr><td>F17-P11 · Reasignación con cobros</td><td>Contra Postgres real: como Barista lanza <code>Manager role required</code>; como Gerente pasa, mueve las unidades y deja la incidencia <code>split_reassignment</code> con motivo e importe (7000 centavos)</td><td class="ok">Correcto</td></tr>
+    <tr><td>F17-P13 · Migración sobre Postgres real</td><td>Aplicó limpia; quedaron las 2 tablas, <code>orders.split_mode</code>, <code>payments.subaccount_id</code>, el CHECK ampliado de <code>incidents</code>, 4 triggers y 8 políticas RLS. Reaplicarla no da errores</td><td class="ok">Correcto</td></tr>
+    <tr><td>F17-P14 · <code>sync_offline_operations</code> con reparto</td><td>Un payload con 3 subcuentas, 4 participaciones y un pago con <code>subaccountId</code> se materializó completo, incluidas las 2 unidades de un mismo renglón repartidas entre dos personas</td><td class="ok">Correcto</td></tr>
+    <tr><td>F17-P15 · Borrado tipo diff</td><td>Las subcuentas ausentes del payload se borran con sus participaciones en cascada, pero <b>una subcuenta con pago sobrevive</b>: el pago no queda huérfano y la FK no se rompe</td><td class="ok">Correcto</td></tr>
+    <tr><td>F17-P16 · Regresión de cobro normal</td><td>Una cuenta sin dividir se creó y cerró como siempre; <code>validate_order_close</code> aceptó el total con extras (2 × (70+15) = 170) y <code>split_mode</code> quedó nulo</td><td class="ok">Correcto</td></tr>
+    <tr><td>F17-P12 · Ticket de cuenta sin dividir</td><td>Un test de regresión comprueba que <code>createTicketDocument</code> sin contexto de subcuenta produce el ticket de siempre</td><td class="ok">Correcto</td></tr>
+  </tbody>
+</table>
+
+<h2>Funcionalidades conectadas verificadas</h2>
+<table>
+  <thead><tr><th style="width:26%">Funcionalidad</th><th style="width:58%">Efecto comprobado</th><th style="width:16%">Estado</th></tr></thead>
+  <tbody>
+    <tr><td>Cobro (F07)</td><td>El cobro entero sigue igual; el módulo es una rama aparte del mismo modal. <code>addPayment</code> mantiene su firma y su tope contra el saldo de la orden</td><td class="ok">Correcto</td></tr>
+    <tr><td>Salón (F03)</td><td>La orden cerrada sale de <code>isTracked</code> y la mesa vuelve a libre, igual que en un cobro normal</td><td class="ok">Correcto</td></tr>
+    <tr><td>Impresión (F15)</td><td>El ticket por persona reutiliza el mismo maquetador, ancho y ajustes que el ticket completo</td><td class="ok">Correcto</td></tr>
+    <tr><td>Caja (F09) y Reportes (F13)</td><td>Sin cambios: los pagos siguen colgando de la orden, así que <code>paymentContributions</code>, las propinas y el efectivo esperado se agregan como antes</td><td class="warn">Verificado por lectura de código</td></tr>
+  </tbody>
+</table>
+
+<h2>Pruebas automatizadas</h2>
+<ul>
+  <li><code>src/domain/splitBill.test.ts</code> nuevo, <b>33 casos</b>. Incluye la comprobación de que la suma de las subcuentas es <b>idénticamente</b> el total para siete descuentos distintos, y que <code>evenSplitAmounts</code> cuadra al centavo para 7 totales × 6 tamaños de grupo.</li>
+  <li><code>src/lib/printing.test.ts</code> pasó de <b>24 a 31 casos</b>, con el ticket por persona y la regresión del ticket completo.</li>
+  <li>Suite completa: <b>259 pruebas en verde</b> en 15 archivos. Lint (<code>--max-warnings 0</code>) y compilación sin errores.</li>
+</ul>
+
+<h2>Limitaciones y observaciones</h2>
+<div class="box">
+  <ul>
+    <li><b>Hallazgo F17-01, corregido antes de aplicar.</b> <code>order_item_shares</code> nacía con clave compuesta y sin columna <code>id</code>, pero <code>private.audit_row()</code> escribe <code>coalesce(new.id, old.id)</code> en <code>audit_log.entity_id</code>. El trigger de auditoría habría fallado en <b>cada</b> escritura de participaciones con «record "new" has no field "id"», dejando el módulo inservible en cuanto se aplicara la migración. Se le dio llave propia y el par <code>(order_item_id, subaccount_id)</code> quedó como <code>unique</code>. Detectado en revisión estática por Codex; no lo habrían atrapado ni el compilador ni las pruebas, porque el modo demostración no toca Postgres.</li>
+    <li><b>Duda abierta:</b> <code>order_item_shares</code> no impone que el renglón y la subcuenta pertenezcan a la misma orden. Las dos llaves foráneas son válidas por separado; el cliente siempre las construye consistentes, pero un payload malformado podría cruzarlas. Requeriría un trigger de validación.</li>
+    <li><b>La migración SQL sí se aplicó y se probó</b> contra un Supabase local (Postgres 17.6, <code>supabase start</code> + <code>supabase migration up</code>). Aplicó limpia sobre las 17 migraciones previas, y reaplicarla entera sobre una base que ya la tenía dio <b>cero errores</b> sin tocar los datos: es idempotente. Falta aplicarla en staging/producción.</li>
+    <li><b>Verificación en modo demostración.</b> Todo el recorrido se ejecutó en navegador real sin Supabase, así que la persistencia de subcuentas y participaciones en Postgres, y su llegada a otras estaciones por realtime, quedan por comprobar.</li>
+    <li><b>Impresión interceptada.</b> Se sustituyó <code>window.print()</code> del iframe para no bloquear la sesión con el diálogo de Chrome; se verificó el <b>contenido</b> del ticket, no su salida en papel. La impresión física queda para F15.</li>
+    <li><b>Nota sobre la guarda de gerencia.</b> Con descuento aplicado, un Barista queda bloqueado antes por la política RLS <code>staff update open orders</code> (que exige gerencia para tocar <code>discount_cents</code>), no por la guarda del reparto. La guarda propia sólo se llegó a ejercer con una cuenta sin descuento — y ahí sí lanza <code>Manager role required</code>. Son dos defensas superpuestas, no una redundante.</li>
+  </ul>
+</div>
+
+<footer>Documento generado durante el desarrollo del módulo · Vereda Café POS · rama cuentas-separadas.</footer>
+</body>
+</html>
