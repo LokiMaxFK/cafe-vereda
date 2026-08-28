@@ -1,9 +1,9 @@
 import { createClient } from "@supabase/supabase-js";
 
-const url = import.meta.env.VITE_SUPABASE_URL;
-const publishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+import { isSupabaseConfigured, supabasePublishableKey as publishableKey, supabaseUrl as url } from "./environment";
 
-export const isSupabaseConfigured = Boolean(url && publishableKey && !url.includes("your-project"));
+// Se re-exporta para no obligar a cambiar de origen a todo lo que ya la importa desde aquí.
+export { isSupabaseConfigured };
 
 export const supabase = isSupabaseConfigured
   ? createClient(url!, publishableKey!, {

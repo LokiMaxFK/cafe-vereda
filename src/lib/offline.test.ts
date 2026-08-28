@@ -55,7 +55,8 @@ function seed(overrides: Partial<PendingOperation> = {}): PendingOperation {
     idempotencyKey: overrides.idempotencyKey ?? `${DEVICE}:${overrides.id ?? "seed"}`,
     deviceId: DEVICE,
     type: "upsert_order",
-    entityId: "order-1",
+    // Un uuid de verdad: los llamadores reales siempre lo son, y la cola aparta lo que no lo sea.
+    entityId: overrides.entityId ?? "22222222-2222-4222-8222-222222222222",
     payload: { total: 4800 },
     createdAt: "2026-08-20T10:00:00.000Z",
     attempts: 0,
@@ -261,5 +262,132 @@ describe("reclaimStalledOperations · hallazgo F16-01", () => {
     expect(await reclaimStalledOperations()).toBe(0);
     expect(fakeTable.rows.find((row) => row.id === "enviada")?.status).toBe("synced");
     expect(fakeTable.rows.find((row) => row.id === "pendiente")?.status).toBe("pending");
+  });
+});
+
+describe("syncPendingOperations · una operación rota no bloquea a las demás", () => {
+  // Una operación que el servidor rechaza por su contenido, no por su id: aquí, un producto que ya
+  // no existe. El id es válido, así que llega a viajar y tumba el lote entero.
+  const rota = (id: string) => seed({ id, entityId: "33333333-3333-4333-8333-333333333333", createdAt: "2026-08-21T05:52:00.000Z" });
+  const buena = (id: string) => seed({ id, createdAt: "2026-08-26T07:20:00.000Z" });
+
+  /** `sync_offline_operations` es una sola transacción: el lote entero falla o entra entero. */
+  const porLote = (rechazadas: string[]) => rpc.mockImplementation(async (_name: string, args: { p_operations: PendingOperation[] }) => {
+    const envenenado = args.p_operations.find((operation) => rechazadas.includes(operation.id));
+    if (envenenado) return { data: null, error: { message: "insert or update on table \"order_items\" violates foreign key constraint", code: "23503" } };
+    return { data: args.p_operations.map((operation) => ({ id: operation.id, status: "synced" })), error: null };
+  });
+
+  it("reintenta una por una y sube las buenas aunque una sea irrecuperable", async () => {
+    const mala = rota("mala");
+    const primera = buena("buena-1");
+    const segunda = buena("buena-2");
+    porLote([mala.id]);
+
+    const result = await syncPendingOperations();
+
+    expect(result).toEqual({ synced: 2, review: 1 });
+    expect(fakeTable.rows.find((row) => row.id === primera.id)?.status).toBe("synced");
+    expect(fakeTable.rows.find((row) => row.id === segunda.id)?.status).toBe("synced");
+    expect(fakeTable.rows.find((row) => row.id === mala.id)?.status).toBe("pending");
+  });
+
+  it("guarda el motivo del rechazo: sin él, «hay operaciones por revisar» no da nada que revisar", async () => {
+    const mala = rota("mala");
+    buena("buena-1");
+    porLote([mala.id]);
+
+    await syncPendingOperations();
+
+    expect(fakeTable.rows.find((row) => row.id === mala.id)?.lastError)
+      .toBe('insert or update on table "order_items" violates foreign key constraint (23503)');
+  });
+
+  it("no reintenta de una en una cuando el lote entra a la primera", async () => {
+    buena("buena-1");
+    buena("buena-2");
+    porLote([]);
+
+    await syncPendingOperations();
+
+    expect(rpc).toHaveBeenCalledTimes(1);
+  });
+
+  it("no reenvía por separado una operación que ya viajaba sola", async () => {
+    const mala = rota("mala");
+    porLote([mala.id]);
+
+    const result = await syncPendingOperations();
+
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ synced: 0, review: 1 });
+  });
+
+  it("manda a revisión la rota tras tres intentos, sin arrastrar a las buenas", async () => {
+    const mala = rota("mala");
+    porLote([mala.id]);
+    for (let intento = 0; intento < 3; intento += 1) {
+      buena(`buena-${intento}`);
+      await syncPendingOperations();
+    }
+
+    const fila = fakeTable.rows.find((row) => row.id === mala.id);
+    expect(fila?.status).toBe("review_required");
+    expect(fila?.attempts).toBe(3);
+    expect(fakeTable.rows.filter((row) => row.status === "synced")).toHaveLength(3);
+  });
+
+  it("limpia el motivo cuando la operación acaba entrando", async () => {
+    const operation = seed({ id: "intermitente" });
+    porLote([operation.id]);
+    await syncPendingOperations();
+    expect(fakeTable.rows[0].lastError).toBeTruthy();
+
+    porLote([]);
+    await syncPendingOperations();
+
+    expect(fakeTable.rows[0].status).toBe("synced");
+    expect(fakeTable.rows[0].lastError).toBeUndefined();
+  });
+});
+
+describe("syncPendingOperations · lo que el servidor nunca podrá aceptar", () => {
+  /** Comandas de la demostración: sus mesas tienen ids como `demo-table-3` en lugar de uuid. */
+  const heredada = (id: string) => seed({ id, entityId: "demo-table-3", createdAt: "2026-08-21T05:52:00.000Z" });
+  const real = (id: string) => seed({ id, entityId: crypto.randomUUID(), createdAt: "2026-08-26T07:20:00.000Z" });
+
+  it("no gasta ni una petición en ellas", async () => {
+    heredada("vieja-1");
+    heredada("vieja-2");
+    rpc.mockResolvedValue({ data: [], error: null });
+
+    const result = await syncPendingOperations();
+
+    expect(rpc).not.toHaveBeenCalled();
+    expect(result).toEqual({ synced: 0, review: 2 });
+  });
+
+  it("explica por qué, en vez de dejarlas fallando en silencio", async () => {
+    const vieja = heredada("vieja-1");
+    rpc.mockResolvedValue({ data: [], error: null });
+
+    await syncPendingOperations();
+
+    expect(fakeTable.rows.find((row) => row.id === vieja.id)?.lastError)
+      .toContain("«demo-table-3» no es un identificador válido");
+  });
+
+  it("no impide que las operaciones legítimas suban", async () => {
+    heredada("vieja-1");
+    const buena = real("buena-1");
+    rpc.mockImplementation(async (_name: string, args: { p_operations: PendingOperation[] }) =>
+      ({ data: args.p_operations.map((operation) => ({ id: operation.id, status: "synced" })), error: null }));
+
+    const result = await syncPendingOperations();
+
+    expect(result).toEqual({ synced: 1, review: 1 });
+    expect(fakeTable.rows.find((row) => row.id === buena.id)?.status).toBe("synced");
+    // La heredada no viaja en el lote: el servidor la rechazaría y se llevaría por delante a la buena.
+    expect(rpc).toHaveBeenCalledWith("sync_offline_operations", { p_operations: [buena] });
   });
 });
