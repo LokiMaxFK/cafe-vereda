@@ -41,6 +41,15 @@ export async function reclaimStalledOperations() {
   return db.pendingOperations.where("status").equals("syncing").modify({ status: "pending" });
 }
 
+/**
+ * `sync_offline_operations` empieza casteando `entityId` a uuid, así que una operación cuyo id no lo
+ * sea no puede entrar jamás: no es un fallo pasajero que merezca reintentarse. Ya no se generan
+ * —la demostración tiene su propia base—, pero las instalaciones que mezclaron ambas todavía las
+ * arrastran, y sin esto gastan una petición por cada una en cada sincronización.
+ */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export const canReachServer = (operation: PendingOperation) => UUID.test(operation.entityId);
+
 const describeError = (error: unknown) => {
   const detail = error as { message?: string; code?: string } | null;
   const message = detail?.message?.trim();
@@ -57,11 +66,18 @@ export async function syncPendingOperations() {
   if (!supabase) return { synced: 0, review: pending.length };
   const ids = pending.map((operation) => operation.id);
   await db.pendingOperations.where("id").anyOf(ids).modify({ status: "syncing" });
-  const inventory = pending.filter((operation) => INVENTORY_OPERATIONS.includes(operation.type));
-  const standard = pending.filter((operation) => !inventory.includes(operation));
   const synced: string[] = [];
   const failed: string[] = [];
   const errors = new Map<string, string>();
+
+  const unreachable = pending.filter((operation) => !canReachServer(operation));
+  for (const operation of unreachable) {
+    failed.push(operation.id);
+    errors.set(operation.id, `El servidor no puede aceptar esta operación: «${operation.entityId}» no es un identificador válido.`);
+  }
+  const usable = pending.filter((operation) => canReachServer(operation));
+  const inventory = usable.filter((operation) => INVENTORY_OPERATIONS.includes(operation.type));
+  const standard = usable.filter((operation) => !inventory.includes(operation));
   for (const operation of inventory) {
     const payload = operation.payload as Record<string, unknown>;
     let result;

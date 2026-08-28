@@ -1,5 +1,16 @@
 import Dexie, { type EntityTable } from "dexie";
 import type { CafeTable, CashSession, CatalogExtra, Category, InventoryCount, InventoryItem, InventoryMovement, Order, PendingOperation, Product, StaffSession } from "../domain/types";
+import { isSupabaseConfigured } from "./environment";
+
+/**
+ * La demostración vive en su propia base. Compartirla con la real dejaba sus comandas —cuyas mesas
+ * tienen ids como `demo-table-3` en lugar de uuid— en la misma cola de sincronización, y bastaba con
+ * abrir la demo una vez en la estación para que el servidor rechazara ese lote y, con él, todas las
+ * ventas posteriores. Ocurrió: cinco días sin subir una sola venta (docs/COLA_OFFLINE_Y_DATOS_DEMO.md).
+ *
+ * El nombre real se mantiene: las instalaciones existentes ya guardan ahí sus datos.
+ */
+export const DATABASE_NAME = isSupabaseConfigured ? "vereda-pos" : "vereda-pos-demo";
 
 class VeredaDatabase extends Dexie {
   orders!: EntityTable<Order, "id">;
@@ -16,7 +27,7 @@ class VeredaDatabase extends Dexie {
   cashSessions!: EntityTable<CashSession, "id">;
 
   constructor() {
-    super("vereda-pos");
+    super(DATABASE_NAME);
     this.version(1).stores({
       orders: "id, folio, status, tableId, openedBy, updatedAt, syncStatus",
       pendingOperations: "id, idempotencyKey, deviceId, entityId, createdAt, status",

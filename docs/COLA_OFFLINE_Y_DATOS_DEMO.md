@@ -46,7 +46,9 @@ porque esas entidades no existen ni pueden existir en la base.
 
 Basta con que alguien abra la demo una vez en la máquina del punto de venta para envenenar la cola.
 
-## Qué ya se arregló (26/08/2026)
+## Qué ya se arregló
+
+### 26/08/2026 · contener el daño
 
 En `src/lib/offline.ts`:
 
@@ -60,29 +62,33 @@ En `src/lib/offline.ts`:
 Cubierto por seis casos en `src/lib/offline.test.ts`, bajo
 `syncPendingOperations · una operación rota no bloquea a las demás`.
 
-**Esto contiene el daño, no lo evita.** Una operación de demo sigue entrando a la cola, sigue
-fallando para siempre y sigue dejando el indicador en rojo. Lo único que ya no hace es arrastrar a
-las ventas legítimas.
+Eso contenía el daño pero no lo evitaba: una operación de demostración seguía entrando a la cola.
+
+### 27/08/2026 · cortar la raíz
+
+3. **Cada modo con su propia base.** `src/lib/db.ts` deriva el nombre de `isSupabaseConfigured`:
+   `vereda-pos` contra el proyecto real, `vereda-pos-demo` en demostración. El nombre real no se
+   toca, porque las instalaciones existentes ya guardan ahí sus datos. La condición se extrajo a
+   `src/lib/environment.ts` para que `db.ts` no tenga que duplicarla —desincronizarlas haría que la
+   aplicación real abriera la base de la demostración— ni arrastre la creación del cliente Supabase
+   como efecto de importar la base.
+
+   *Verificado:* con la demo levantada aparte, una comanda con mesa deja su `create_order` en
+   `vereda-pos-demo` mientras la cola de `vereda-pos` sigue en cero.
+
+4. **La cola aparta lo que el servidor no puede aceptar.** `sync_offline_operations` empieza
+   casteando `entityId` a uuid, así que una operación cuyo id no lo sea no entrará jamás: no es un
+   fallo pasajero que merezca reintentarse. `syncPendingOperations` las separa antes de enviar nada,
+   con un motivo legible. Ya no se generan, pero las instalaciones que mezclaron ambos modos todavía
+   las arrastran, y sin esto gastaban una petición por cada una en cada sincronización.
 
 ## Lo que queda pendiente
 
-### 1. Separar la base de datos local del modo demostración
+Las dos son de interfaz y se dejaron fuera a propósito el 27/08/2026: con la raíz cortada, el atasco
+ya no puede repetirse por esta vía, así que ninguna es urgente. Siguen anotadas porque el día que
+falle otra cosa —y algo fallará— la cola volverá a ser una caja negra.
 
-Es el arreglo de raíz. En `src/lib/db.ts`, derivar el nombre de la base de `isSupabaseConfigured`
-(por ejemplo `vereda-pos` y `vereda-pos-demo`). Ojo con la migración: las bases existentes ya
-contienen datos reales bajo el nombre actual, así que el nombre real debe seguir siendo `vereda-pos`
-y sólo la demo debe cambiar de nombre.
-
-*Criterio de aceptación:* abrir la demo, generar comandas y cobros, volver a modo real y comprobar
-que la cola sigue vacía y el indicador en verde.
-
-### 2. No encolar lo que nunca podrá subir
-
-Cinturón y tirantes por si vuelven a mezclarse: `queueOperation` puede rechazar —o marcar como
-local— cualquier operación cuyo `entityId` no sea un UUID válido. El servidor lo va a rechazar de
-todas formas; encolarlo sólo sirve para ensuciar.
-
-### 3. Una pantalla para revisar la cola atascada
+### 1. Una pantalla para revisar la cola atascada
 
 Hoy `lastError` sólo se ve abriendo IndexedDB a mano. Un panel en Ajustes que liste las operaciones
 en `review_required` con su tipo, fecha, intentos y motivo, y que permita descartarlas, habría
@@ -91,7 +97,7 @@ convertido cinco días de silencio en dos minutos de diagnóstico.
 *Criterio de aceptación:* con una operación rota en la cola, el indicador debe llevar a una pantalla
 que diga qué operación es y por qué falla.
 
-### 4. Que el indicador rojo pese lo que pesa
+### 2. Que el indicador rojo pese lo que pesa
 
 «Hay operaciones por revisar» describe un estado en el que **las ventas no se están guardando**. Ese
 mensaje merece un tono más alarmante y, probablemente, la antigüedad de la operación más vieja
