@@ -133,11 +133,18 @@ export interface InventoryItem {
   active: boolean;
   updatedAt?: string;
 }
+/**
+ * `signedQuantity` es la cantidad con el signo que aporta a la existencia: positiva para entradas y
+ * para los ajustes que compensan una venta revertida, negativa para mermas y consumo. Es opcional
+ * porque los movimientos capturados a mano lo derivan del tipo; los que escribe el servidor al
+ * cerrar una venta sí lo traen.
+ */
 export interface InventoryMovement {
   id: string;
   itemId: string;
-  type: "entry" | "waste";
+  type: "entry" | "waste" | "daily_consumption" | "adjustment";
   quantity: number;
+  signedQuantity?: number;
   note: string;
   recordedAt: string;
   recordedBy?: string;
@@ -150,7 +157,8 @@ export interface InventoryCount {
   recordedBy?: string;
   lines: InventoryCountLine[];
 }
-export interface RecipeLine { inventoryItemId: string; quantity: number; }
+/** `unit` sólo recuerda en qué unidad se capturó; `quantity` va siempre en la unidad del insumo. */
+export interface RecipeLine { inventoryItemId: string; quantity: number; unit?: InventoryUnit; }
 export interface InventoryRecipe {
   id: string;
   productId: string;
@@ -168,4 +176,6 @@ export interface PendingOperation {
   createdAt: string;
   attempts: number;
   status: SyncStatus;
+  /** Último motivo por el que el servidor la rechazó. Se limpia al sincronizar. */
+  lastError?: string;
 }

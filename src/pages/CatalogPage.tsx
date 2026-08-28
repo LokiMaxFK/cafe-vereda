@@ -3,7 +3,9 @@ import { Coffee, ImagePlus, Pencil, Plus, Search, Sparkles, Tags, Trash2, X } fr
 import { Badge, Button, FieldLabel, InlineAlert, Page, PageHeader, Panel, SelectField, TextareaField, TextField } from "../../design-system/react";
 import { Modal } from "../components/Modal";
 import { mxn } from "../domain/money";
-import type { CatalogExtra, Category, InventoryItem, Product, ProductVariant } from "../domain/types";
+import type { CatalogExtra, Category, InventoryItem, InventoryUnit, Product, ProductVariant } from "../domain/types";
+import { areUnitsCompatible, convertQuantity, preferredUnit, quantityIn } from "../domain/units";
+import { QuantityField } from "../components/QuantityField";
 import { supabase } from "../lib/supabase";
 import { useApp } from "../state/AppContext";
 
@@ -264,10 +266,26 @@ function CategoriesModal({ categories, products, onCreate, onRename, onDelete, o
   </Modal>;
 }
 
+/**
+ * La receta guarda la cantidad en la unidad canónica del insumo y, aparte, en qué unidad la escribió
+ * el usuario. Sin ese recuerdo, quien captura «180 ml» de un insumo medido en litros vuelve a abrir
+ * la receta y se encuentra «0.18 L». Las recetas anteriores a la columna `unit` no lo tienen: se
+ * elige la unidad en la que la cantidad se lee mejor.
+ */
+function toEditableLines(rows: Array<{ inventory_item_id: string; quantity: number; unit?: string | null }>, items: InventoryItem[]) {
+  return rows.map((line) => {
+    const base = items.find((item) => item.id === line.inventory_item_id)?.unit;
+    if (!base) return { inventoryItemId: line.inventory_item_id, quantity: String(line.quantity), unit: "" as const };
+    const stored = line.unit as InventoryUnit | null | undefined;
+    const unit = stored && areUnitsCompatible(stored, base) ? stored : preferredUnit(Number(line.quantity), base);
+    return { inventoryItemId: line.inventory_item_id, quantity: String(convertQuantity(Number(line.quantity), base, unit)), unit };
+  });
+}
+
 function RecipeEditor({ product, products, onSelectProduct, onClose }: { product: Product; products: Product[]; onSelectProduct: (product: Product) => void; onClose: () => void }) {
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [variant, setVariant] = useState("");
-  const [lines, setLines] = useState<Array<{ inventoryItemId: string; quantity: string }>>([]);
+  const [lines, setLines] = useState<Array<{ inventoryItemId: string; quantity: string; unit: InventoryUnit | "" }>>([]);
   const [loading, setLoading] = useState(Boolean(supabase));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -278,15 +296,16 @@ function RecipeEditor({ product, products, onSelectProduct, onClose }: { product
     if (!supabase) { setLoading(false); return; }
     void Promise.all([
       supabase.from("inventory_items").select("id,name,unit,minimum_quantity,tolerance_quantity,active").eq("active", true).order("name"),
-      supabase.from("inventory_recipes").select("variant_name,inventory_recipe_lines(inventory_item_id,quantity)").eq("product_id", product.id)
+      supabase.from("inventory_recipes").select("variant_name,inventory_recipe_lines(inventory_item_id,quantity,unit)").eq("product_id", product.id)
     ]).then(([itemResult, recipeResult]) => {
       if (!active) return;
       const caught = itemResult.error || recipeResult.error;
       if (caught) setError(caught.message);
       else {
-        setItems((itemResult.data ?? []).map((item) => ({ id: item.id, name: item.name, unit: item.unit, minimum: Number(item.minimum_quantity), tolerance: Number(item.tolerance_quantity ?? 0), active: item.active })));
+        const nextItems: InventoryItem[] = (itemResult.data ?? []).map((item) => ({ id: item.id, name: item.name, unit: item.unit as InventoryUnit, minimum: Number(item.minimum_quantity), tolerance: Number(item.tolerance_quantity ?? 0), active: item.active }));
+        setItems(nextItems);
         const recipe = (recipeResult.data ?? []).find((entry) => entry.variant_name === "");
-        setLines((recipe?.inventory_recipe_lines ?? []).map((line) => ({ inventoryItemId: line.inventory_item_id, quantity: String(line.quantity) })));
+        setLines(toEditableLines(recipe?.inventory_recipe_lines ?? [], nextItems));
       }
       setLoading(false);
     });
@@ -295,27 +314,34 @@ function RecipeEditor({ product, products, onSelectProduct, onClose }: { product
 
   useEffect(() => {
     if (!supabase) return;
-    void supabase.from("inventory_recipes").select("inventory_recipe_lines(inventory_item_id,quantity)").eq("product_id", product.id).eq("variant_name", variant).maybeSingle().then(({ data, error: caught }) => {
+    void supabase.from("inventory_recipes").select("inventory_recipe_lines(inventory_item_id,quantity,unit)").eq("product_id", product.id).eq("variant_name", variant).maybeSingle().then(({ data, error: caught }) => {
       if (caught) setError(caught.message);
-      else setLines((data?.inventory_recipe_lines ?? []).map((line) => ({ inventoryItemId: line.inventory_item_id, quantity: String(line.quantity) })));
+      else setLines(toEditableLines(data?.inventory_recipe_lines ?? [], items));
     });
-  }, [product.id, variant]);
+  }, [product.id, variant, items]);
 
   async function save() {
     if (!supabase) { setError("Las recetas requieren la conexión a Supabase."); return; }
-    const normalized = lines.filter((line) => line.inventoryItemId && Number(line.quantity) > 0).map((line) => ({ inventoryItemId: line.inventoryItemId, quantity: Number(line.quantity) }));
+    const normalized = lines
+      .map((line) => {
+        const base = items.find((item) => item.id === line.inventoryItemId)?.unit;
+        if (!base) return null;
+        const quantity = quantityIn(base, line.quantity, line.unit);
+        return quantity !== null && quantity > 0 ? { inventoryItemId: line.inventoryItemId, quantity, unit: line.unit || base } : null;
+      })
+      .filter((line): line is { inventoryItemId: string; quantity: number; unit: InventoryUnit } => line !== null);
     setSaving(true); setError("");
     const { error: caught } = await supabase.rpc("replace_inventory_recipe", { p_product_id: product.id, p_variant_name: variant, p_lines: normalized });
     setSaving(false);
     if (caught) setError(caught.message); else onClose();
   }
 
-  return <Modal title={`Receta: ${product.name}`} description="La receta mide el consumo teórico al preparar; no descuenta existencias." onClose={onClose} width="max-w-2xl">
+  return <Modal title={`Receta: ${product.name}`} description="Al cobrar la cuenta, cada venta descuenta del insumo la cantidad indicada aquí." onClose={onClose} width="max-w-2xl">
     {error && <div className="mb-4"><InlineAlert>{error}</InlineAlert></div>}
     {loading ? <p className="py-8 text-center text-sm text-on-surface-variant">Cargando insumos…</p> : <div className="space-y-4">
       <label className="block text-sm font-semibold">Producto<SelectField value={product.id} onChange={(event) => { const next = products.find((item) => item.id === event.target.value); if (next) onSelectProduct(next); }}><option value={product.id}>{product.name}</option>{products.filter((item) => item.id !== product.id).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</SelectField></label>
       <label className="block text-sm font-semibold">Presentación<SelectField value={variant} onChange={(event) => setVariant(event.target.value)}><option value="">Sin presentación / receta base</option>{product.variants?.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}</SelectField></label>
-      {!items.length ? <InlineAlert>Primero registra los insumos de esta receta.</InlineAlert> : <><div className="space-y-3">{lines.map((line, index) => <div key={`${line.inventoryItemId}-${index}`} className="grid grid-cols-[1fr_120px_auto] gap-2"><SelectField value={line.inventoryItemId} onChange={(event) => setLines((current) => current.map((value, position) => position === index ? { ...value, inventoryItemId: event.target.value } : value))}><option value="">Selecciona insumo</option>{items.map((item) => <option key={item.id} value={item.id}>{item.name} ({item.unit})</option>)}</SelectField><TextField type="number" min="0.001" step="0.001" value={line.quantity} onChange={(event) => setLines((current) => current.map((value, position) => position === index ? { ...value, quantity: event.target.value } : value))} placeholder="Cantidad" /><Button size="sm" onClick={() => setLines((current) => current.filter((_, position) => position !== index))}>Quitar</Button></div>)}</div><Button size="sm" onClick={() => setLines((current) => [...current, { inventoryItemId: items[0]?.id ?? "", quantity: "" }])}><Plus size={16} /> Agregar insumo</Button></>}
+      {!items.length ? <InlineAlert>Primero registra los insumos de esta receta.</InlineAlert> : <><div className="space-y-3">{lines.map((line, index) => <div key={`${line.inventoryItemId}-${index}`} className="grid grid-cols-[1fr_200px_auto] items-start gap-2"><SelectField value={line.inventoryItemId} onChange={(event) => setLines((current) => current.map((value, position) => position === index ? { ...value, inventoryItemId: event.target.value, unit: items.find((item) => item.id === event.target.value)?.unit ?? "" } : value))}><option value="">Selecciona insumo</option>{items.map((item) => <option key={item.id} value={item.id}>{item.name} ({item.unit})</option>)}</SelectField><QuantityField base={items.find((item) => item.id === line.inventoryItemId)?.unit ?? ""} value={line.quantity} unit={line.unit} min="0.001" placeholder="Cantidad" onChange={(next) => setLines((current) => current.map((value, position) => position === index ? { ...value, quantity: next.value, unit: next.unit } : value))} /><Button size="sm" className="mt-1" onClick={() => setLines((current) => current.filter((_, position) => position !== index))}>Quitar</Button></div>)}</div><Button size="sm" onClick={() => setLines((current) => [...current, { inventoryItemId: items[0]?.id ?? "", quantity: "", unit: items[0]?.unit ?? "" }])}><Plus size={16} /> Agregar insumo</Button></>}
       <div className="flex justify-end gap-2"><Button onClick={onClose}>Cancelar</Button><Button variant="primary" disabled={saving || !items.length} onClick={() => void save()}>{saving ? "Guardando…" : "Guardar receta"}</Button></div>
     </div>}
   </Modal>;

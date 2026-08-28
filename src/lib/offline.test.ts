@@ -263,3 +263,87 @@ describe("reclaimStalledOperations · hallazgo F16-01", () => {
     expect(fakeTable.rows.find((row) => row.id === "pendiente")?.status).toBe("pending");
   });
 });
+
+describe("syncPendingOperations · una operación rota no bloquea a las demás", () => {
+  const rota = (id: string) => seed({ id, entityId: "demo-table-3", createdAt: "2026-08-21T05:52:00.000Z" });
+  const buena = (id: string) => seed({ id, createdAt: "2026-08-26T07:20:00.000Z" });
+
+  /** `sync_offline_operations` es una sola transacción: el lote entero falla o entra entero. */
+  const porLote = (rechazadas: string[]) => rpc.mockImplementation(async (_name: string, args: { p_operations: PendingOperation[] }) => {
+    const envenenado = args.p_operations.find((operation) => rechazadas.includes(operation.id));
+    if (envenenado) return { data: null, error: { message: `invalid input syntax for type uuid: "${envenenado.entityId}"`, code: "22P02" } };
+    return { data: args.p_operations.map((operation) => ({ id: operation.id, status: "synced" })), error: null };
+  });
+
+  it("reintenta una por una y sube las buenas aunque una sea irrecuperable", async () => {
+    const mala = rota("mala");
+    const primera = buena("buena-1");
+    const segunda = buena("buena-2");
+    porLote([mala.id]);
+
+    const result = await syncPendingOperations();
+
+    expect(result).toEqual({ synced: 2, review: 1 });
+    expect(fakeTable.rows.find((row) => row.id === primera.id)?.status).toBe("synced");
+    expect(fakeTable.rows.find((row) => row.id === segunda.id)?.status).toBe("synced");
+    expect(fakeTable.rows.find((row) => row.id === mala.id)?.status).toBe("pending");
+  });
+
+  it("guarda el motivo del rechazo: sin él, «hay operaciones por revisar» no da nada que revisar", async () => {
+    const mala = rota("mala");
+    buena("buena-1");
+    porLote([mala.id]);
+
+    await syncPendingOperations();
+
+    expect(fakeTable.rows.find((row) => row.id === mala.id)?.lastError)
+      .toBe('invalid input syntax for type uuid: "demo-table-3" (22P02)');
+  });
+
+  it("no reintenta de una en una cuando el lote entra a la primera", async () => {
+    buena("buena-1");
+    buena("buena-2");
+    porLote([]);
+
+    await syncPendingOperations();
+
+    expect(rpc).toHaveBeenCalledTimes(1);
+  });
+
+  it("no reenvía por separado una operación que ya viajaba sola", async () => {
+    const mala = rota("mala");
+    porLote([mala.id]);
+
+    const result = await syncPendingOperations();
+
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ synced: 0, review: 1 });
+  });
+
+  it("manda a revisión la rota tras tres intentos, sin arrastrar a las buenas", async () => {
+    const mala = rota("mala");
+    porLote([mala.id]);
+    for (let intento = 0; intento < 3; intento += 1) {
+      buena(`buena-${intento}`);
+      await syncPendingOperations();
+    }
+
+    const fila = fakeTable.rows.find((row) => row.id === mala.id);
+    expect(fila?.status).toBe("review_required");
+    expect(fila?.attempts).toBe(3);
+    expect(fakeTable.rows.filter((row) => row.status === "synced")).toHaveLength(3);
+  });
+
+  it("limpia el motivo cuando la operación acaba entrando", async () => {
+    const operation = seed({ id: "intermitente" });
+    porLote([operation.id]);
+    await syncPendingOperations();
+    expect(fakeTable.rows[0].lastError).toBeTruthy();
+
+    porLote([]);
+    await syncPendingOperations();
+
+    expect(fakeTable.rows[0].status).toBe("synced");
+    expect(fakeTable.rows[0].lastError).toBeUndefined();
+  });
+});
