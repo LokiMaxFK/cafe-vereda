@@ -61,9 +61,10 @@ export function SplitBillModal({ order, onClose, onSettled }: { order: Order; on
       // La propina se saca del mismo campo que ve el cajero, pero un importe negativo restaría de
       // lo que Reportes y el arqueo dan por propinas del turno.
       await addPayment(order.id, method, value, Math.max(0, Number(tip) || 0), subaccount.id);
-      setAmount(""); setTip("0"); setChargingId(null);
-      // No se imprime aquí: `order` todavía es la copia anterior al pago y el ticket saldría sin
-      // él. Se marca y lo imprime el efecto de abajo, ya con la orden actualizada.
+      setAmount(""); setTip("0");
+      // El panel de cobro no se cierra aquí: si la persona todavía debe, el pago mixto (una parte
+      // con tarjeta y el resto en efectivo) se encadena sin salir. El efecto de abajo lo cierra
+      // e imprime el ticket en cuanto la subcuenta queda cubierta.
       setPendingPrintId(subaccount.id);
     });
   }
@@ -74,14 +75,21 @@ export function SplitBillModal({ order, onClose, onSettled }: { order: Order; on
   }
 
   // El ticket sale solo en cuanto la persona queda cubierta, con la orden ya actualizada por el
-  // contexto. Si el cobro fue parcial no se imprime todavía: aún debe.
+  // contexto. Si el cobro fue parcial no se imprime todavía: aún debe, y el panel sigue abierto con
+  // el saldo restante ya puesto para cobrar el resto por otro método.
   useEffect(() => {
     if (!pendingPrintId) return;
     const subaccount = (order.subaccounts ?? []).find((candidate) => candidate.id === pendingPrintId);
-    if (!subaccount || !isSubaccountSettled(order, pendingPrintId)) { setPendingPrintId(null); return; }
+    const settled = !!subaccount && isSubaccountSettled(order, pendingPrintId);
     setPendingPrintId(null);
+    if (!subaccount) return;
+    if (!settled) {
+      if (chargingId === pendingPrintId) setAmount(subaccountBalance(order, pendingPrintId).toFixed(2));
+      return;
+    }
+    setChargingId(null);
     void printFor(subaccount, order);
-    }, [order, pendingPrintId]);
+    }, [order, pendingPrintId, chargingId]);
 
   // `closeOrder` no cierra una cuenta que no esté cubierta y no avisa de ello, así que se comprueba
   // aquí antes de dar la venta por terminada y devolver al cajero al salón.
