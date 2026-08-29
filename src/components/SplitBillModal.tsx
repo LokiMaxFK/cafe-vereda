@@ -3,8 +3,8 @@ import { Banknote, Check, CreditCard, Minus, Plus, Printer, Smartphone, Users } 
 import { Badge, Button, InlineAlert, SegmentedControl, TextField } from "../../design-system/react";
 import { mxn, orderTotal, paidTotal } from "../domain/money";
 import {
-  hasSubaccountPayments, isSubaccountSettled, pendingAssignments, splitIsComplete, subaccountBalance,
-  subaccountPaid, subaccountTip, subaccountTotal, unassignedUnits
+  hasSubaccountPayments, isSubaccountSettled, nextAssignedUnits, pendingAssignments, splitIsComplete,
+  splitIsSettled, subaccountBalance, subaccountPaid, subaccountTip, subaccountTotal, unassignedUnits
 } from "../domain/splitBill";
 import type { Order, OrderSubaccount, PaymentMethod, SplitMode } from "../domain/types";
 import { Modal } from "./Modal";
@@ -40,7 +40,7 @@ export function SplitBillModal({ order, onClose, onSettled }: { order: Order; on
   const pending = pendingAssignments(order);
   const ready = splitIsComplete(order);
   const frozen = hasSubaccountPayments(order);
-  const allSettled = started && subaccounts.every((subaccount) => isSubaccountSettled(order, subaccount.id));
+  const allSettled = started && splitIsSettled(order);
 
   async function run(action: () => Promise<void>) {
     setError("");
@@ -58,7 +58,9 @@ export function SplitBillModal({ order, onClose, onSettled }: { order: Order; on
     const value = Number(amount);
     if (!value || value <= 0) return;
     await run(async () => {
-      await addPayment(order.id, method, value, Number(tip || 0), subaccount.id);
+      // La propina se saca del mismo campo que ve el cajero, pero un importe negativo restaría de
+      // lo que Reportes y el arqueo dan por propinas del turno.
+      await addPayment(order.id, method, value, Math.max(0, Number(tip) || 0), subaccount.id);
       setAmount(""); setTip("0"); setChargingId(null);
       // No se imprime aquí: `order` todavía es la copia anterior al pago y el ticket saldría sin
       // él. Se marca y lo imprime el efecto de abajo, ya con la orden actualizada.
@@ -81,8 +83,11 @@ export function SplitBillModal({ order, onClose, onSettled }: { order: Order; on
     void printFor(subaccount, order);
     }, [order, pendingPrintId]);
 
+  // `closeOrder` no cierra una cuenta que no esté cubierta y no avisa de ello, así que se comprueba
+  // aquí antes de dar la venta por terminada y devolver al cajero al salón.
   async function finishAll() {
     await run(async () => {
+      if (!splitIsSettled(order)) throw new Error("Todavía falta cobrar parte de la cuenta.");
       await closeOrder(order.id);
       onSettled();
     });
@@ -178,7 +183,7 @@ export function SplitBillModal({ order, onClose, onSettled }: { order: Order; on
                                 setReassignReason("");
                                 return;
                               }
-                              void run(() => assignItemUnits(order.id, item.id, subaccount.id, units + 1 > item.quantity ? 0 : units + 1));
+                              void run(() => assignItemUnits(order.id, item.id, subaccount.id, nextAssignedUnits(item, order.itemShares ?? [], subaccount.id)));
                             }}
                             className={`min-h-10 rounded-lg border px-3 text-xs font-bold disabled:opacity-40 ${units > 0 ? "border-primary bg-primary-fixed text-primary" : "border-outline-variant/50"}`}
                           >
@@ -199,7 +204,10 @@ export function SplitBillModal({ order, onClose, onSettled }: { order: Order; on
               const total = subaccountTotal(order, subaccount.id);
               const paid = subaccountPaid(order, subaccount.id);
               const balance = subaccountBalance(order, subaccount.id);
-              const settled = balance <= 0;
+              // Mientras falten unidades por asignar, deber cero no es haber pagado: es no tener
+              // todavía nada encima. Darlo por saldado ahí anunciaba «Pagado» y ofrecía su ticket a
+              // las tres personas de una cuenta recién dividida en la que nadie había puesto un peso.
+              const settled = ready && balance <= 0;
               return (
                 <div key={subaccount.id} className="rounded-xl border border-outline-variant/30 p-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">

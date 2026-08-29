@@ -1,4 +1,4 @@
-import { itemTotal, orderSubtotal, orderTotal, roundToCents } from "./money";
+import { itemTotal, orderSubtotal, orderTotal, paidTotal, roundToCents } from "./money";
 import type { Order, OrderItem, OrderItemShare, OrderSubaccount } from "./types";
 
 /**
@@ -71,13 +71,40 @@ export function assignUnits(shares: OrderItemShare[], item: Pick<OrderItem, "id"
   return [...others, { itemId: item.id, subaccountId, units: capped }];
 }
 
-/** Quita del reparto las participaciones de renglones que ya no existen o que se cancelaron. */
+/**
+ * Quita del reparto las participaciones de renglones que ya no existen, que se cancelaron o que
+ * encogieron.
+ *
+ * El recorte es por renglón, no por participación: se va repartiendo lo que queda de la línea entre
+ * las participaciones en orden y las que ya no caben se descartan. Toparlas una a una contra
+ * `item.quantity` no bastaba —dos personas con una unidad cada una de una línea que bajó a una
+ * sobrevivían ambas—, y ahí la suma de las subcuentas pasaba a ser mayor que el total de la cuenta,
+ * que es justo lo que impide cerrarla.
+ */
 export function pruneShares(items: OrderItem[], shares: OrderItemShare[]): OrderItemShare[] {
+  const free = new Map<string, number>();
   return shares.flatMap((share) => {
     const item = items.find((candidate) => candidate.id === share.itemId && candidate.status !== "cancelled");
     if (!item) return [];
-    return share.units > item.quantity ? [{ ...share, units: item.quantity }] : [share];
+    const available = free.get(item.id) ?? item.quantity;
+    const units = Math.min(share.units, available);
+    free.set(item.id, available - units);
+    return units > 0 ? [{ ...share, units }] : [];
   });
+}
+
+/**
+ * Cuántas unidades le tocan a una persona en el siguiente toque sobre su botón del reparto.
+ *
+ * Cada toque suma una unidad y vuelve a cero cuando ya no queda ninguna libre. El tope es lo que
+ * queda **de la línea**, no la línea entera: con dos cafés repartidos uno a cada quien, comparar
+ * contra `item.quantity` daba 2, `assignUnits` lo recortaba de vuelta a 1 y el botón dejaba de
+ * responder, así que una unidad mal asignada no se podía soltar sin deshacer el reparto completo.
+ */
+export function nextAssignedUnits(item: Pick<OrderItem, "id" | "quantity">, shares: OrderItemShare[], subaccountId: string) {
+  const own = shares.filter((share) => share.itemId === item.id && share.subaccountId === subaccountId).reduce((sum, share) => sum + share.units, 0);
+  const takenByOthers = assignedUnits(item.id, shares) - own;
+  return own + 1 > item.quantity - takenByOthers ? 0 : own + 1;
 }
 
 /**
@@ -106,14 +133,22 @@ export function subaccountSubtotal(order: Pick<Order, "items" | "itemShares">, s
  * El residuo del prorrateo se le carga a la última subcuenta, igual que en `evenSplitAmounts`, para
  * que la suma de los descuentos dé el descuento de la cuenta y ni el negocio ni el cliente pongan
  * un centavo de más.
+ *
+ * En partes iguales no hay consumo del que prorratear —nadie tiene artículos asignados—, así que el
+ * descuento se parte en partes iguales como el total. Prorratearlo por consumo ahí dejaba a todos en
+ * cero y el residuo entero, o sea el descuento completo, impreso en el ticket de la última persona.
  */
-export function subaccountDiscount(order: Pick<Order, "items" | "itemShares" | "discount" | "subaccounts">, subaccountId: string) {
+export function subaccountDiscount(order: Pick<Order, "items" | "itemShares" | "discount" | "subaccounts" | "splitMode">, subaccountId: string) {
   const subaccounts = order.subaccounts ?? [];
   const discountCents = Math.round(roundToCents(order.discount) * 100);
   const subtotal = orderSubtotal(order);
   if (!discountCents || !subtotal || !subaccounts.length) return 0;
 
   const ordered = [...subaccounts].sort((a, b) => a.position - b.position);
+  if (order.splitMode === "even") {
+    const index = ordered.findIndex((subaccount) => subaccount.id === subaccountId);
+    return index === -1 ? 0 : evenSplitAmounts(order.discount, ordered.length)[index] ?? 0;
+  }
   const shares = ordered.map((subaccount) => Math.floor((discountCents * subaccountSubtotal(order, subaccount.id)) / subtotal));
   const assigned = shares.reduce((sum, value) => sum + value, 0);
   const index = ordered.findIndex((subaccount) => subaccount.id === subaccountId);
@@ -172,4 +207,21 @@ export function splitIsComplete(order: Pick<Order, "items" | "itemShares" | "spl
 /** Una división ya no se puede deshacer ni rehacer en cuanto alguien pagó. */
 export function hasSubaccountPayments(order: Pick<Order, "payments">) {
   return order.payments.some((payment) => Boolean(payment.subaccountId));
+}
+
+/**
+ * Si el reparto está cobrado y la cuenta se puede cerrar.
+ *
+ * No basta con que todas las personas estén saldadas. Recién dividida en «por producto» nadie tiene
+ * artículos, así que todas deben cero y todas figuran saldadas con la cuenta intacta: el modal
+ * ofrecía «Cerrar la cuenta», `closeOrder` no hacía nada —el pago era insuficiente— y el cajero
+ * volvía al salón convencido de haber cobrado una venta que seguía abierta y en cero.
+ *
+ * Por eso se exige además que el reparto esté completo y que lo cobrado cubra el total de la cuenta,
+ * que es la misma condición que `closeOrder` y el trigger `validate_order_close` van a comprobar.
+ */
+export function splitIsSettled(order: SplitOrder & Pick<Order, "payments">) {
+  if (!splitIsComplete(order)) return false;
+  if (!(order.subaccounts ?? []).every((subaccount) => isSubaccountSettled(order, subaccount.id))) return false;
+  return paidTotal(order) >= orderTotal(order);
 }

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { mxn } from "../domain/money";
 import type { Order } from "../domain/types";
 import { defaultPrinterSettings } from "./printerSettings";
-import { createCommandDocument, createTicketDocument } from "./printing";
+import { createCommandDocument, createTicketDocument, ticketContextFor } from "./printing";
 
 const order: Order = {
   id: "ticket", folio: 1, type: "takeaway", customerName: "María", status: "closed", openedBy: "staff", openedAt: "2026-08-17T15:30:00Z", updatedAt: "2026-08-17T15:31:00Z", syncStatus: "synced", discount: 0,
@@ -314,6 +314,31 @@ describe("ticket of a separate account", () => {
     const html = createTicketDocument(split, "58", defaultPrinterSettings, { ...anaContext, label: "<script>x</script>" }).html;
     expect(html).not.toContain("<script>x</script>");
     expect(html).toContain("&lt;script&gt;");
+  });
+
+  // En partes iguales nadie tiene artículos asignados, así que el prorrateo por consumo dejaba a
+  // todos en cero y le cargaba el descuento entero al último, que se llevaba el residuo: su ticket
+  // anunciaba un descuento de $50 sobre un total que ya venía con su parte descontada.
+  describe("split in equal parts", () => {
+    const evenSplit: Order = {
+      ...split,
+      splitMode: "even",
+      itemShares: [],
+      subaccounts: [{ id: "ana", label: "Ana", position: 1 }, { id: "beto", label: "Beto", position: 2 }]
+    };
+
+    it("prints each person their own share of the discount", () => {
+      const ana = createTicketDocument(evenSplit, "58", defaultPrinterSettings, ticketContextFor(evenSplit, evenSplit.subaccounts![0])).html;
+      const beto = createTicketDocument(evenSplit, "58", defaultPrinterSettings, ticketContextFor(evenSplit, evenSplit.subaccounts![1])).html;
+      expect(ana).toContain(`-${mxn.format(25)}`);
+      expect(beto).toContain(`-${mxn.format(25)}`);
+      expect(beto).not.toContain(`-${mxn.format(50)}`);
+    });
+
+    it("charges each person half of the discounted total", () => {
+      const ana = createTicketDocument(evenSplit, "58", defaultPrinterSettings, ticketContextFor(evenSplit, evenSplit.subaccounts![0])).html;
+      expect(ana).toContain(`<strong>${mxn.format(62.5)}</strong>`);
+    });
   });
 
   // La red de seguridad del módulo: si el ticket completo cambiara al agregar el reparto, las

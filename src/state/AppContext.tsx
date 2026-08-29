@@ -400,7 +400,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const batchId = crypto.randomUUID();
     const result = cancelItemUnits(order.items, itemId, quantity ?? target.quantity, reason, batchId, crypto.randomUUID());
     if (!result) return null;
-    await persistOrder({ ...order, items: result.items }, "cancel_dispatched_item");
+    // Cancelar parte de un renglón lo encoge sin tocar el reparto, y las participaciones se quedaban
+    // reclamando unidades que ya no existen: la suma de las subcuentas superaba el total y la cuenta
+    // no podía cerrarse. Las unidades que quedan libres vuelven a «sin asignar», que es lo que la
+    // pantalla ya sabe pedir.
+    await persistOrder({ ...order, items: result.items, ...(order.itemShares?.length ? { itemShares: pruneShares(result.items, order.itemShares) } : {}) }, "cancel_dispatched_item");
     return { batchId, item: result.cancelled };
   }, [orders, persistOrder]);
 
@@ -453,10 +457,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
    * Divide la cuenta entre `people` personas. Rehacer el reparto borra el anterior, así que se
    * bloquea en cuanto alguien pagó: mover el importe de una persona que ya se fue con su ticket
    * en la mano dejaría la cuenta sin cuadrar y sin forma de explicarlo.
+   *
+   * Tampoco se puede dividir una cuenta que ya tiene cobros propios, aunque no sean de nadie en
+   * particular. Las subcuentas reparten el total entero, no el saldo: con $100 ya cobrados de una
+   * cuenta de $250, cada mitad seguía pidiendo $125 y el tope de `addPayment` recortaba el cobro de
+   * la última al saldo real, de modo que se quedaba debiendo para siempre. Ni se cerraba la cuenta
+   * ni se podía volver a juntar, y el dinero de esa persona entraba al cajón sin quedar registrado.
    */
   const splitOrder = useCallback(async (orderId: string, mode: SplitMode, people: number) => {
     const order = orders.find((item) => item.id === orderId); if (!order) return;
     if (hasSubaccountPayments(order)) throw new Error("La cuenta ya tiene cobros: no se puede volver a dividir.");
+    if (order.payments.length) throw new Error("La cuenta ya tiene pagos registrados: cóbrala completa o revierte la venta para dividirla.");
     const subaccounts = createSubaccounts(people);
     if (!subaccounts.length) throw new Error("Una cuenta separada necesita al menos dos personas.");
     await persistOrder({ ...order, splitMode: mode, subaccounts, itemShares: [] }, "split_order");
