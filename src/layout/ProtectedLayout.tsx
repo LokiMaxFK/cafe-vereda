@@ -2,10 +2,11 @@ import { useEffect, useState } from "react";
 import { BarChart3, BookOpen, Boxes, ClipboardList, Coffee, HandCoins, Home, LayoutGrid, LayoutTemplate, LogOut, Plus, Settings, Users, WalletCards } from "lucide-react";
 import { Link, Navigate, Outlet, useLocation } from "react-router-dom";
 import { AppShell, InlineAlert } from "../../design-system/react";
+import { connectionBadge } from "../domain/connection";
 import { useApp } from "../state/AppContext";
 
 export function ProtectedLayout() {
-  const { session, hydrated, logout, online, syncStatus, pendingCount } = useApp();
+  const { session, hydrated, logout, online, syncStatus, liveStatus, pendingCount } = useApp();
   const location = useLocation();
   const [logoutError, setLogoutError] = useState("");
   // El aviso se retira solo: si no, queda pegado en pantalla el resto de la sesión, incluso
@@ -35,7 +36,7 @@ export function ProtectedLayout() {
       { href: "/configuracion", label: "Configuración", icon: <Settings size={21} />, group: "Administración" }
     ] : [])
   ];
-  const status = !online ? { label: `${pendingCount} cambios · Sin conexión`, tone: "danger" as const } : syncStatus === "syncing" ? { label: "Sincronizando cambios", tone: "neutral" as const } : syncStatus === "review_required" ? { label: "Hay operaciones por revisar", tone: "danger" as const } : { label: pendingCount ? `${pendingCount} cambios pendientes` : "Todo sincronizado", tone: "success" as const };
+  const status = connectionBadge({ online, syncStatus, pendingCount, liveStatus });
   return (
     <AppShell
       brand={{ name: "Vereda Café", subtitle: "Punto de venta", logoUrl: "/logo.png", fallback: "V" }}

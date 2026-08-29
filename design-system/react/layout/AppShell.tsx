@@ -158,7 +158,7 @@ export function AppShell({
             className="mx-3 mb-2 flex min-h-10 items-center gap-2 rounded-xl px-3 text-left text-xs font-semibold text-on-surface-variant hover:bg-surface-container-high"
           >
             <span className={cn("h-2.5 w-2.5 rounded-full", status.tone === "success" ? "bg-tertiary" : status.tone === "danger" ? "bg-error" : "bg-outline")} />
-            <span className="truncate">{status.label}</span>
+            <span className="truncate" title={status.label}>{status.label}</span>
           </button>
         )}
 

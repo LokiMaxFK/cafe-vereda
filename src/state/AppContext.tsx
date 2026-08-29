@@ -8,7 +8,7 @@ import { nextFreeSlot } from "../domain/tables";
 import { applyPaymentCap, orderSubtotal, orderTotal, paidTotal, roundToCents } from "../domain/money";
 import { cancelItemUnits, mergeOrAddItem, type OrderItemInput } from "../domain/orderItem";
 import { assignUnits, createSubaccounts, hasSubaccountPayments, pruneShares, subaccountBalance, subaccountTotal } from "../domain/splitBill";
-import type { AppRole, CafeTable, CashSession, CatalogExtra, Category, Order, OrderItem, PaymentMethod, Product, SplitMode, StaffSession, SyncStatus } from "../domain/types";
+import type { AppRole, CafeTable, CashSession, CatalogExtra, Category, LiveStatus, Order, OrderItem, PaymentMethod, Product, SplitMode, StaffSession, SyncStatus } from "../domain/types";
 import { fetchOpenCashSession } from "../lib/cashSessions";
 import { db } from "../lib/db";
 import { queueOperation, reclaimStalledOperations, syncPendingOperations } from "../lib/offline";
@@ -84,6 +84,8 @@ interface AppContextValue {
   extras: CatalogExtra[];
   online: boolean;
   syncStatus: SyncStatus;
+  /** Salud del canal de tiempo real. `down` = no llegan los cambios de otras estaciones. */
+  liveStatus: LiveStatus;
   pendingCount: number;
   demoMode: boolean;
   /** Turno de caja abierto, o `null` si no hay ninguno. */
@@ -149,6 +151,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [extras, setExtras] = useState<CatalogExtra[]>(demoExtras);
   const [online, setOnline] = useState(navigator.onLine);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(navigator.onLine ? "synced" : "pending");
+  const [liveStatus, setLiveStatus] = useState<LiveStatus>("connecting");
   const [pendingCount, setPendingCount] = useState(0);
   const [cashSession, setCashSession] = useState<CashSession | null>(null);
 
@@ -281,8 +284,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
     void client.realtime.setAuth();
     const channel = client.channel("branch:main", { config: { private: true } });
     const refresh = () => { setSyncStatus("syncing"); void forceSync(); };
-    channel.on("broadcast", { event: "INSERT" }, refresh).on("broadcast", { event: "UPDATE" }, refresh).on("broadcast", { event: "DELETE" }, refresh).subscribe();
-    return () => { void client.removeChannel(channel); };
+    let disposed = false;
+    setLiveStatus("connecting");
+    channel
+      .on("broadcast", { event: "INSERT" }, refresh)
+      .on("broadcast", { event: "UPDATE" }, refresh)
+      .on("broadcast", { event: "DELETE" }, refresh)
+      .subscribe((status, error) => {
+        if (disposed) return;
+        // Sin este callback, un fallo al suscribirse era invisible: el POS se quedaba sin los
+        // cambios de otras estaciones y la barra seguía diciendo «Todo sincronizado» (F16-05).
+        // La causa casi siempre es que falta la política de `realtime.messages` que las
+        // migraciones no pueden crear (ver docs/DEPLOY_HOSTINGER.md).
+        if (status === "SUBSCRIBED") setLiveStatus("live");
+        else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          setLiveStatus("down");
+          console.error("[realtime] el canal branch:main no se pudo suscribir:", status, error);
+        }
+      });
+    return () => { disposed = true; setLiveStatus("connecting"); void client.removeChannel(channel); };
   }, [session, online, forceSync]);
 
   useEffect(() => {
@@ -732,14 +752,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [session]);
 
   const value = useMemo(() => ({
-    session, hydrated, orders, tables, products, categories, extras, online, syncStatus, pendingCount, demoMode: !isSupabaseConfigured,
+    session, hydrated, orders, tables, products, categories, extras, online, syncStatus, liveStatus, pendingCount, demoMode: !isSupabaseConfigured,
     cashSession, cashSessionRequired, canTakeOrders: ordersAllowed, refreshCashSession,
     login, logout, startOrder, addItem, changeQuantity, cancelCommandedItem, dispatchPending, markOrderReady, finalizeOrder, addPayment,
     closeOrder, setDiscount, cancelOrder, reverseSale, forceSync, addTable, updateTable,
     splitOrder, renameSubaccount, assignItemUnits, reassignItemUnits, clearSplit,
     createProduct, updateProduct, deleteProduct, createExtra, updateExtra, deleteExtra, createCategory, updateCategory, deleteCategory, uploadProductImage
   }), [
-    session, hydrated, orders, tables, products, categories, extras, online, syncStatus, pendingCount,
+    session, hydrated, orders, tables, products, categories, extras, online, syncStatus, liveStatus, pendingCount,
     cashSession, cashSessionRequired, ordersAllowed, refreshCashSession,
     login, logout, startOrder, addItem, changeQuantity, cancelCommandedItem, dispatchPending, markOrderReady, finalizeOrder, addPayment,
     closeOrder, setDiscount, cancelOrder, reverseSale, forceSync, addTable, updateTable,

@@ -7,6 +7,12 @@ export type CashMovementType = "opening" | "withdrawal" | "adjustment" | "closin
 export type InventoryMovementType = "entry" | "daily_consumption" | "waste" | "withdrawal" | "adjustment";
 export type InventoryUnit = "g" | "kg" | "ml" | "L" | "pza" | "paquete" | "bolsa";
 export type SyncStatus = "pending" | "syncing" | "synced" | "review_required";
+/**
+ * Estado del canal de tiempo real. `down` significa que el POS dejó de recibir los cambios de
+ * otras estaciones: la barra no ve entrar una comanda, el salón no ve liberarse una mesa. El
+ * caso típico es que falte la política de `realtime.messages` (ver docs/DEPLOY_HOSTINGER.md).
+ */
+export type LiveStatus = "connecting" | "live" | "down";
 /** Cómo se repartió una cuenta entre varias personas. Sin valor, la cuenta se cobra entera. */
 export type SplitMode = "even" | "items";
 

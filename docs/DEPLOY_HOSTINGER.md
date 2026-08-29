@@ -16,9 +16,13 @@ Las migraciones de `supabase/migrations/` **no bastan por sí solas**. Hay una p
 migraciones no puede crear, porque `realtime.messages` pertenece a `supabase_realtime_admin`. Sin
 ella, el canal `branch:main` —que la aplicación abre como privado— nunca llega a suscribirse, y el
 punto de venta se queda **sin actualizaciones en vivo**: la barra no ve entrar una comanda nueva, el
-salón no ve liberarse una mesa y quien cobra no ve que un plato ya salió. No aparece ningún error;
-el indicador sigue diciendo «Todo sincronizado». Así se detectó en la revisión previa a la entrega (hallazgo **F16-05**): el proyecto llevaba
+salón no ve liberarse una mesa y quien cobra no ve que un plato ya salió. Así se detectó en la revisión previa a la entrega (hallazgo **F16-05**): el proyecto llevaba
 funcionando sin tiempo real desde la migración inicial, y nadie se había dado cuenta.
+
+Desde entonces la aplicación **sí avisa**: si el canal `branch:main` no llega a suscribirse, la
+insignia de la barra lateral pasa a roja con «Sin actualización en vivo · recarga la página» (y
+queda un `console.error` con el detalle). Si ves ese estado en un despliegue nuevo, es casi seguro
+que falta la política de abajo.
 
 Tras aplicar las migraciones a un proyecto nuevo, ejecuta esto **una vez** desde el **SQL Editor**
 del panel de Supabase:
