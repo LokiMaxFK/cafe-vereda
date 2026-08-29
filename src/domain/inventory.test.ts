@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { analyzeRestockPattern, buildInventoryPeriods, createInventoryAnalysis, deriveStock, isInventoryVarianceAlert, movementSign } from "./inventory";
+import { analysisMovementStart, analyzeRestockPattern, buildInventoryPeriods, createInventoryAnalysis, deriveStock, isInventoryVarianceAlert, movementSign } from "./inventory";
 import type { InventoryItem, InventoryMovement } from "./types";
 
 const item: InventoryItem = { id: "coffee", name: "Café", unit: "kg", minimum: 2, tolerance: 0.1, active: true };
@@ -21,6 +21,59 @@ describe("inventory analysis", () => {
   it("does not infer consumption from a single baseline count", () => {
     const [row] = createInventoryAnalysis([item], [{ id: "baseline", countedAt: "2026-08-17T10:00:00.000Z", lines: [{ itemId: "coffee", quantity: 8 }] }], [], "2026-08-17T00:00:00.000Z", "2026-08-18T00:00:00.000Z");
     expect(row.physical).toBeUndefined();
+  });
+});
+
+describe("insumos dados de baja en la tabla", () => {
+  const inactivo: InventoryItem = { ...item, id: "descafeinado", name: "Descafeinado", active: false };
+  const counts = [
+    { id: "c1", countedAt: "2026-08-10T10:00:00.000Z", lines: [{ itemId: "descafeinado", quantity: 5 }] },
+    { id: "c2", countedAt: "2026-08-20T10:00:00.000Z", lines: [{ itemId: "descafeinado", quantity: 4 }] }
+  ];
+  const venta: InventoryMovement[] = [
+    { id: "m1", itemId: "descafeinado", type: "daily_consumption", quantity: 1, signedQuantity: -1, note: "Venta folio 9", recordedAt: "2026-08-15T10:00:00.000Z" }
+  ];
+  const START = "2026-08-01T00:00:00.000Z";
+  const END = "2026-08-25T00:00:00.000Z";
+
+  /** El disparador descuenta por receta sin mirar `active`: ese consumo no puede quedar invisible. */
+  it("lo enseña si una receta lo sigue descontando", () => {
+    const rows = createInventoryAnalysis([inactivo], counts, venta, START, END);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].theoretical).toBeCloseTo(1);
+  });
+
+  it("lo oculta cuando ya no se mueve", () => {
+    expect(createInventoryAnalysis([inactivo], counts, [], START, END)).toEqual([]);
+  });
+});
+
+describe("ventana de descarga de movimientos", () => {
+  const counts = [
+    { id: "apertura", countedAt: "2026-08-01T10:00:00.000Z", lines: [{ itemId: "coffee", quantity: 9 }] },
+    { id: "cierre", countedAt: "2026-08-20T10:00:00.000Z", lines: [{ itemId: "coffee", quantity: 6 }] }
+  ];
+
+  it("retrocede hasta el conteo de apertura, que es anterior al inicio del rango", () => {
+    expect(analysisMovementStart([item], counts, "2026-08-10T00:00:00.000Z", "2026-08-25T00:00:00.000Z"))
+      .toBe("2026-08-01T10:00:00.000Z");
+  });
+
+  it("no retrocede cuando el conteo de apertura cae dentro del rango", () => {
+    expect(analysisMovementStart([item], [counts[1]], "2026-08-10T00:00:00.000Z", "2026-08-25T00:00:00.000Z"))
+      .toBe("2026-08-10T00:00:00.000Z");
+  });
+
+  it("respeta el tope de antigüedad", () => {
+    const antiguo = [{ id: "prehistorico", countedAt: "2024-01-01T00:00:00.000Z", lines: [{ itemId: "coffee", quantity: 1 }] }];
+    expect(analysisMovementStart([item], antiguo, "2026-08-10T00:00:00.000Z", "2026-08-25T00:00:00.000Z"))
+      .toBe(new Date(Date.parse("2026-08-25T00:00:00.000Z") - 365 * 86_400_000).toISOString());
+  });
+
+  /** Un dado de baja que sigue en una receta necesita su conteo de apertura como cualquier otro. */
+  it("retrocede también por un insumo dado de baja", () => {
+    expect(analysisMovementStart([{ ...item, active: false }], counts, "2026-08-10T00:00:00.000Z", "2026-08-25T00:00:00.000Z"))
+      .toBe("2026-08-01T10:00:00.000Z");
   });
 });
 

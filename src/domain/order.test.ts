@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { barItemsForCancellation, deliverableItemCount, elapsedMinutes, FIRST_LOCAL_FOLIO, isCancellable, isTracked, markItemsPrepared, nextLocalFolio, orderDestination, tableStatus } from "./order";
+import { barItemsForCancellation, deliverableItemCount, elapsedMinutes, FIRST_LOCAL_FOLIO, isCancellable, isChargeable, isClosable, isFinalizable, isTracked, markItemsPrepared, nextLocalFolio, orderDestination, tableStatus } from "./order";
 import type { Order, OrderItem, OrderStatus } from "./types";
 
 const allStatuses: OrderStatus[] = ["open", "preparing", "ready", "served", "closed", "cancelled", "reversed"];
@@ -13,6 +13,40 @@ describe("order tracking", () => {
     expect(allStatuses.filter((status) => isCancellable({ status }))).toEqual(["open", "preparing", "ready", "served"]);
     expect(isCancellable({ status: "closed" })).toBe(false);
     expect(isCancellable({ status: "reversed" })).toBe(false);
+  });
+});
+
+describe("estados desde los que se puede finalizar y cobrar", () => {
+  const orderWith = (status: OrderStatus, total: number, paid: number): Order => ({
+    id: "o1", folio: 1, type: "takeaway", status, openedBy: "u1", openedAt: "2026-08-29T10:00:00.000Z",
+    updatedAt: "2026-08-29T10:00:00.000Z", discount: 0, syncStatus: "synced",
+    items: total ? [{ id: "i1", productId: "p1", name: "Café", quantity: 1, unitPrice: total, modifiers: [], status: "prepared" }] : [],
+    payments: paid ? [{ id: "pay1", method: "cash", amount: paid, tip: 0, createdAt: "2026-08-29T10:05:00.000Z" }] : []
+  });
+
+  it("sólo finaliza una cuenta que la barra todavía tiene en marcha", () => {
+    expect(allStatuses.filter((status) => isFinalizable({ status }))).toEqual(["open", "preparing", "ready"]);
+  });
+
+  /** El fallo original: finalizar una cuenta cancelada la devolvía a 'served' y desde ahí se cobraba. */
+  it("no deja resucitar una cuenta cancelada ni una revertida", () => {
+    expect(isFinalizable({ status: "cancelled" })).toBe(false);
+    expect(isFinalizable({ status: "reversed" })).toBe(false);
+    expect(isFinalizable({ status: "served" })).toBe(false);
+  });
+
+  it("sólo cobra una cuenta ya finalizada", () => {
+    expect(allStatuses.filter((status) => isChargeable({ status }))).toEqual(["served"]);
+  });
+
+  it("cierra una cuenta cobrable y cubierta", () => {
+    expect(isClosable(orderWith("served", 50, 50))).toBe(true);
+    expect(isClosable(orderWith("served", 50, 20))).toBe(false);
+  });
+
+  it("no cierra una cuenta cancelada aunque figure como pagada", () => {
+    expect(isClosable(orderWith("cancelled", 50, 50))).toBe(false);
+    expect(isClosable(orderWith("reversed", 50, 50))).toBe(false);
   });
 });
 

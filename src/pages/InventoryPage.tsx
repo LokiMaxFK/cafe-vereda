@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, ArrowDown, ArrowUp, Boxes, ClipboardCheck, Pencil, Plus, Scale, Trash2 } from "lucide-react";
 import { Badge, Button, InlineAlert, LoadingState, MetricCard, Page, PageHeader, Panel, SelectField, TextField } from "../../design-system/react";
-import { analyzeRestockPattern, buildInventoryPeriods, createInventoryAnalysis, deriveStock, INVENTORY_UNITS, isInventoryVarianceAlert } from "../domain/inventory";
+import { analysisMovementStart, analyzeRestockPattern, buildInventoryPeriods, createInventoryAnalysis, deriveStock, INVENTORY_UNITS, isInventoryVarianceAlert } from "../domain/inventory";
 import { compatibleUnits, quantityIn } from "../domain/units";
 import type { InventoryCount, InventoryItem, InventoryMovement, InventoryUnit } from "../domain/types";
+import { InventoryAnalysisTable } from "../components/InventoryAnalysisTable";
 import { Modal } from "../components/Modal";
 import { QuantityField } from "../components/QuantityField";
 import { db } from "../lib/db";
@@ -57,19 +58,25 @@ async function fetchItemHistory(itemId: string): Promise<{ counts: InventoryCoun
 }
 
 /**
- * Desde cuándo hay que traer movimientos. El indicador de la tabla mira 30 días, pero la existencia
- * se deriva del último conteo de cada insumo, que puede ser más viejo. Se toma el más antiguo de
- * esos conteos, con un tope de un año para que la consulta no crezca sin límite.
+ * Desde cuándo hay que traer movimientos, tomando lo más antiguo que necesita cada consumidor de
+ * `movements` en esta pantalla: la existencia se deriva del último conteo de cada insumo, y la tabla
+ * de indicadores mide desde el conteo de apertura de su ventana, que puede ser todavía más viejo.
+ * Quedarse corto por cualquiera de los dos lados infla la existencia o el consumo físico.
  */
-function movementWindowStart(items: InventoryItem[], counts: InventoryCount[]) {
+function movementWindowStart(items: InventoryItem[], counts: InventoryCount[], analysisStart: string, analysisEnd: string) {
   const floor = Date.now() - 365 * 86_400_000;
-  let earliest = Date.now() - 31 * 86_400_000;
+  let earliest = Date.parse(analysisMovementStart(items, counts, analysisStart, analysisEnd));
   for (const item of items) {
     if (!item.active) continue;
     const latest = counts.filter((count) => count.lines.some((line) => line.itemId === item.id)).sort((a, b) => b.countedAt.localeCompare(a.countedAt))[0];
     if (latest) earliest = Math.min(earliest, Date.parse(latest.countedAt));
   }
   return new Date(Math.max(earliest, floor)).toISOString();
+}
+
+/** La ventana del indicador. Vive fuera del componente porque la consulta la necesita antes de pintar. */
+function analysisWindow(now = Date.now()) {
+  return { start: new Date(now - 30 * 86_400_000).toISOString(), end: new Date(now).toISOString() };
 }
 
 export function InventoryPage() {
@@ -113,7 +120,8 @@ export function InventoryPage() {
     // Los movimientos se piden desde el conteo de referencia más antiguo, no desde una ventana fija:
     // la existencia se deriva a partir del último conteo de cada insumo, y si ese conteo quedara
     // fuera de la ventana los movimientos intermedios faltarían y la existencia saldría inflada.
-    const since = movementWindowStart(nextItems, nextCounts);
+    const range = analysisWindow();
+    const since = movementWindowStart(nextItems, nextCounts, range.start, range.end);
     const movementResult = await supabase.from("inventory_movements").select(MOVEMENT_COLUMNS).gte("created_at", since).order("created_at", { ascending: false }).limit(2000);
     if (movementResult.error) { setError(movementResult.error.message); setLoading(false); return; }
     const nextMovements = (movementResult.data ?? []).map((row) => remoteMovement(row as Record<string, unknown>));
@@ -154,8 +162,7 @@ export function InventoryPage() {
   // quedaba congelado en el instante del montaje y un conteo recién registrado, con `countedAt`
   // posterior, caía fuera del filtro `countedAt <= end` — la tabla de abajo no se enteraba de nada.
   const analysis = useMemo(() => {
-    const end = new Date().toISOString();
-    const start = new Date(Date.now() - 30 * 86_400_000).toISOString();
+    const { start, end } = analysisWindow();
     return createInventoryAnalysis(items, counts, movements, start, end);
   }, [items, counts, movements]);
   // Un insumo dado de baja desaparece de lo operativo (existencia, selectores y últimos registros),
@@ -220,8 +227,16 @@ export function InventoryPage() {
     const count: InventoryCount = { id: crypto.randomUUID(), countedAt: new Date().toISOString(), note: note.trim() || undefined, recordedBy: session?.id, lines: [{ itemId: selected, quantity: value }] };
     setError("");
     try {
-      if (supabase) { await db.inventoryCounts.put(count); await queueOperation("record_inventory_count", count.id, count); void forceSync(); }
+      let rejected = false;
+      if (supabase) {
+        await db.inventoryCounts.put(count);
+        const operation = await queueOperation("record_inventory_count", count.id, count);
+        rejected = await syncAndReport(operation.id);
+      }
       setCounts((current) => [count, ...current]); close();
+      // Antes esto era un `void forceSync()`: un rechazo del servidor dejaba el conteo pintado en
+      // pantalla como si hubiera funcionado, igual que le pasaba al alta de insumos.
+      setNotice(rejected ? "El servidor no aceptó el conteo. Quedó pendiente de sincronizar." : "Conteo registrado.");
     } catch (reason) { setError(reason instanceof Error ? reason.message : "No se pudo guardar el conteo."); }
   }
   async function saveMovement() {
@@ -230,8 +245,16 @@ export function InventoryPage() {
     const movement: InventoryMovement = { id: crypto.randomUUID(), itemId: selected, type: movementType, quantity: value, signedQuantity: movementType === "entry" ? value : -value, note: note.trim(), recordedAt: new Date().toISOString(), recordedBy: session?.id };
     setError("");
     try {
-      if (supabase) { await db.inventoryMovements.put(movement); await queueOperation("record_inventory_movement", movement.id, movement); void forceSync(); }
+      let rejected = false;
+      if (supabase) {
+        await db.inventoryMovements.put(movement);
+        const operation = await queueOperation("record_inventory_movement", movement.id, movement);
+        rejected = await syncAndReport(operation.id);
+      }
       setMovements((current) => [movement, ...current].sort(byRecordedAtDesc)); close();
+      setNotice(rejected
+        ? "El servidor no aceptó el movimiento. Quedó pendiente de sincronizar."
+        : movementType === "entry" ? "Entrada registrada." : "Merma registrada.");
     } catch (reason) { setError(reason instanceof Error ? reason.message : "No se pudo guardar el movimiento."); }
   }
   async function saveItem() {
@@ -267,23 +290,38 @@ export function InventoryPage() {
   async function removeItem() {
     const item = targetId ? items.find((current) => current.id === targetId) : undefined;
     if (!item) return;
-    // El servidor decide entre borrar y dar de baja según si queda evidencia que dependa del insumo.
-    // El cliente predice la misma rama con lo que tiene en memoria para no mentir mientras sincroniza.
-    const used = movements.some((movement) => movement.itemId === item.id) || counts.some((count) => count.lines.some((line) => line.itemId === item.id));
+    // El servidor decide entre borrar y dar de baja según si queda evidencia que dependa del insumo:
+    // movimientos, conteos, **recetas** y consumos. El cliente no tiene las recetas en memoria, así
+    // que predecir esa rama aquí anunciaba «se eliminó» de un insumo que el servidor sólo daba de
+    // baja, lo quitaba de la pantalla y lo hacía reaparecer en la siguiente carga. Estando en línea
+    // se pregunta por el resultado en vez de adivinarlo; sin conexión se predice y se dice que está
+    // pendiente, que es lo único honesto que se puede decir todavía.
+    const predictedUsed = movements.some((movement) => movement.itemId === item.id) || counts.some((count) => count.lines.some((line) => line.itemId === item.id));
+    const online = Boolean(supabase) && navigator.onLine;
     setError(""); setSaving(true);
     try {
       let rejected = false;
+      let deactivated = predictedUsed;
       if (supabase) {
-        if (used) await db.inventoryItems.put({ ...item, active: false }); else await db.inventoryItems.delete(item.id);
         const operation = await queueOperation("delete_inventory_item", item.id, { id: item.id });
         rejected = await syncAndReport(operation.id);
+        if (!rejected && online) {
+          const { data } = await supabase.from("inventory_items").select("id").eq("id", item.id).maybeSingle();
+          deactivated = Boolean(data);
+        }
       }
-      setItems((current) => used ? current.map((entry) => entry.id === item.id ? { ...entry, active: false } : entry) : current.filter((entry) => entry.id !== item.id));
+      if (rejected) {
+        close();
+        setNotice("El servidor no aceptó la baja. Quedó pendiente de sincronizar.");
+        return;
+      }
+      if (deactivated) await db.inventoryItems.put({ ...item, active: false }); else await db.inventoryItems.delete(item.id);
+      setItems((current) => deactivated ? current.map((entry) => entry.id === item.id ? { ...entry, active: false } : entry) : current.filter((entry) => entry.id !== item.id));
       if (detailItemId === item.id) setDetailItemId(null);
       close();
-      setNotice(rejected
-        ? "El servidor no aceptó la baja. Quedó pendiente de sincronizar."
-        : used ? `«${item.name}» se dio de baja: conserva su historial y sus recetas.` : `«${item.name}» se eliminó.`);
+      setNotice(deactivated
+        ? `«${item.name}» se dio de baja: conserva su historial y sus recetas.${online ? "" : " (pendiente de confirmar con el servidor)"}`
+        : `«${item.name}» se eliminó.`);
     } catch (reason) { setError(reason instanceof Error ? reason.message : "No se pudo eliminar el insumo."); }
     finally { setSaving(false); }
   }
@@ -340,7 +378,7 @@ export function InventoryPage() {
           })}{!recent.length && <p className="text-sm text-on-surface-variant">Aún no hay entradas ni mermas.</p>}</div>
         </Panel>
       </div>
-      <Panel className="mt-6 overflow-hidden"><div className="border-b border-outline-variant/30 p-5"><p className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Indicador de los últimos 30 días</p><h2 className="mt-1 text-lg font-bold">Consumo contado vs. receta teórica</h2></div><div className="overflow-x-auto"><table className="w-full min-w-[900px] text-left text-sm"><thead className="bg-surface-container-low text-xs uppercase tracking-wider text-on-surface-variant"><tr><th className="px-5 py-3">Insumo</th><th className="px-5 py-3 text-right">Entradas</th><th className="px-5 py-3 text-right">Mermas</th><th className="px-5 py-3 text-right">Físico</th><th className="px-5 py-3 text-right">Teórico</th><th className="px-5 py-3 text-right">Diferencia</th></tr></thead><tbody className="divide-y divide-outline-variant/25">{analysis.map((row) => <tr key={row.item.id}><td className="px-5 py-4"><p className="font-semibold">{row.item.name}</p><p className="text-xs text-on-surface-variant">{row.physical !== undefined ? `Entre los conteos del ${formatDate(row.openingAt ?? "")} y el ${formatDate(row.closingAt ?? "")}` : row.openingAt ? `Desde el conteo del ${formatDate(row.openingAt)} · falta un segundo conteo para medir el físico` : "Sin conteos: sólo lo registrado en el periodo"}</p></td><td className="px-5 py-4 text-right">{amount(row.entries, row.item.unit)}</td><td className="px-5 py-4 text-right">{amount(row.waste, row.item.unit)}</td><td className="px-5 py-4 text-right font-semibold">{row.physical === undefined ? "—" : amount(row.physical, row.item.unit)}</td><td className="px-5 py-4 text-right">{amount(row.theoretical, row.item.unit)}</td><td className={`px-5 py-4 text-right font-bold ${isInventoryVarianceAlert(row) ? "text-error" : ""}`}>{row.variance === undefined ? "—" : `${row.variance > 0 ? "+" : ""}${amount(row.variance, row.item.unit)}`}</td></tr>)}</tbody></table></div></Panel>
+      <Panel className="mt-6 overflow-hidden"><div className="border-b border-outline-variant/30 p-5"><p className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Indicador de los últimos 30 días</p><h2 className="mt-1 text-lg font-bold">Consumo contado vs. receta teórica</h2></div><InventoryAnalysisTable rows={analysis} /></Panel>
     </>}
     {modal === "count" && <Modal title="Conteo parcial" description="Registra la lectura física de un insumo. Vuelve a fijar su existencia desde cero." onClose={close}><div className="space-y-4">
       <label className="block text-sm font-semibold">Insumo<SelectField value={selected} onChange={(event) => setSelected(event.target.value)}>{activeItems.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</SelectField></label>
@@ -368,7 +406,9 @@ export function InventoryPage() {
     {modal === "delete" && targetItem && <Modal title={`Eliminar ${targetItem.name}`} onClose={close}><div className="space-y-4">
       <p className="text-sm text-on-surface-variant">{targetUsed
         ? "Este insumo ya tiene historial, así que se dará de baja en lugar de borrarse: desaparecerá de las listas de trabajo pero sus conteos, movimientos y recetas seguirán cuadrando en los reportes."
-        : "Este insumo no tiene conteos, movimientos ni recetas, así que se eliminará por completo."}</p>
+        // El cliente no carga las recetas, así que no puede afirmar que no haya ninguna: lo decide
+        // el servidor, y el mensaje posterior dice qué ocurrió de verdad.
+        : "Este insumo no tiene conteos ni movimientos. Si tampoco aparece en ninguna receta se eliminará por completo; si alguna lo usa, se dará de baja para no romperla."}</p>
       <div className="flex justify-end gap-2"><Button onClick={close}>Cancelar</Button><Button variant="danger" disabled={saving} onClick={() => void removeItem()}>{saving ? "Eliminando…" : targetUsed ? "Dar de baja" : "Eliminar"}</Button></div>
     </div></Modal>}
     {detailItemId && <InventoryDetailModal itemId={detailItemId} item={items.find((item) => item.id === detailItemId)} history={detailHistory} loading={detailLoading} error={detailError} onClose={() => setDetailItemId(null)} onEdit={openEdit} onDelete={openDelete} />}

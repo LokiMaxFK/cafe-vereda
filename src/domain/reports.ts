@@ -435,6 +435,18 @@ export function percentageChange(metric: ReportMetric) {
   return ((metric.value - metric.previous) / Math.abs(metric.previous)) * 100;
 }
 
+/**
+ * Ventas que figuran cobradas y a la vez tienen una incidencia de cancelación registrada. No debería
+ * existir ninguna: hasta que se cerró el hueco, una cuenta cancelada se podía volver a finalizar y
+ * cobrar, y el registro terminaba contándose como venta del día mientras su cancelación seguía en la
+ * bitácora de incidencias. Se listan para que gerencia pueda ir a buscarlas —el dinero de esas
+ * cuentas no cuadra con nada—, no se corrigen solas: reescribir una venta cerrada es una reversión,
+ * y esa decisión es de gerencia.
+ */
+export function contradictoryCancellations(rows: ReportRow[], cancelledOrderIds: Set<string>): ReportRow[] {
+  return rows.filter((row) => row.closedInRange && cancelledOrderIds.has(row.order.id));
+}
+
 export function reportEventLabel(row: ReportRow) {
   return [row.closedInRange && "Cobro", row.reversedInRange && "Reversión", row.cancelledInRange && "Cancelación"].filter(Boolean).join(" · ");
 }

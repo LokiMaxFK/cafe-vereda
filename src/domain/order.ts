@@ -1,3 +1,4 @@
+import { orderTotal, paidTotal } from "./money";
 import type { Order, OrderItem } from "./types";
 
 export type TableStatus = "free" | "open" | "preparing" | "ready" | "billing";
@@ -13,6 +14,29 @@ export const cancellableStatuses: Order["status"][] = ["open", "preparing", "rea
 
 export function isCancellable(order: Pick<Order, "status">) {
   return cancellableStatuses.includes(order.status);
+}
+
+/**
+ * Estados desde los que una cuenta se puede finalizar. Sin esta comprobación, una cuenta cancelada
+ * volvía a 'served' y desde ahí se cobraba: la pantalla de venta ofrecía «Finalizar orden» a todo
+ * lo que no fuera 'closed' ni 'served', cancelaciones y reversiones incluidas.
+ */
+export const finalizableStatuses: Order["status"][] = ["open", "preparing", "ready"];
+
+export function isFinalizable(order: Pick<Order, "status">) {
+  return finalizableStatuses.includes(order.status);
+}
+
+/** Una cuenta sólo se cobra ya finalizada: antes de eso la barra todavía puede cambiarla. */
+export const chargeableStatuses: Order["status"][] = ["served"];
+
+export function isChargeable(order: Pick<Order, "status">) {
+  return chargeableStatuses.includes(order.status);
+}
+
+/** Una cuenta se cierra cuando es cobrable y está cubierta; el servidor exige lo mismo. */
+export function isClosable(order: Order) {
+  return isChargeable(order) && paidTotal(order) >= orderTotal(order);
 }
 
 /** Primer folio que puede asignar el dispositivo cuando no hay servidor que lo reparta. */

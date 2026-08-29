@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { createDailySales, createHourlyPattern, createReportDataset, resolveReportRange, sortProducts, type ReportOrder, type ReportProduct } from "./reports";
+import {
+  contradictoryCancellations,
+  createDailySales,
+  createHourlyPattern,
+  createReportDataset,
+  resolveReportRange,
+  sortProducts,
+  type ReportOrder,
+  type ReportProduct,
+  type ReportRow
+} from "./reports";
 
 const range = resolveReportRange("custom", "2026-08-17", "2026-08-17");
 const filters = { employeeId: "", orderType: "all" as const, paymentMethod: "all" as const };
@@ -199,5 +209,27 @@ describe("reversión dentro o fuera del rango", () => {
     expect(data.metrics.tickets.value).toBe(0);
     expect(data.metrics.reversals.value).toBe(180);
     expect(data.metrics.netSales.value).toBe(-180);
+  });
+});
+
+describe("ventas que figuran cobradas y canceladas a la vez", () => {
+  const row = (id: string, folio: number, closedInRange: boolean) => ({
+    order: { id, folio } as ReportRow["order"],
+    gross: 100, reversal: 0, net: 100, tip: 0, discount: 0,
+    cancellation: false, closedInRange, reversedInRange: false, cancelledInRange: false,
+    paymentContributions: { cash: 100, card: 0, transfer: 0 }
+  }) as ReportRow;
+
+  it("señala la venta cobrada que además tiene incidencia de cancelación", () => {
+    const found = contradictoryCancellations([row("a", 1, true), row("b", 2, true)], new Set(["b"]));
+    expect(found.map((entry) => entry.order.folio)).toEqual([2]);
+  });
+
+  it("no señala una cancelación que nunca llegó a cobrarse", () => {
+    expect(contradictoryCancellations([row("b", 2, false)], new Set(["b"]))).toEqual([]);
+  });
+
+  it("no señala una venta normal", () => {
+    expect(contradictoryCancellations([row("a", 1, true)], new Set())).toEqual([]);
   });
 });

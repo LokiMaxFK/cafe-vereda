@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowLeft, Banknote, Check, ChevronRight, ClipboardCheck, Coffee, CreditCard, Minus, MoreVertical, Plus, Printer, RotateCcw, Send, Smartphone, Trash2, Users } from "lucide-react";
 import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { Badge, Button, InlineAlert, TextField } from "../../design-system/react";
-import { cancellableStatuses } from "../domain/order";
+import { cancellableStatuses, isChargeable, isFinalizable } from "../domain/order";
 import { itemTotal, mxn, orderSubtotal, orderTotal, paidTotal, paymentChange, paymentMethodLabel } from "../domain/money";
 import { hasSubaccountPayments, isSplit } from "../domain/splitBill";
 import type { Order, PaymentMethod } from "../domain/types";
@@ -56,9 +56,20 @@ export function SalePage() {
   // El descuento se puede abrir desde el cobro; al cerrarlo hay que devolver al cajero ahí.
   const [discountReturnsToCheckout, setDiscountReturnsToCheckout] = useState(false);
   const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
   const [actionsOpen, setActionsOpen] = useState(false);
   const [orderAction, setOrderAction] = useState<"cancel" | "reverse" | null>(null);
   const [orderActionReason, setOrderActionReason] = useState("");
+
+  // El modal de cobro se pinta con su propio estado, no con el de la orden: si otro dispositivo la
+  // cancela mientras está abierto, hay que retirarlo en vez de dejar delante del cajero un
+  // formulario que ya no puede cobrar nada.
+  const chargeable = order ? isChargeable(order) : false;
+  useEffect(() => {
+    if (chargeable) return;
+    setCheckoutOpen(false);
+    setSplitOpen(false);
+  }, [chargeable]);
 
   if (!orderId) return <Navigate to="/salon" replace />;
   if (!order) return <div className="p-8">Cargando orden…</div>;
@@ -122,17 +133,33 @@ export function SalePage() {
     }
   }
   async function finalize() {
-    await finalizeOrder(activeOrder.id);
-    setMessage("Orden finalizada. Ya está lista para cobrarse.");
+    setError("");
+    try {
+      await finalizeOrder(activeOrder.id);
+      setMessage("Orden finalizada. Ya está lista para cobrarse.");
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "No se pudo finalizar la orden."); }
   }
   async function registerPayment() {
     const value = Number(amount); const tipValue = Number(tip || 0);
     if (!value || value <= 0) return;
-    await addPayment(activeOrder.id, method, value, tipValue); setAmount(""); setTip("0");
+    setError("");
+    try {
+      await addPayment(activeOrder.id, method, value, tipValue); setAmount(""); setTip("0");
+    } catch (reason) {
+      setCheckoutOpen(false);
+      setError(reason instanceof Error ? reason.message : "No se pudo registrar el pago.");
+    }
   }
   async function finish() {
     const refreshed = orders.find((item) => item.id === activeOrder.id) ?? activeOrder;
-    await closeOrder(activeOrder.id);
+    setError("");
+    try {
+      await closeOrder(activeOrder.id);
+    } catch (reason) {
+      setCheckoutOpen(false);
+      setError(reason instanceof Error ? reason.message : "No se pudo cerrar la venta.");
+      return;
+    }
     try { await printTicket(refreshed); } catch (reason) { setMessage(`Venta cerrada, pero no se pudo imprimir el ticket: ${printErrorMessage(reason)}`); }
     setCheckoutOpen(false); navigate("/salon");
   }
@@ -172,9 +199,10 @@ export function SalePage() {
     <div className="flex min-h-screen flex-col bg-background">
       <header className="sticky top-0 z-30 flex min-h-16 items-center justify-between gap-3 border-b border-outline-variant/30 bg-background/95 px-4 py-2 backdrop-blur sm:px-6">
         <div className="flex min-w-0 items-center gap-3"><Button size="icon" variant="ghost" onClick={() => navigate("/salon")} aria-label="Volver al salón"><ArrowLeft size={20} /></Button><div><div className="flex items-center gap-2"><h1 className="truncate text-lg font-bold">{order.type === "table" ? `Mesa ${order.tableId?.replace("t", "")}` : order.customerName || "Para llevar"}</h1><OrderStatusBadge status={order.status} /></div><p className="text-xs text-on-surface-variant">Orden #{order.folio} · {new Date(order.openedAt).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}</p></div></div>
-        <div className="relative flex items-center gap-2">{discountable && <Button className="hidden sm:inline-flex" onClick={() => openDiscount(false)} disabled={session?.role !== "manager"}>Descuento</Button>}{order.status === "closed" ? <Button variant="primary" onClick={() => void reprintTicket()}><Printer size={18} /> Reimprimir</Button> : order.status === "served" ? <Button variant="primary" onClick={() => (isSplit(order) ? setSplitOpen(true) : setCheckoutOpen(true))} disabled={!order.items.length || ["cancelled", "reversed"].includes(order.status)}>Cobrar <ChevronRight size={18} /></Button> : <Button variant="success" onClick={() => void finalize()} disabled={!order.items.length || pendingItems.length > 0}><ClipboardCheck size={18} /> Finalizar orden</Button>}<Button size="icon" variant="ghost" aria-label="Más acciones" onClick={() => setActionsOpen((value) => !value)}><MoreVertical size={19} /></Button>{actionsOpen && <div className="absolute right-0 top-12 z-40 w-56 rounded-xl border border-outline-variant/40 bg-surface-container-lowest p-2 shadow-2xl">{cancellableStatuses.includes(order.status) && <button className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-sm font-semibold text-error hover:bg-error-container" onClick={() => { setOrderAction("cancel"); setActionsOpen(false); }}><Trash2 size={17} /> Cancelar cuenta</button>}{order.status === "closed" && session?.role === "manager" && <button className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-sm font-semibold text-error hover:bg-error-container" onClick={() => { setOrderAction("reverse"); setActionsOpen(false); }}><RotateCcw size={17} /> Revertir venta</button>}{order.items.some((item) => item.dispatchBatchId) && <button className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-sm font-semibold hover:bg-surface-container-low" onClick={() => { void reprintCommand(); setActionsOpen(false); }}><Printer size={17} /> Reimprimir comanda (COPIA {peekCopyNumber(order.id)})</button>}{order.items.length > 0 && <button className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-sm font-semibold hover:bg-surface-container-low" onClick={() => { void reprintTicket(); setActionsOpen(false); }}><Printer size={17} /> Imprimir ticket</button>}</div>}</div>
+        <div className="relative flex items-center gap-2">{discountable && <Button className="hidden sm:inline-flex" onClick={() => openDiscount(false)} disabled={session?.role !== "manager"}>Descuento</Button>}{order.status === "closed" ? <Button variant="primary" onClick={() => void reprintTicket()}><Printer size={18} /> Reimprimir</Button> : isChargeable(order) ? <Button variant="primary" onClick={() => (isSplit(order) ? setSplitOpen(true) : setCheckoutOpen(true))} disabled={!order.items.length}>Cobrar <ChevronRight size={18} /></Button> : isFinalizable(order) ? <Button variant="success" onClick={() => void finalize()} disabled={!order.items.length || pendingItems.length > 0}><ClipboardCheck size={18} /> Finalizar orden</Button> : null}<Button size="icon" variant="ghost" aria-label="Más acciones" onClick={() => setActionsOpen((value) => !value)}><MoreVertical size={19} /></Button>{actionsOpen && <div className="absolute right-0 top-12 z-40 w-56 rounded-xl border border-outline-variant/40 bg-surface-container-lowest p-2 shadow-2xl">{cancellableStatuses.includes(order.status) && <button className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-sm font-semibold text-error hover:bg-error-container" onClick={() => { setOrderAction("cancel"); setActionsOpen(false); }}><Trash2 size={17} /> Cancelar cuenta</button>}{order.status === "closed" && session?.role === "manager" && <button className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-sm font-semibold text-error hover:bg-error-container" onClick={() => { setOrderAction("reverse"); setActionsOpen(false); }}><RotateCcw size={17} /> Revertir venta</button>}{order.items.some((item) => item.dispatchBatchId) && <button className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-sm font-semibold hover:bg-surface-container-low" onClick={() => { void reprintCommand(); setActionsOpen(false); }}><Printer size={17} /> Reimprimir comanda (COPIA {peekCopyNumber(order.id)})</button>}{order.items.length > 0 && <button className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-sm font-semibold hover:bg-surface-container-low" onClick={() => { void reprintTicket(); setActionsOpen(false); }}><Printer size={17} /> Imprimir ticket</button>}</div>}</div>
       </header>
       {message && <div className="mx-4 mt-3 sm:mx-6"><InlineAlert tone="success">{message}</InlineAlert></div>}
+      {error && <div className="mx-4 mt-3 sm:mx-6"><InlineAlert>{error}</InlineAlert></div>}
       <div className="grid flex-1 lg:grid-cols-[minmax(0,1fr)_360px] xl:grid-cols-[180px_minmax(0,1fr)_390px]">
         {editable ? <ProductPicker onSelect={(selection) => void addItem(activeOrder.id, selection)} /> : <div className="flex min-h-52 flex-col items-center justify-center gap-3 p-8 text-center text-on-surface-variant xl:col-span-2"><ClipboardCheck size={34} className="text-outline" /><p className="font-semibold">{closedStateCopy(order.status).title}</p><p className="max-w-xs text-xs">{closedStateCopy(order.status).description}</p></div>}
         <aside className="border-t border-outline-variant/30 bg-surface-container-lowest lg:sticky lg:top-16 lg:h-[calc(100vh-4rem)] lg:border-l lg:border-t-0">

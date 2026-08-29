@@ -41,6 +41,30 @@ const firstWithin = (counts: InventoryCount[], itemId: string, start: string, en
 
 const quantityFor = (count: InventoryCount | undefined, itemId: string) => count?.lines.find((line) => line.itemId === itemId)?.quantity;
 
+/** Conteo con el que abre la ventana de un insumo: el mismo que elige `createInventoryAnalysis`. */
+const openingCountFor = (counts: InventoryCount[], itemId: string, start: string, end: string) =>
+  atOrBefore(counts, itemId, start) ?? firstWithin(counts, itemId, start, end);
+
+/**
+ * Desde cuándo hay que traer movimientos para que la tabla no mienta. La ventana de cada insumo no
+ * empieza en `start` sino en su conteo de apertura, que suele ser anterior: pedir los movimientos
+ * desde `start` deja fuera las entradas y las mermas de ese tramo, y el físico —que se calcula con
+ * `entries`— sale inflado justo por lo que no se descargó. El tope evita que la consulta crezca sin
+ * límite cuando un insumo lleva meses sin recontarse.
+ */
+export function analysisMovementStart(items: InventoryItem[], counts: InventoryCount[], start: string, end: string, maxDays = 365) {
+  const floor = new Date(Date.parse(end) - maxDays * 86_400_000).toISOString();
+  let earliest = start;
+  for (const item of items) {
+    // Los dados de baja cuentan igual: si una receta todavía los usa siguen moviéndose, y la tabla
+    // los enseña (ver `isVisibleInAnalysis`). Sólo ensancha la ventana el que tenga conteos, así que
+    // arrastrar los inactivos no engorda la consulta por sí mismo.
+    const opening = openingCountFor(counts, item.id, start, end);
+    if (opening && opening.countedAt < earliest) earliest = opening.countedAt;
+  }
+  return earliest < floor ? floor : earliest;
+}
+
 /**
  * Aporte de un movimiento a la existencia. Los movimientos capturados a mano no traen el signo —lo
  * dicta su tipo— pero los que escribe el servidor al cerrar o revertir una venta sí, y ese valor
@@ -90,10 +114,21 @@ export function deriveStock(itemId: string, counts: InventoryCount[], movements:
  * producen el físico. Antes venía de un mapa `expected` calculado sobre una ventana fija de 31 días,
  * de modo que se comparaban dos periodos distintos y el número no cambiaba hasta recargar la página.
  */
+/**
+ * Un insumo dado de baja desaparece de la tabla —para eso se da de baja—, salvo que siga moviéndose.
+ * El disparador de venta descuenta según la receta sin mirar si el insumo sigue activo, así que una
+ * receta que todavía lo nombra genera consumo real; esconderlo hacía desaparecer producto de los
+ * indicadores sin que nadie pudiera notarlo.
+ */
+function isVisibleInAnalysis(item: InventoryItem, movements: InventoryMovement[], start: string, end: string) {
+  if (item.active) return true;
+  return movements.some((movement) => movement.itemId === item.id && movement.recordedAt > start && movement.recordedAt <= end);
+}
+
 export function createInventoryAnalysis(items: InventoryItem[], counts: InventoryCount[], movements: InventoryMovement[], start: string, end: string): InventoryAnalysisRow[] {
-  return items.filter((item) => item.active).map((item) => {
+  return items.filter((item) => isVisibleInAnalysis(item, movements, start, end)).map((item) => {
     const closingCount = atOrBefore(counts, item.id, end);
-    const openingCount = atOrBefore(counts, item.id, start) ?? firstWithin(counts, item.id, start, end);
+    const openingCount = openingCountFor(counts, item.id, start, end);
     const opening = quantityFor(openingCount, item.id);
     const closing = quantityFor(closingCount, item.id);
     const comparable = opening !== undefined && closing !== undefined && openingCount?.id !== closingCount?.id;

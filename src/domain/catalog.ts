@@ -1,4 +1,5 @@
-import type { Category, Product } from "./types";
+import { quantityIn } from "./units";
+import type { Category, InventoryItem, InventoryUnit, Product } from "./types";
 
 // El servidor guarda el orden del menú en `categories.position`, pero ese orden se perdía al
 // pasar por IndexedDB: Dexie devuelve `toArray()` ordenado por clave primaria, que es el
@@ -40,5 +41,31 @@ export const PRODUCT_IMAGE_MAX_BYTES = 2_000_000;
 export function productImageError(file: Pick<File, "type" | "size">): string | null {
   if (!/image\/(png|jpeg)/.test(file.type)) return "La imagen debe ser PNG o JPEG.";
   if (file.size > PRODUCT_IMAGE_MAX_BYTES) return "La imagen no debe pesar más de 2 MB.";
+  return null;
+}
+
+export type RecipeLine = { inventoryItemId: string; quantity: string; unit: InventoryUnit | "" };
+
+/**
+ * Qué está mal en una receta antes de mandarla al servidor, o `null` si se puede guardar.
+ *
+ * Antes el editor se limitaba a descartar en silencio toda línea sin insumo, sin cantidad o cuyo
+ * insumo no estuviera cargado, y como `replace_inventory_recipe` borra y reescribe la receta
+ * entera, guardar con el formulario a medias la vaciaba sin decir nada.
+ */
+export function recipeProblem(lines: RecipeLine[], items: InventoryItem[]): string | null {
+  const chosen = lines.filter((line) => line.inventoryItemId);
+  if (chosen.length !== lines.length) return "Hay una línea sin insumo seleccionado. Elígelo o quítala.";
+  for (const line of lines) {
+    const base = items.find((item) => item.id === line.inventoryItemId);
+    if (!base) return "Una de las líneas apunta a un insumo que ya no existe. Quítala para poder guardar.";
+    const quantity = quantityIn(base.unit, line.quantity, line.unit);
+    if (quantity === null || quantity <= 0) return `Falta la cantidad de «${base.name}», o es cero.`;
+  }
+  const ids = chosen.map((line) => line.inventoryItemId);
+  const duplicated = ids.find((id, index) => ids.indexOf(id) !== index);
+  // La PK de inventory_recipe_lines es (recipe_id, inventory_item_id): sin esto el servidor
+  // respondía con el mensaje crudo del índice único.
+  if (duplicated) return `«${items.find((item) => item.id === duplicated)?.name ?? "Un insumo"}» está dos veces. Súmalo en una sola línea.`;
   return null;
 }

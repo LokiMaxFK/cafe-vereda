@@ -3,7 +3,7 @@ import { categories as initialCategories, commonModifiers as initialExtras, prod
 import { initialTables } from "../data/tables";
 import { CASH_SESSION_REQUIRED_MESSAGE, canTakeOrders } from "../domain/cash";
 import { productImageError, sortCategories } from "../domain/catalog";
-import { cancellableStatuses, markItemsPrepared, nextLocalFolio } from "../domain/order";
+import { cancellableStatuses, isChargeable, isClosable, isFinalizable, markItemsPrepared, nextLocalFolio } from "../domain/order";
 import { nextFreeSlot } from "../domain/tables";
 import { applyPaymentCap, orderSubtotal, orderTotal, paidTotal, roundToCents } from "../domain/money";
 import { cancelItemUnits, mergeOrAddItem, type OrderItemInput } from "../domain/orderItem";
@@ -428,13 +428,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await persistOrder({ ...order, status: "ready", items: markItemsPrepared(order.items) }, "mark_order_ready");
   }, [orders, persistOrder]);
 
+  /**
+   * Una cuenta cancelada o revertida no vuelve a la vida. Sin esta guarda, finalizarla la devolvía a
+   * 'served' y desde ahí se cobraba con normalidad: el dinero entraba al cajón por una venta que el
+   * servidor sigue teniendo por anulada.
+   */
   const finalizeOrder = useCallback(async (orderId: string) => {
     const order = orders.find((item) => item.id === orderId); if (!order) return;
+    if (!isFinalizable(order)) throw new Error("Esta cuenta ya no se puede finalizar.");
     await persistOrder({ ...order, status: "served" }, "finalize_order");
   }, [orders, persistOrder]);
 
   const addPayment = useCallback(async (orderId: string, method: PaymentMethod, amount: number, tip: number, subaccountId?: string) => {
     const order = orders.find((item) => item.id === orderId); if (!order || amount <= 0) return;
+    // El modal de cobro se pinta con su propio estado, no con el de la orden: si otro dispositivo la
+    // cancela mientras está abierto, el cajero sigue teniendo delante un formulario que cobra.
+    if (!isChargeable(order)) throw new Error("Esta cuenta ya no se puede cobrar.");
     // Con la cuenta dividida el tope es el saldo de esa persona, no el de la cuenta: sin él, quien
     // paga primero con un billete grande absorbería el saldo de los demás y sus tickets saldrían
     // en cero. El saldo de la cuenta se mantiene como cota exterior.
@@ -449,7 +458,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [orders, persistOrder]);
 
   const closeOrder = useCallback(async (orderId: string) => {
-    const order = orders.find((item) => item.id === orderId); if (!order || paidTotal(order) < orderTotal(order)) return;
+    const order = orders.find((item) => item.id === orderId); if (!order) return;
+    if (!isChargeable(order)) throw new Error("Esta cuenta ya no se puede cerrar.");
+    if (!isClosable(order)) return;
     await persistOrder({ ...order, status: "closed" }, "close_order");
   }, [orders, persistOrder]);
 

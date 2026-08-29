@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { hasPriceChoices, PRODUCT_IMAGE_MAX_BYTES, productDisplayPrice, productImageError, sortCategories } from "./catalog";
-import type { Category } from "./types";
+import { PRODUCT_IMAGE_MAX_BYTES, hasPriceChoices, productDisplayPrice, productImageError, recipeProblem, sortCategories } from "./catalog";
+import type { Category, InventoryItem } from "./types";
 
 const category = (id: string, name: string, position: number): Category => ({ id, name, position });
 
@@ -102,5 +102,41 @@ describe("productImageError", () => {
 
   it("avisa primero del formato: un archivo enorme y del tipo equivocado no confunde al usuario", () => {
     expect(productImageError(file("application/pdf", 9_000_000))).toBe("La imagen debe ser PNG o JPEG.");
+  });
+});
+
+describe("validación de una receta antes de guardarla", () => {
+  const leche: InventoryItem = { id: "milk", name: "Leche entera", unit: "L", minimum: 8, tolerance: 0.5, active: true };
+  const cafe: InventoryItem = { id: "coffee", name: "Café en grano", unit: "kg", minimum: 3, tolerance: 0.15, active: true };
+  const items = [leche, cafe];
+
+  it("acepta una receta completa, con la cantidad en otra unidad de la misma familia", () => {
+    expect(recipeProblem([{ inventoryItemId: "milk", quantity: "180", unit: "ml" }], items)).toBeNull();
+  });
+
+  it("no deja guardar una línea sin insumo en vez de descartarla en silencio", () => {
+    expect(recipeProblem([{ inventoryItemId: "", quantity: "1", unit: "" }], items)).toMatch(/sin insumo/);
+  });
+
+  it("no deja guardar una cantidad vacía ni un cero", () => {
+    expect(recipeProblem([{ inventoryItemId: "milk", quantity: "", unit: "L" }], items)).toMatch(/Leche entera/);
+    expect(recipeProblem([{ inventoryItemId: "milk", quantity: "0", unit: "L" }], items)).toMatch(/Leche entera/);
+  });
+
+  /** La PK (recipe_id, inventory_item_id) hacía que el servidor respondiera con jerga de Postgres. */
+  it("avisa del insumo repetido antes de que reviente el índice único", () => {
+    const repetida = recipeProblem([
+      { inventoryItemId: "coffee", quantity: "0.02", unit: "kg" },
+      { inventoryItemId: "coffee", quantity: "0.01", unit: "kg" }
+    ], items);
+    expect(repetida).toMatch(/Café en grano.*dos veces/);
+  });
+
+  it("señala la línea que apunta a un insumo que ya no existe", () => {
+    expect(recipeProblem([{ inventoryItemId: "fantasma", quantity: "1", unit: "" }], items)).toMatch(/ya no existe/);
+  });
+
+  it("acepta la receta vacía: es la forma de dejar un producto sin consumo", () => {
+    expect(recipeProblem([], items)).toBeNull();
   });
 });
