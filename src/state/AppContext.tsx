@@ -1,9 +1,9 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { categories as initialCategories, commonModifiers as initialExtras, products as initialProducts } from "../data/menu";
 import { initialTables } from "../data/tables";
 import { CASH_SESSION_REQUIRED_MESSAGE, canTakeOrders } from "../domain/cash";
 import { productImageError, sortCategories } from "../domain/catalog";
-import { cancellableStatuses, isChargeable, isClosable, isFinalizable, markItemsPrepared, nextLocalFolio } from "../domain/order";
+import { cancellableStatuses, isAbandonedDraft, isChargeable, isClosable, isEmptyDraft, isFinalizable, markItemsPrepared, nextLocalFolio } from "../domain/order";
 import { nextFreeSlot } from "../domain/tables";
 import { applyPaymentCap, orderSubtotal, orderTotal, paidTotal, roundToCents } from "../domain/money";
 import { cancelItemUnits, mergeOrAddItem, type OrderItemInput } from "../domain/orderItem";
@@ -334,6 +334,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (isSupabaseConfigured && navigator.onLine) void forceSync();
   }, [forceSync]);
 
+  /**
+   * Cancela los borradores vacíos que quedaron colgando de una mesa. El salón antiguo abría la
+   * cuenta con sólo tocar la mesa, así que las instalaciones viejas arrastran varias de estas:
+   * aparecen como «cuenta abierta» sin un solo producto y bloquean la mesa para siempre. Se limpian
+   * una vez por id —el ref evita reencolar la cancelación mientras el sync la procesa—.
+   */
+  const cleanedDrafts = useRef(new Set<string>());
+  useEffect(() => {
+    if (!hydrated || !session) return;
+    const abandoned = orders.filter((order) => isAbandonedDraft(order) && !cleanedDrafts.current.has(order.id));
+    if (!abandoned.length) return;
+    abandoned.forEach((order) => cleanedDrafts.current.add(order.id));
+    void (async () => {
+      for (const order of abandoned) {
+        await persistOrder({ ...order, status: "cancelled", cancellationReason: "Cuenta vacía sin actividad" }, "cancel_order");
+      }
+    })();
+  }, [hydrated, session, orders, persistOrder]);
+
   const login = useCallback(async (username: string, pin: string) => {
     if (!navigator.onLine && !session) throw new Error("El primer acceso o cambio de usuario requiere conexión.");
     if (isSupabaseConfigured && supabase) {
@@ -412,6 +431,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const order = orders.find((item) => item.id === orderId); if (!order) return;
     const current = order.items.find((item) => item.id === itemId); if (!current || current.status !== "pending") return;
     const items = current.quantity + delta <= 0 ? order.items.filter((item) => item.id !== itemId) : order.items.map((item) => item.id === itemId ? { ...item, quantity: item.quantity + delta } : item);
+    // Quitar el último producto de un borrador que nunca se comandó no deja una cuenta vacía colgando
+    // de la mesa: se descarta cancelándola, y la pantalla de venta devuelve al salón.
+    if (isEmptyDraft({ ...order, items })) {
+      await persistOrder({ ...order, items, status: "cancelled", cancellationReason: "Cuenta vacía descartada" }, "cancel_order");
+      return;
+    }
     await persistOrder({ ...order, items }, "update_order_item");
   }, [orders, persistOrder]);
 

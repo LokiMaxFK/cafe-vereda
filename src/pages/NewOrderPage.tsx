@@ -5,7 +5,7 @@ import { Badge, Button, EmptyState, InlineAlert, SegmentedControl, TextField } f
 import { Modal } from "../components/Modal";
 import { ProductPicker, type ProductPickerSelection } from "../components/ProductPicker";
 import { TableFloorPlan } from "../components/TableFloorPlan";
-import { isTracked } from "../domain/order";
+import { occupiesFloor } from "../domain/order";
 import { mergeOrAddItem } from "../domain/orderItem";
 import { itemTotal, mxn, orderSubtotal } from "../domain/money";
 import type { OrderItem } from "../domain/types";
@@ -28,7 +28,7 @@ export function NewOrderPage() {
 
   const activeTables = useMemo(() => tables.filter((table) => table.active), [tables]);
   // Incluye las cuentas ya finalizadas pero sin cobrar: esa mesa sigue ocupada aunque no admita más comandas.
-  const occupiedTableIds = useMemo(() => new Set(orders.filter(isTracked).filter((order) => order.tableId).map((order) => order.tableId as string)), [orders]);
+  const occupiedTableIds = useMemo(() => new Set(orders.filter(occupiesFloor).filter((order) => order.tableId).map((order) => order.tableId as string)), [orders]);
 
   const subtotal = orderSubtotal({ items: cartItems });
   const visibleItems = cartItems.filter((item) => item.status !== "cancelled");
@@ -45,6 +45,8 @@ export function NewOrderPage() {
   }
   async function confirm() {
     if (destType === "table" && !selectedTableId) return;
+    // Sin productos no se crea la cuenta: nacería vacía y se quedaría colgando de la mesa.
+    if (!visibleItems.length) { setCreateError("Agrega al menos un producto antes de crear el pedido."); return; }
     setCreating(true);
     setCreateError("");
     try {
