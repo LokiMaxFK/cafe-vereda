@@ -9,7 +9,7 @@ import { TableFloorPlan } from "../components/TableFloorPlan";
 import { TakeawayRail } from "../components/TakeawayRail";
 import { tableStatusBadge, tableStatusDot, tableStatusLabel, tableStatusOrder, tableStatusSurface } from "../components/tableStatusTone";
 import { mxn, orderTotal } from "../domain/money";
-import { elapsedMinutes, isTracked, tableStatus, type TableStatus } from "../domain/order";
+import { elapsedMinutes, occupiesFloor, tableStatus, type TableStatus } from "../domain/order";
 import type { CafeTable, Order } from "../domain/types";
 import { useApp } from "../state/AppContext";
 
@@ -33,7 +33,7 @@ export function SalonPage() {
   const [previewId, setPreviewId] = useState<string | null>(null);
 
   const activeTables = useMemo(() => tables.filter((table) => table.active), [tables]);
-  const tracked = useMemo(() => orders.filter(isTracked), [orders]);
+  const tracked = useMemo(() => orders.filter(occupiesFloor), [orders]);
   const byTable = useMemo(
     () => new Map(tracked.filter((order) => order.type === "table" && order.tableId).map((order) => [order.tableId as string, order])),
     [tracked]

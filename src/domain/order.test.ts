@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { barItemsForCancellation, deliverableItemCount, elapsedMinutes, FIRST_LOCAL_FOLIO, isCancellable, isChargeable, isClosable, isFinalizable, isTracked, markItemsPrepared, nextLocalFolio, orderDestination, tableStatus } from "./order";
+import { ABANDONED_DRAFT_MINUTES, barItemsForCancellation, deliverableItemCount, elapsedMinutes, FIRST_LOCAL_FOLIO, isAbandonedDraft, isCancellable, isChargeable, isClosable, isEmptyDraft, isFinalizable, isTracked, markItemsPrepared, nextLocalFolio, occupiesFloor, orderDestination, tableStatus } from "./order";
 import type { Order, OrderItem, OrderStatus } from "./types";
 
 const allStatuses: OrderStatus[] = ["open", "preparing", "ready", "served", "closed", "cancelled", "reversed"];
@@ -225,6 +225,46 @@ describe("aviso a la barra al cancelar una cuenta", () => {
 
   it("devuelve vacío cuando no hay nada en la barra, para no imprimir papel de más", () => {
     expect(barItemsForCancellation([], "El cliente se fue")).toEqual([]);
+  });
+});
+
+// Antes el salón abría la cuenta con sólo tocar la mesa, así que quedaron cuentas 'open' sin un solo
+// producto colgando de mesas que en realidad están libres.
+describe("borradores vacíos", () => {
+  const item = (status: OrderItem["status"]): OrderItem => ({ id: crypto.randomUUID(), productId: "cafe", name: "Café", quantity: 1, unitPrice: 50, modifiers: [], status });
+  const draft = (overrides: Partial<Order> = {}): Order => ({
+    id: "o1", folio: 1, type: "table", tableId: "t1", status: "open", openedBy: "u1",
+    openedAt: new Date().toISOString(), updatedAt: new Date().toISOString(), discount: 0, syncStatus: "synced",
+    items: [], payments: [], ...overrides
+  });
+
+  it("una cuenta abierta sin artículos ni cobros es un borrador vacío", () => {
+    expect(isEmptyDraft(draft())).toBe(true);
+  });
+
+  it("deja de serlo en cuanto tiene un producto vivo, un cobro o cambia de estado", () => {
+    expect(isEmptyDraft(draft({ items: [item("pending")] }))).toBe(false);
+    expect(isEmptyDraft(draft({ payments: [{ id: "p", method: "cash", amount: 10, tip: 0, createdAt: new Date().toISOString() }] }))).toBe(false);
+    expect(isEmptyDraft(draft({ status: "preparing" }))).toBe(false);
+  });
+
+  it("un renglón íntegramente cancelado no reanima el borrador", () => {
+    expect(isEmptyDraft(draft({ items: [item("cancelled")] }))).toBe(true);
+  });
+
+  it("no ocupa la mesa aunque su estado sea rastreable", () => {
+    expect(isTracked(draft())).toBe(true);
+    expect(occupiesFloor(draft())).toBe(false);
+    expect(occupiesFloor(draft({ items: [item("pending")] }))).toBe(true);
+  });
+
+  it("sólo se da por abandonado pasado el margen, para no cancelar la cuenta que otra estación arma", () => {
+    const now = Date.now();
+    const reciente = draft({ openedAt: new Date(now - 60_000).toISOString() });
+    const vieja = draft({ openedAt: new Date(now - (ABANDONED_DRAFT_MINUTES + 1) * 60_000).toISOString() });
+    expect(isAbandonedDraft(reciente, now)).toBe(false);
+    expect(isAbandonedDraft(vieja, now)).toBe(true);
+    expect(isAbandonedDraft(draft({ status: "served", openedAt: new Date(now - 60 * 60_000).toISOString() }), now)).toBe(false);
   });
 });
 

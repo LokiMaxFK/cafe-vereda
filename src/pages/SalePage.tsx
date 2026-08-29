@@ -71,6 +71,14 @@ export function SalePage() {
     setSplitOpen(false);
   }, [chargeable]);
 
+  // Quitar el último producto descarta el borrador: la cuenta se cancela sin artículos y aquí ya no
+  // hay nada que cobrar ni editar, así que se vuelve al salón en vez de dejar la pantalla de
+  // «cuenta cancelada».
+  const discarded = !!order && order.status === "cancelled" && order.items.length === 0;
+  useEffect(() => {
+    if (discarded) navigate("/salon", { replace: true });
+  }, [discarded, navigate]);
+
   if (!orderId) return <Navigate to="/salon" replace />;
   if (!order) return <div className="p-8">Cargando orden…</div>;
   const activeOrder = order;

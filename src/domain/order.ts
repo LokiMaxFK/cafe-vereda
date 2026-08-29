@@ -9,6 +9,35 @@ export function isTracked(order: Order) {
   return trackedStatuses.includes(order.status);
 }
 
+/**
+ * Una cuenta 'open' sin un solo artículo activo y sin cobros nunca llegó a ser comanda: es un
+ * borrador que quedó a medias —una mesa que se tocó por error, o un pedido al que se le quitó el
+ * último producto—. No ocupa la mesa ni cuenta como cuenta abierta, y se descarta en cuanto se
+ * detecta. La versión antigua del salón abría la cuenta al tocar la mesa, así que las instalaciones
+ * viejas arrastran varias de estas colgando de mesas que en realidad están libres.
+ */
+export function isEmptyDraft(order: Pick<Order, "status" | "items" | "payments">) {
+  return order.status === "open"
+    && order.payments.length === 0
+    && order.items.every((item) => item.status === "cancelled");
+}
+
+/** Una cuenta viva que además ocupa su mesa: descarta los borradores vacíos. */
+export function occupiesFloor(order: Order) {
+  return isTracked(order) && !isEmptyDraft(order);
+}
+
+/** Minutos que un borrador vacío puede seguir abierto antes de darse por abandonado y cancelarse solo. */
+export const ABANDONED_DRAFT_MINUTES = 10;
+
+/**
+ * Un borrador vacío que lleva abierto más de `ABANDONED_DRAFT_MINUTES`. El margen evita cancelar
+ * la cuenta recién creada que otra estación todavía está armando.
+ */
+export function isAbandonedDraft(order: Pick<Order, "status" | "items" | "payments" | "openedAt">, now = Date.now()) {
+  return isEmptyDraft(order) && now - new Date(order.openedAt).getTime() >= ABANDONED_DRAFT_MINUTES * 60_000;
+}
+
 /** Estados desde los que una cuenta todavía se puede cancelar (coincide con la política RLS "staff update open orders"). */
 export const cancellableStatuses: Order["status"][] = ["open", "preparing", "ready", "served"];
 

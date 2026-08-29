@@ -4,7 +4,7 @@ import { Button, InlineAlert, Page, PageHeader, Panel, TextField } from "../../d
 import { Modal } from "../components/Modal";
 import { TableFloorPlan } from "../components/TableFloorPlan";
 import type { CafeTable } from "../domain/types";
-import { isTracked, orderDestination } from "../domain/order";
+import { occupiesFloor, orderDestination } from "../domain/order";
 import { useApp } from "../state/AppContext";
 
 const shapeOptions: Array<{ value: CafeTable["shape"]; label: string; icon: typeof Circle }> = [
@@ -43,7 +43,7 @@ export function TablesPage() {
 
   // Una mesa con cuenta viva no se puede dar de baja: el pedido desaparecería del salón sin aviso
   // y sólo se recuperaría entrando a Pedidos, con el riesgo de que nadie llegue a cobrarlo.
-  const openOrder = editing ? orders.find((order) => order.tableId === editing.id && isTracked(order)) : undefined;
+  const openOrder = editing ? orders.find((order) => order.tableId === editing.id && occupiesFloor(order)) : undefined;
 
   return (
     <Page size="wide">
