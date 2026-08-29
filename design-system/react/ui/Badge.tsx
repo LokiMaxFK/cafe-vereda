@@ -13,7 +13,7 @@ const TONE_CLASS: Record<BadgeTone, string> = {
 export function Badge({ tone = "neutral", className, ...props }: HTMLAttributes<HTMLSpanElement> & { tone?: BadgeTone }) {
   return (
     <span
-      className={cn("inline-flex w-fit items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold", TONE_CLASS[tone], className)}
+      className={cn("inline-flex w-fit items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-bold", TONE_CLASS[tone], className)}
       {...props}
     />
   );

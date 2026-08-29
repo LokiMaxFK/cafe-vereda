@@ -80,7 +80,7 @@ export function NewOrderPage() {
   return (
     <div className="flex min-h-screen flex-col bg-background">
       <header className="sticky top-0 z-30 flex min-h-16 items-center justify-between gap-3 border-b border-outline-variant/30 bg-background/95 px-4 py-2 backdrop-blur sm:px-6">
-        <div className="flex min-w-0 items-center gap-3"><Button size="icon" variant="ghost" onClick={() => navigate("/salon")} aria-label="Volver al salón"><ArrowLeft size={20} /></Button><div><h1 className="text-lg font-bold">Nueva orden</h1><p className="text-xs text-on-surface-variant">Elige los productos y luego asigna mesa o para llevar.</p></div></div>
+        <div className="flex min-w-0 items-center gap-2 sm:gap-3"><Button size="icon" variant="ghost" className="shrink-0" onClick={() => navigate("/salon")} aria-label="Volver al salón"><ArrowLeft size={20} /></Button><div className="min-w-0"><h1 className="truncate text-base font-bold sm:text-lg">Nueva orden</h1><p className="hidden truncate text-xs text-on-surface-variant sm:block">Elige los productos y luego asigna mesa o para llevar.</p></div></div>
         <Button variant="primary" onClick={() => setAssignOpen(true)} disabled={!visibleItems.length}>Continuar <ChevronRight size={18} /></Button>
       </header>
       <div className="grid flex-1 lg:grid-cols-[minmax(0,1fr)_360px] xl:grid-cols-[180px_minmax(0,1fr)_390px]">
