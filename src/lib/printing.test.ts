@@ -211,11 +211,12 @@ describe("ticket cash change", () => {
     payments: [{ id: "cash", method: "cash", amount: 400, tip: 0, received: 500, createdAt: "2026-08-17T15:31:00Z" }]
   };
 
-  it("prints what the customer handed over and the change owed", () => {
+  it("prints what the customer handed over, what was applied and the change owed", () => {
     const html = createTicketDocument(cashOrder).html;
-    expect(html).toContain("Recibido");
+    expect(html).toContain("Efectivo recibido");
     expect(html).toContain(mxn.format(500));
-    expect(html).toContain("CAMBIO");
+    expect(html).toContain("Aplicado a la cuenta");
+    expect(html).toContain("CAMBIO TOTAL");
     expect(html).toContain(mxn.format(100));
   });
 
@@ -241,7 +242,7 @@ describe("ticket cash change", () => {
     expect(html).toContain(mxn.format(100));
   });
 
-  it("prints the change of each cash payment when the bill was split", () => {
+  it("adds up the change of every cash payment when the bill was split across payments", () => {
     const html = createTicketDocument({
       ...cashOrder,
       payments: [
@@ -249,9 +250,10 @@ describe("ticket cash change", () => {
         { id: "b", method: "cash", amount: 200, tip: 0, received: 300, createdAt: "2026-08-17T15:32:00Z" }
       ]
     }).html;
-    expect(html.match(/CAMBIO/g)).toHaveLength(2);
-    expect(html).toContain(mxn.format(50));
-    expect(html).toContain(mxn.format(100));
+    // Un solo desglose al pie: efectivo recibido 550, aplicado 400 y cambio total 150.
+    expect(html.match(/CAMBIO TOTAL/g)).toHaveLength(1);
+    expect(html).toContain(mxn.format(550));
+    expect(html).toContain(mxn.format(150));
   });
 });
 

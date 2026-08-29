@@ -1,4 +1,4 @@
-import { itemTotal, mxn, orderTotal, paymentChange, paymentMethodLabel } from "../domain/money";
+import { itemTotal, mxn, orderChange, orderTotal, paymentMethodLabel, roundToCents } from "../domain/money";
 import { subaccountDiscount, subaccountItems, subaccountTotal } from "../domain/splitBill";
 import type { Order, OrderItem, OrderSubaccount, Payment } from "../domain/types";
 import { printWithBrowser, type ThermalPrintDocument } from "./browserPrinting";
@@ -61,12 +61,24 @@ function ticketItem(item: OrderItem, settings: PrinterSettings) {
 }
 
 function paymentRows(payment: Order["payments"][number]) {
-  const change = paymentChange(payment);
   return `<div class="row muted"><span class="pay-method">${escapeHtml(paymentMethodLabel[payment.method] ?? payment.method).toUpperCase()}</span><span>${mxn.format(payment.amount)}</span></div>`
-    + (payment.tip > 0 ? `<div class="row muted tip-row"><span class="pay-method">Propina</span><span>${mxn.format(payment.tip)}</span></div>` : "")
-    // El cambio se imprime junto al efectivo que lo generó, no al final: con la cuenta dividida
-    // en varios pagos, un solo renglón al pie no diría de cuál de ellos salió.
-    + (change > 0 ? `<div class="row muted tip-row"><span class="pay-method">Recibido</span><span>${mxn.format(payment.received ?? 0)}</span></div><div class="row"><strong class="pay-method">CAMBIO</strong><strong>${mxn.format(change)}</strong></div>` : "");
+    + (payment.tip > 0 ? `<div class="row muted tip-row"><span class="pay-method">Propina</span><span>${mxn.format(payment.tip)}</span></div>` : "");
+}
+
+/**
+ * Desglose del efectivo al pie del ticket: cuánto entregó el cliente, cuánto se aplicó a la cuenta
+ * y el cambio total que se le devolvió. Antes el cambio salía en un renglón `muted` pegado a cada
+ * pago y era fácil no verlo; ahora se agrupa —sumando todos los pagos en efectivo si el cobro se
+ * dividió— para que el cambio total quede claro de un vistazo. Sólo aparece cuando hay cambio.
+ */
+function cashChangeSummary(payments: Payment[]) {
+  const totalChange = orderChange({ payments });
+  if (totalChange <= 0) return "";
+  const received = roundToCents(payments.reduce((sum, payment) => sum + (payment.method === "cash" ? payment.received ?? 0 : 0), 0));
+  return `<div class="line"></div>`
+    + `<div class="row"><span>Efectivo recibido</span><span>${mxn.format(received)}</span></div>`
+    + `<div class="row muted"><span>Aplicado a la cuenta</span><span>${mxn.format(roundToCents(received - totalChange))}</span></div>`
+    + `<div class="row"><strong>CAMBIO TOTAL</strong><strong>${mxn.format(totalChange)}</strong></div>`;
 }
 
 /**
@@ -119,6 +131,7 @@ export function createTicketDocument(order: Order, paper: PrintPaper = "80", opt
     ${items.map((item) => ticketItem(item, settings)).join("")}
     <div class="line"></div>${discount > 0 ? `<div class="row"><span>${discountLabel}</span><span>-${mxn.format(discount)}</span></div>` : ""}<div class="row"><strong>TOTAL</strong><strong>${mxn.format(total)}</strong></div>
     ${payments.map((payment) => paymentRows(payment)).join("")}
+    ${cashChangeSummary(payments)}
     ${qr}${footer}
   `, paper, settings);
 }
