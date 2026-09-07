@@ -115,7 +115,7 @@ export function TableFloorPlan({ tables, getStatus, getBadge, selectedId, disabl
   }
 
   return (
-    <div ref={containerRef} onPointerMove={onPointerMove} className="@container relative min-h-[420px] w-full overflow-hidden rounded-2xl bg-[linear-gradient(rgba(90,58,27,.035)_1px,transparent_1px),linear-gradient(90deg,rgba(90,58,27,.035)_1px,transparent_1px)] bg-[size:32px_32px]">
+    <div ref={containerRef} onPointerMove={onPointerMove} className="@container relative min-h-[320px] w-full overflow-hidden rounded-2xl bg-[linear-gradient(rgba(90,58,27,.035)_1px,transparent_1px),linear-gradient(90deg,rgba(90,58,27,.035)_1px,transparent_1px)] bg-[size:32px_32px] sm:min-h-[420px]">
       {guides.x !== undefined && <div className="pointer-events-none absolute top-0 z-20 h-full w-px bg-primary/60" style={{ left: `${guides.x}%` }} />}
       {guides.y !== undefined && <div className="pointer-events-none absolute left-0 z-20 h-px w-full bg-primary/60" style={{ top: `${guides.y}%` }} />}
       {tables.map((table) => {
