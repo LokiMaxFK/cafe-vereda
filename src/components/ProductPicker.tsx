@@ -51,7 +51,7 @@ export function ProductPicker({ onSelect }: { onSelect: (selection: ProductPicke
   return (
     <>
       <aside className="min-w-0 border-b border-outline-variant/30 bg-surface-container-low px-3 py-3 lg:col-span-2 xl:col-span-1 xl:border-b-0 xl:border-r xl:py-5">
-        <div className="flex gap-2 overflow-x-auto xl:flex-col xl:overflow-visible">
+        <div className="mobile-scrollbar flex gap-2 overflow-x-auto overscroll-x-contain pb-1 xl:flex-col xl:overflow-visible xl:pb-0">
           {categories.map((category) => <button key={category.id} onClick={() => { setCategoryId(category.id); setSeasonalOnly(false); setSearch(""); }} className={`min-h-11 shrink-0 rounded-xl px-4 text-left text-sm font-bold transition-colors xl:w-full ${categoryId === category.id && !seasonalOnly && !search ? "bg-primary text-on-primary shadow-brand" : "bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container-high"}`}>{category.name}</button>)}
           <button onClick={() => { setSeasonalOnly(true); setSearch(""); }} className={`flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl px-4 text-left text-sm font-bold transition-colors xl:w-full ${seasonalOnly && !search ? "bg-primary text-on-primary shadow-brand" : "bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container-high"}`}><Sparkles size={16} /> Temporada</button>
         </div>

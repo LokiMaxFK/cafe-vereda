@@ -29,9 +29,9 @@ export interface TableFloorPlanProps {
 // apretado —o hasta traslapado— en el contenedor angosto aunque en el ancho quepa perfecto.
 // clamp(mín, %-del-contenedor, máx) hace que el tamaño escale junto con las posiciones.
 const shapeClass: Record<CafeTable["shape"], string> = {
-  round: "w-[clamp(72px,10.5cqw,128px)] h-[clamp(72px,10.5cqw,128px)] rounded-full",
-  square: "w-[clamp(72px,10.5cqw,128px)] h-[clamp(72px,10.5cqw,128px)] rounded-2xl",
-  rectangular: "w-[clamp(92px,13.5cqw,164px)] h-[clamp(62px,9cqw,112px)] rounded-2xl"
+  round: "w-[clamp(64px,10.5cqw,128px)] h-[clamp(64px,10.5cqw,128px)] rounded-full",
+  square: "w-[clamp(64px,10.5cqw,128px)] h-[clamp(64px,10.5cqw,128px)] rounded-2xl",
+  rectangular: "w-[clamp(84px,13.5cqw,164px)] h-[clamp(58px,9cqw,112px)] rounded-2xl"
 };
 
 function clamp(value: number, min: number, max: number) {

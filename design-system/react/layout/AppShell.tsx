@@ -186,7 +186,7 @@ export function AppShell({
           {onLogout && <Button onClick={onLogout} variant="ghost" size="icon" aria-label="Cerrar sesión">{logoutIcon ?? "↪"}</Button>}
         </header>
 
-        <main className="flex min-h-screen flex-col pb-24 lg:pb-0">{children}</main>
+        <main className="flex min-h-screen flex-col pb-[calc(6rem+env(safe-area-inset-bottom))] lg:pb-0">{children}</main>
       </div>
 
       <nav className="safe-area-bottom fixed inset-x-0 bottom-0 z-50 border-t border-outline-variant/30 bg-surface-container-lowest px-2 pt-2 shadow-bottom-nav lg:hidden">
@@ -227,7 +227,7 @@ export function AppShell({
       {moreOpen && (
         <div className="fixed inset-0 z-[60] lg:hidden">
           <button type="button" aria-label="Cerrar menú" className="absolute inset-0 bg-inverse-surface/25" onClick={() => setMoreOpen(false)} />
-          <section id="mobile-more-menu" aria-label="Más opciones" className="safe-area-bottom absolute inset-x-0 bottom-0 rounded-t-2xl border-t border-outline-variant/30 bg-surface-container-lowest p-4 shadow-2xl">
+          <section id="mobile-more-menu" aria-label="Más opciones" className="safe-area-bottom absolute inset-x-0 bottom-0 max-h-[min(78dvh,40rem)] overflow-y-auto overscroll-contain rounded-t-2xl border-t border-outline-variant/30 bg-surface-container-lowest p-4 shadow-2xl">
             <div className="mb-3 flex items-center justify-between">
               <div>
                 <h2 className="text-lg font-semibold text-on-surface">Más opciones</h2>
