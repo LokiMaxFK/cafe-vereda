@@ -11,7 +11,7 @@ const PAGE_SIZE_CLASS: Record<PageSize, string> = {
 
 export function Page({ children, size = "default", className }: { children: ReactNode; size?: PageSize; className?: string }) {
   return (
-    <div className={cn("w-full px-4 py-5 sm:px-6 sm:py-8 lg:px-8", className)}>
+    <div className={cn("w-full px-3 py-4 sm:px-6 sm:py-8 lg:px-8", className)}>
       <div className={cn("mx-auto w-full", PAGE_SIZE_CLASS[size])}>{children}</div>
     </div>
   );
@@ -37,7 +37,7 @@ export function PageHeader({
         <h1 className="text-2xl font-bold leading-8 text-on-surface sm:text-3xl sm:leading-10">{title}</h1>
         {description && <p className="mt-1 max-w-2xl text-sm leading-6 text-on-surface-variant sm:text-base">{description}</p>}
       </div>
-      {action && <div className="flex shrink-0 flex-wrap items-center gap-2">{action}</div>}
+      {action && <div className="flex w-full shrink-0 flex-wrap items-center gap-2 sm:w-auto [&>button]:flex-1 sm:[&>button]:flex-none">{action}</div>}
     </header>
   );
 }
