@@ -91,6 +91,25 @@
     background-clip: content-box;
   }
 
+  /* Las tablas administrativas conservan todos sus datos en pantallas pequeñas. El riel visible
+     indica que se pueden deslizar lateralmente, incluso en navegadores que ocultan scrollbars. */
+  @media (max-width: 639px) {
+    .overflow-x-auto {
+      padding-bottom: 4px;
+      scrollbar-width: thin;
+      scrollbar-color: theme("colors.outline-variant") transparent;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .overflow-x-auto::-webkit-scrollbar { height: 10px; }
+    .overflow-x-auto::-webkit-scrollbar-thumb {
+      border: 3px solid transparent;
+      border-radius: 10px;
+      background: theme("colors.outline-variant");
+      background-clip: content-box;
+    }
+  }
+
   .safe-area-bottom {
     padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
   }
