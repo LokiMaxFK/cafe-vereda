@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowLeft, Banknote, Check, ChevronRight, ClipboardCheck, Coffee, CreditCard, Minus, MoreVertical, Plus, Printer, RotateCcw, Send, Smartphone, Trash2, Users } from "lucide-react";
+import { ArrowLeft, Banknote, Check, ChevronRight, ClipboardCheck, Coffee, CreditCard, Minus, MoreVertical, Plus, Printer, RotateCcw, Send, ShoppingBag, Smartphone, Trash2, Users, X } from "lucide-react";
 import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { Badge, Button, InlineAlert, TextField } from "../../design-system/react";
 import { cancellableStatuses, isChargeable, isFinalizable } from "../domain/order";
@@ -58,6 +58,7 @@ export function SalePage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [actionsOpen, setActionsOpen] = useState(false);
+  const [cartOpen, setCartOpen] = useState(false);
   const [orderAction, setOrderAction] = useState<"cancel" | "reverse" | null>(null);
   const [orderActionReason, setOrderActionReason] = useState("");
 
@@ -219,16 +220,22 @@ export function SalePage() {
       </header>
       {message && <div className="mx-4 mt-3 sm:mx-6"><InlineAlert tone="success">{message}</InlineAlert></div>}
       {error && <div className="mx-4 mt-3 sm:mx-6"><InlineAlert>{error}</InlineAlert></div>}
-      <div className="grid flex-1 lg:grid-cols-[minmax(0,1fr)_360px] xl:grid-cols-[180px_minmax(0,1fr)_390px]">
+      <div className="grid flex-1 pb-24 lg:pb-0 lg:grid-cols-[minmax(0,1fr)_360px] xl:grid-cols-[180px_minmax(0,1fr)_390px]">
         {editable ? <ProductPicker onSelect={(selection) => void addItem(activeOrder.id, selection)} /> : <div className="flex min-h-52 flex-col items-center justify-center gap-3 p-8 text-center text-on-surface-variant xl:col-span-2"><ClipboardCheck size={34} className="text-outline" /><p className="font-semibold">{closedStateCopy(order.status).title}</p><p className="max-w-xs text-xs">{closedStateCopy(order.status).description}</p></div>}
-        <aside className="border-t border-outline-variant/30 bg-surface-container-lowest lg:sticky lg:top-16 lg:h-[calc(100vh-4rem)] lg:border-l lg:border-t-0">
-          <div className="flex h-full flex-col"><div className="border-b border-outline-variant/30 p-5"><div className="flex items-center justify-between"><div><p className="text-xs font-bold uppercase tracking-wider text-outline">Cuenta actual</p><h2 className="text-xl font-bold">{order.items.filter((item) => item.status !== "cancelled").length} artículo{order.items.filter((item) => item.status !== "cancelled").length === 1 ? "" : "s"}</h2></div>{pendingItems.length > 0 && <Badge tone="primary">{pendingItems.length} nuevo{pendingItems.length === 1 ? "" : "s"}</Badge>}</div></div>
+        <aside className={`${cartOpen ? "fixed inset-0 z-[70] flex" : "hidden"} border-t border-outline-variant/30 bg-surface-container-lowest lg:sticky lg:top-16 lg:z-auto lg:flex lg:h-[calc(100vh-4rem)] lg:border-l lg:border-t-0`} aria-label="Cuenta actual">
+          <div className="flex h-full w-full flex-col"><div className="border-b border-outline-variant/30 p-5"><div className="flex items-center justify-between"><div><p className="text-xs font-bold uppercase tracking-wider text-outline">Cuenta actual</p><h2 className="text-xl font-bold">{order.items.filter((item) => item.status !== "cancelled").length} artículo{order.items.filter((item) => item.status !== "cancelled").length === 1 ? "" : "s"}</h2></div><div className="flex items-center gap-2">{pendingItems.length > 0 && <Badge tone="primary">{pendingItems.length} nuevo{pendingItems.length === 1 ? "" : "s"}</Badge>}<Button className="lg:hidden" variant="ghost" size="icon" aria-label="Cerrar cuenta" onClick={() => setCartOpen(false)}><X size={20} /></Button></div></div></div>
             <div className="custom-scrollbar min-h-48 flex-1 space-y-3 overflow-y-auto p-4">{order.items.length === 0 ? <div className="flex h-full min-h-52 flex-col items-center justify-center text-center text-on-surface-variant"><Coffee size={34} className="mb-3 text-outline" /><p className="font-semibold">La cuenta está vacía</p><p className="mt-1 max-w-xs text-xs">Elige un producto del menú para comenzar.</p></div> : order.items.map((item) => <div key={item.id} className={`rounded-xl border p-3 ${item.status === "cancelled" ? "border-error/20 bg-error-container/25 opacity-65" : item.status === "pending" ? "border-primary/25 bg-primary-fixed/35" : "border-outline-variant/30 bg-surface"}`}><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className={`font-semibold leading-5 ${item.status === "cancelled" ? "line-through" : ""}`}>{item.name}</p>{item.variant && <p className="mt-0.5 text-xs text-on-surface-variant">{item.variant}</p>}{item.modifiers.map((modifier) => <p key={modifier.id} className="text-xs text-on-surface-variant">+ {modifier.name}</p>)}{item.notes && <p className="text-xs font-semibold text-primary">Nota: {item.notes}</p>}{item.cancellationReason && <p className="text-xs font-semibold text-error">Motivo: {item.cancellationReason}</p>}<p className="mt-1 text-sm font-bold text-primary">{mxn.format(itemTotal(item))}</p></div>{item.status === "pending" ? <div className="flex items-center gap-1"><button onClick={() => void changeQuantity(order.id, item.id, -1)} className="flex h-9 w-9 items-center justify-center rounded-lg border border-outline-variant/50" aria-label={item.quantity === 1 ? "Eliminar" : "Restar"}>{item.quantity === 1 ? <Trash2 size={15} /> : <Minus size={15} />}</button><span className="w-7 text-center text-sm font-bold">{item.quantity}</span><button onClick={() => void changeQuantity(order.id, item.id, 1)} className="flex h-9 w-9 items-center justify-center rounded-lg border border-outline-variant/50" aria-label="Sumar"><Plus size={15} /></button></div> : item.status === "cancelled" ? <Badge tone="danger">Cancelado</Badge> : <button type="button" title="Cancelar artículo comandado" onClick={() => { setCancelItemId(item.id); setCancelQuantity(1); setCancelReason(""); }}><Badge tone={item.status === "prepared" ? "success" : "neutral"}>{item.status === "prepared" ? "Listo" : "Enviado"}</Badge></button>}</div></div>)}</div>
             <div className="border-t border-outline-variant/30 p-4"><div className="mb-3 space-y-2 text-sm"><div className="flex justify-between text-on-surface-variant"><span>Subtotal</span><span>{mxn.format(subtotal)}</span></div>{order.discount > 0 && <div className="flex justify-between text-tertiary"><span>Descuento</span><span>-{mxn.format(order.discount)}</span></div>}<div className="flex items-end justify-between border-t border-outline-variant/30 pt-3"><span className="font-bold">Total</span><span className="text-2xl font-bold text-primary">{mxn.format(total)}</span></div></div>{editable && (pendingItems.length
               ? <Button variant="success" size="lg" className="w-full" onClick={() => void dispatch()}><Send size={18} /> Enviar {pendingItems.length} a preparación</Button>
               : <Button variant="success" size="lg" className="w-full" onClick={() => void reprintCommand()} disabled={!hasCommandedItems}><Printer size={18} /> {hasCommandedItems ? `Reenviar comanda a cocina (COPIA ${peekCopyNumber(order.id)})` : "Sin artículos que comandar"}</Button>)}</div>
           </div>
         </aside>
+      </div>
+      <div className="safe-area-bottom fixed inset-x-0 bottom-0 z-40 border-t border-outline-variant/30 bg-surface-container-lowest px-3 pt-3 shadow-bottom-nav lg:hidden">
+        <Button className="w-full justify-between" variant="primary" size="lg" onClick={() => setCartOpen(true)} aria-haspopup="dialog">
+          <span className="flex items-center gap-2"><ShoppingBag size={18} /> Ver cuenta <span className="text-on-primary/75">({order.items.filter((item) => item.status !== "cancelled").length})</span></span>
+          <strong>{mxn.format(total)}</strong>
+        </Button>
       </div>
       {cancelItemId && (() => {
         const target = order.items.find((candidate) => candidate.id === cancelItemId);
