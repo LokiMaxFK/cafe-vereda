@@ -9,8 +9,199 @@ a { color: inherit; text-decoration: none; }
   overflow: hidden;
 }
 
+/* Bloques que sólo existen en el PDF; en pantalla los mantiene ocultos el atributo `hidden`. */
+.report-print-cover,
+.report-print-only { display: none; }
+
+/**
+ * Hoja de impresión del reporte.
+ *
+ * Antes esto eran cuatro reglas que blanqueaban cualquier elemento con una clase `bg-*`. Como las
+ * barras de las gráficas son justamente `div`s con `bg-primary-fixed`, `bg-error` y `bg-tertiary`,
+ * el PDF salía con cuatro recuadros vacíos. Aquí se blanquean las superficies pero se respeta lo
+ * que lleva `.print-fill`, que es el relleno que representa un dato.
+ */
 @media print {
+  @page {
+    size: letter landscape;
+    margin: 12mm 14mm;
+  }
+
+  /**
+   * El armazón reserva el ancho del menú lateral con `lg:ml-sidebar-width`, y ese punto de corte
+   * sí se cumple al imprimir: el reporte salía corrido a la derecha, desperdiciando ~35% de la
+   * hoja en un margen izquierdo vacío. El menú está oculto, así que el hueco no reserva nada.
+   */
+  .lg\:ml-sidebar-width { margin-left: 0 !important; }
+
+  html, body {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    overflow: visible !important;
+    background: #fff !important;
+    font-size: 10pt;
+  }
+
   aside, nav, header:not(.report-print-header), button, .print\:hidden { display: none !important; }
-  body, main, [class*="bg-"] { background: #fff !important; color: #111 !important; }
+
+  body, main, [class*="bg-"]:not(.print-fill) { background: #fff !important; color: #111 !important; }
+
+  /* El relleno de una barra es el dato: conserva su color y no se blanquea. */
+  .print-fill { print-color-adjust: exact; }
+
   .shadow-panel { box-shadow: none !important; }
+
+  [class*="border"] { border-color: #c9c9c9 !important; }
+
+  /* La cabecera de la app se sustituye por la portada del reporte. */
+  .report-print-header { display: none !important; }
+
+  .report-print-cover,
+  .report-print-only { display: block !important; }
+
+  .report-print-cover {
+    margin-bottom: 8mm;
+    padding-bottom: 4mm;
+    border-bottom: 1.5pt solid #111;
+  }
+
+  .report-print-brand {
+    font-size: 15pt;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+
+  .report-print-title {
+    margin-top: 1mm;
+    font-size: 11pt;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #444 !important;
+  }
+
+  .report-print-range {
+    margin-top: 3mm;
+    font-size: 13pt;
+    font-weight: 700;
+  }
+
+  /* Los filtros aplicados viajan con el reporte: sin ellos las cifras no son auditables. */
+  .report-print-meta {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 2.5mm 4mm;
+    margin-top: 4mm;
+  }
+
+  .report-print-meta dt {
+    font-size: 7pt;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #666 !important;
+  }
+
+  .report-print-meta dd {
+    margin: 0.5mm 0 0;
+    font-size: 9pt;
+    font-weight: 600;
+  }
+
+  /**
+   * Los globos con el importe sólo aparecen al pasar el cursor. En papel no se ven, pero cada uno
+   * imponía un ancho mínimo de ~40px a su columna: con 24 horas, la gráfica de «ventas por hora»
+   * medía 1067px y se salía de la hoja arrastrando consigo el resto de la rejilla.
+   */
+  .invisible { display: none !important; }
+
+  /* Una sola columna, y con mínimo cero para que ninguna gráfica ensanche la página. */
+  main .grid { grid-template-columns: minmax(0, 1fr) !important; }
+
+  /**
+   * En horizontal caben dos paneles a lo ancho, que es justo para lo que sirve la orientación:
+   * ahorra hojas y deja la tendencia junto a su desglose. Sólo se emparejan las rejillas cuyos dos
+   * paneles se imprimen; la de productos lleva al lado la tabla paginada, que en papel no va.
+   */
+  main .report-print-pair { grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.75fr) !important; gap: 5mm !important; }
+
+  /* Cuatro tarjetas por renglón: el punto de corte `xl:` de Tailwind no aplica al ancho del papel. */
+  main .report-print-metrics { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; gap: 3mm !important; }
+
+  /**
+   * A cuatro columnas la tarjeta mide ~171px y sólo deja ~136px para la cifra. En pantalla son
+   * 30px de tipografía, con lo que un importe mensual como `$128,450.75` se recortaba en el PDF.
+   */
+  .metric-card { min-height: 0 !important; padding: 3.5mm !important; }
+  .metric-card-icon { display: none !important; }
+  .metric-card-value { font-size: 14pt !important; line-height: 1.2 !important; margin-top: 1mm !important; }
+
+  /* Nada de cajas de scroll en papel: recortaban filas sin avisar. */
+  .max-h-72, [class*="max-h-"] { max-height: none !important; }
+  .overflow-y-auto, .overflow-x-auto, .table-scroll-x, .overflow-hidden { overflow: visible !important; }
+  table { min-width: 0 !important; width: 100% !important; }
+
+  /* Un panel no se parte a media gráfica, pero una tabla larga sí debe poder fluir. */
+  .shadow-panel { break-inside: avoid; }
+  .report-print-flow, .report-print-flow .shadow-panel { break-inside: auto; }
+  thead { display: table-header-group; }
+  tfoot { display: table-footer-group; }
+  tr, .report-print-cover { break-inside: avoid; }
+  h1, h2, h3 { break-after: avoid; }
+
+  .report-print-only { margin-top: 6mm; }
+
+  .report-print-section {
+    margin-bottom: 2mm;
+    font-size: 10pt;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    border-bottom: 0.75pt solid #111;
+    padding-bottom: 1.5mm;
+  }
+
+  .report-print-section span {
+    float: right;
+    font-weight: 600;
+    text-transform: none;
+    letter-spacing: 0;
+    color: #666 !important;
+  }
+
+  .report-print-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 8pt;
+  }
+
+  .report-print-table th,
+  .report-print-table td {
+    padding: 1.4mm 2mm;
+    text-align: left;
+    border-bottom: 0.5pt solid #ddd;
+  }
+
+  .report-print-table th {
+    font-size: 7pt;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #555 !important;
+    border-bottom: 0.75pt solid #999;
+  }
+
+  .report-print-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+
+  .report-print-table tfoot td {
+    font-weight: 700;
+    border-top: 0.75pt solid #111;
+    border-bottom: none;
+  }
+
+  .report-print-empty { font-size: 9pt; color: #666 !important; }
+
+  /* «Sin incidencias» no merece media hoja: en pantalla el hueco centra la vista, en papel estorba. */
+  .empty-state { min-height: 0 !important; padding: 4mm !important; }
+  .empty-state-icon { display: none !important; }
+  .empty-state h3 { font-size: 10pt !important; }
 }

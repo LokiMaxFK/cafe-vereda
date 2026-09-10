@@ -27,10 +27,10 @@ export function MetricCard({
   const toneClass = TONE_CLASS[tone];
 
   return (
-    <Panel className="min-h-36 p-5">
-      <div className={cn("mb-4 flex h-10 w-10 items-center justify-center rounded-xl text-xl", toneClass.icon)}>{icon}</div>
+    <Panel className="metric-card min-h-36 p-5">
+      <div className={cn("metric-card-icon mb-4 flex h-10 w-10 items-center justify-center rounded-xl text-xl", toneClass.icon)}>{icon}</div>
       <p className="text-sm font-medium text-on-surface-variant">{label}</p>
-      <p className={cn("mt-1 text-3xl font-bold leading-9", toneClass.value)}>{value}</p>
+      <p className={cn("metric-card-value mt-1 text-3xl font-bold leading-9", toneClass.value)}>{value}</p>
       {detail && <p className="mt-1 truncate text-xs text-on-surface-variant">{detail}</p>}
     </Panel>
   );

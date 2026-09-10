@@ -21,9 +21,9 @@ export function EmptyState({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex min-h-64 flex-col items-center justify-center px-4 py-12 text-center">
+    <div className="empty-state flex min-h-64 flex-col items-center justify-center px-4 py-12 text-center">
       {icon && (
-        <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-surface-container-high text-3xl text-on-surface-variant">
+        <div className="empty-state-icon mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-surface-container-high text-3xl text-on-surface-variant">
           {icon}
         </div>
       )}

@@ -12,20 +12,23 @@ import {
   dateInputValue,
   percentageChange,
   reportEventLabel,
-  reportProductSummary,
   resolveReportRange,
   sortProducts,
-  type ReportDataset,
   type ReportFilters,
   type ReportOrder,
   type ReportPaymentFilter,
   type ReportPreset,
+  type ReportRow,
   type ReportStaff
 } from "../domain/reports";
 import type { InventoryCount, InventoryItem, InventoryMovement, InventoryUnit, Order, OrderItem, Payment, PaymentMethod } from "../domain/types";
 import { InventoryAnalysisTable } from "../components/InventoryAnalysisTable";
+import { buildReportCsv, downloadCsv, reportCsvFilename } from "../lib/reportExport";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
 import { useApp } from "../state/AppContext";
+
+const BUSINESS_NAME = "Vereda Café";
+const ORDER_TYPE_LABEL: Record<ReportFilters["orderType"], string> = { all: "Todos", table: "Mesa", takeaway: "Para llevar" };
 
 const PAGE_SIZE = 500;
 const PAYMENT_LABEL = paymentMethodLabel;
@@ -209,38 +212,53 @@ function metricDetail(value: { value: number; previous: number }, money = true) 
   return `${change > 0 ? "+" : ""}${change.toFixed(1)}% vs. periodo anterior${money ? "" : ""}`;
 }
 
-function exportCsv(dataset: ReportDataset, rangeLabel: string) {
-  const headers = ["folio", "eventos_periodo", "fecha_cobro", "fecha_reversion", "fecha_cancelacion", "empleado_cobro", "tipo", "estado_actual", "productos", "subtotal_productos", "descuento", "venta_bruta", "reversion", "venta_neta", "efectivo", "tarjeta", "transferencia", "propina"];
-  const rows = dataset.rows.map((row) => [
-    row.order.folio,
-    reportEventLabel(row),
-    row.order.closedAt ?? "",
-    row.order.reversedAt ?? "",
-    row.cancelledInRange ? row.order.updatedAt : "",
-    row.order.closedByName ?? "",
-    row.order.type === "table" ? "Mesa" : "Para llevar",
-    row.order.status,
-    reportProductSummary(row.order),
-    row.order.items.filter((item) => item.status !== "cancelled").reduce((sum, item) => sum + item.quantity * (item.unitPrice + item.modifiers.reduce((extra, modifier) => extra + modifier.price, 0)), 0),
-    row.discount,
-    row.gross,
-    row.reversal,
-    row.net,
-    row.paymentContributions.cash,
-    row.paymentContributions.card,
-    row.paymentContributions.transfer,
-    row.tip
-  ]);
-  const csv = [headers, ...rows].map((row) => row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(",")).join("\n");
-  const link = document.createElement("a");
-  link.href = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" }));
-  link.download = `vereda-reportes-${rangeLabel.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.csv`;
-  link.click();
-  URL.revokeObjectURL(link.href);
+/**
+ * Detalle auditable para el PDF. Existe aparte de la tabla de pantalla porque aquélla está paginada
+ * —imprimirla dejaría fuera todo lo que no cupiera en la página visible— y porque en papel sobran
+ * los enlaces, las insignias y el color: lo que se necesita es la lista completa con su total.
+ */
+function PrintSalesTable({ rows }: { rows: ReportRow[] }) {
+  const totals = rows.reduce(
+    (sum, row) => ({ gross: sum.gross + row.gross, reversal: sum.reversal + row.reversal, net: sum.net + row.net, tip: sum.tip + row.tip }),
+    { gross: 0, reversal: 0, net: 0, tip: 0 }
+  );
+
+  return (
+    <section className="report-print-only report-print-flow" hidden aria-hidden="true">
+      <h2 className="report-print-section">Detalle auditable · ventas y movimientos <span>{rows.length} registros</span></h2>
+      {rows.length ? (
+        <table className="report-print-table">
+          <thead>
+            <tr><th>Folio</th><th>Fecha</th><th>Evento</th><th>Empleado</th><th>Tipo</th><th className="num">Bruta</th><th className="num">Reversión</th><th className="num">Neta</th><th className="num">Propina</th></tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.order.id}>
+                <td>#{row.order.folio}</td>
+                <td>{formatDate(row.order.closedAt ?? row.order.reversedAt ?? row.order.updatedAt)}</td>
+                <td>{reportEventLabel(row)}</td>
+                <td>{row.order.closedByName ?? "—"}</td>
+                <td>{row.order.type === "table" ? "Mesa" : "Para llevar"}</td>
+                <td className="num">{mxn.format(row.gross)}</td>
+                <td className="num">{row.reversal ? `-${mxn.format(row.reversal)}` : "—"}</td>
+                <td className="num">{mxn.format(row.net)}</td>
+                <td className="num">{mxn.format(row.tip)}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr><td colSpan={5}>Total del periodo</td><td className="num">{mxn.format(totals.gross)}</td><td className="num">{totals.reversal ? `-${mxn.format(totals.reversal)}` : "—"}</td><td className="num">{mxn.format(totals.net)}</td><td className="num">{mxn.format(totals.tip)}</td></tr>
+          </tfoot>
+        </table>
+      ) : (
+        <p className="report-print-empty">No hay ventas, reversiones o cancelaciones que coincidan con los filtros.</p>
+      )}
+    </section>
+  );
 }
 
 export function ReportsPage() {
-  const { orders } = useApp();
+  const { orders, session } = useApp();
   const [preset, setPreset] = useState<ReportPreset>("today");
   const [customStart, setCustomStart] = useState(dateInputValue());
   const [customEnd, setCustomEnd] = useState(dateInputValue());
@@ -322,6 +340,36 @@ export function ReportsPage() {
   const productMax = Math.max(1, ...(rankedProducts.map((product) => productMode === "quantity" ? product.quantity : product.revenue)));
   const hourlyMax = Math.max(1, ...hourlyPattern.map((point) => Math.abs(point.net)));
 
+  const employeeLabel = filters.employeeId ? staff.find((person) => person.id === filters.employeeId)?.name ?? "Empleado desconocido" : "Todos";
+  const paymentLabel = filters.paymentMethod === "all" ? "Todos" : PAYMENT_LABEL[filters.paymentMethod];
+  const orderTypeLabel = ORDER_TYPE_LABEL[filters.orderType];
+  const rangeLabel = rangeResult.range?.label ?? "periodo";
+
+  const handleExportCsv = () => {
+    if (!dataset) return;
+    const generatedAt = new Date();
+    const csv = buildReportCsv(
+      {
+        dataset,
+        dailySales,
+        hourlyPattern,
+        incidents: incidents.map((incident) => ({ ...incident, incidentLabel: INCIDENT_LABEL[incident.incidentType] ?? incident.incidentType })),
+        inventory: inventoryAnalysis
+      },
+      {
+        businessName: BUSINESS_NAME,
+        rangeLabel,
+        generatedAt,
+        generatedBy: session?.name,
+        employeeLabel,
+        orderTypeLabel,
+        paymentLabel,
+        usesRemoteHistory: Boolean(supabase)
+      }
+    );
+    downloadCsv(reportCsvFilename(rangeLabel, generatedAt), csv);
+  };
+
   return (
     <Page size="wide">
       <PageHeader
@@ -329,8 +377,25 @@ export function ReportsPage() {
         eyebrow="DESEMPEÑO DEL NEGOCIO"
         title="Reportes"
         description={rangeResult.range ? `Resultados del ${rangeResult.range.label} · comparación contra el periodo anterior equivalente.` : "Corrige el periodo para consultar los resultados."}
-        action={<><Button className="print:hidden" onClick={() => window.print()} disabled={!dataset}><FileText size={18} /> Guardar PDF</Button><Button className="print:hidden" variant="primary" onClick={() => dataset && exportCsv(dataset, rangeResult.range?.label ?? "reporte")} disabled={!dataset}><Download size={18} /> Exportar CSV</Button></>}
+        action={<><Button className="print:hidden" onClick={() => window.print()} disabled={!dataset}><FileText size={18} /> Guardar PDF</Button><Button className="print:hidden" variant="primary" onClick={handleExportCsv} disabled={!dataset}><Download size={18} /> Exportar CSV</Button></>}
       />
+
+      {/* Portada del PDF: sólo aparece al imprimir, y declara bajo qué filtros se generó el reporte. */}
+      <section className="report-print-cover" hidden aria-hidden="true">
+        <p className="report-print-brand">{BUSINESS_NAME}</p>
+        <h2 className="report-print-title">Reporte de ventas</h2>
+        <p className="report-print-range">{rangeLabel}</p>
+        <dl className="report-print-meta">
+          <div><dt>Empleado</dt><dd>{employeeLabel}</dd></div>
+          <div><dt>Tipo de venta</dt><dd>{orderTypeLabel}</dd></div>
+          <div><dt>Método de pago</dt><dd>{paymentLabel}</dd></div>
+          <div><dt>Moneda</dt><dd>MXN</dd></div>
+          <div><dt>Emitido</dt><dd>{formatDate(new Date().toISOString())}</dd></div>
+          {session?.name && <div><dt>Emitido por</dt><dd>{session.name}</dd></div>}
+          <div><dt>Datos al corte</dt><dd>{updatedAt ? formatDate(updatedAt.toISOString()) : "Pendiente"}</dd></div>
+          <div><dt>Origen</dt><dd>{supabase ? "Historial completo" : "Modo demostración (sólo este dispositivo)"}</dd></div>
+        </dl>
+      </section>
 
       {!supabase && <div className="mb-5 print:hidden"><InlineAlert tone="success">Modo demostración: este reporte usa únicamente las órdenes locales de este dispositivo, no el historial de Supabase.</InlineAlert></div>}
       {(rangeResult.error || error) && <div className="mb-5 print:hidden"><InlineAlert>{rangeResult.error || error}</InlineAlert></div>}
@@ -357,7 +422,7 @@ export function ReportsPage() {
       </Panel>
 
       {loading ? <LoadingState label="Consultando el historial de ventas…" /> : !dataset ? <EmptyState icon={<BarChart3 />} title="No hay reporte disponible" description="Ajusta el periodo y vuelve a intentarlo." /> : <>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="report-print-metrics grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <MetricCard icon={<TrendingUp />} label="Ventas" value={mxn.format(dataset.metrics.netSales.value)} detail={metricDetail(dataset.metrics.netSales)} tone="primary" />
           <MetricCard icon={<ReceiptText />} label="Tickets cobrados" value={dataset.metrics.tickets.value} detail={metricDetail(dataset.metrics.tickets, false)} />
           <MetricCard icon={<ShoppingBag />} label={filters.paymentMethod === "all" ? "Ticket promedio (bruto)" : "Contribución promedio (bruta)"} value={mxn.format(dataset.metrics.averageTicket.value)} detail={metricDetail(dataset.metrics.averageTicket)} />
@@ -367,29 +432,31 @@ export function ReportsPage() {
           <MetricCard icon={<XCircle />} label="Cancelaciones" value={dataset.metrics.cancellations.value} detail={metricDetail(dataset.metrics.cancellations, false)} tone="danger" />
         </div>
 
-        <div className="mt-6 grid gap-6 xl:grid-cols-[1.25fr_.75fr]">
+        <div className="report-print-pair mt-6 grid gap-6 xl:grid-cols-[1.25fr_.75fr]">
           <Panel className="p-5"><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Venta neta</p><h2 className="mt-1 text-lg font-bold">Tendencia del periodo</h2></div><Badge tone="primary">MXN</Badge></div>
-            {dataset.timeline.length ? <div className="mt-8 flex h-64 items-end gap-1 border-b border-outline-variant/40 px-1">{dataset.timeline.map((point) => <div key={point.key} className="group flex h-full min-w-0 flex-1 flex-col justify-end gap-2 text-center"><span className="invisible rounded bg-on-surface px-1 py-0.5 text-[10px] text-surface group-hover:visible">{mxn.format(point.value)}</span><div className={`w-full rounded-t-md ${point.value < 0 ? "bg-error" : "bg-primary-fixed group-hover:bg-primary"}`} style={{ height: `${Math.max(3, (Math.abs(point.value) / timelineMax) * 84)}%` }} /><span className="truncate text-[10px] font-semibold text-outline">{point.label}</span></div>)}</div> : <EmptyState icon={<BarChart3 />} title="Sin movimientos financieros" description="No hubo cobros ni reversiones en este periodo." />}
+            {dataset.timeline.length ? <div className="mt-8 flex h-64 items-end gap-1 border-b border-outline-variant/40 px-1">{dataset.timeline.map((point) => <div key={point.key} className="group flex h-full min-w-0 flex-1 flex-col justify-end gap-2 text-center"><span className="invisible rounded bg-on-surface px-1 py-0.5 text-[10px] text-surface group-hover:visible">{mxn.format(point.value)}</span><div className={`print-fill w-full rounded-t-md ${point.value < 0 ? "bg-error" : "bg-primary-fixed group-hover:bg-primary"}`} style={{ height: `${Math.max(3, (Math.abs(point.value) / timelineMax) * 84)}%` }} /><span className="truncate text-[10px] font-semibold text-outline">{point.label}</span></div>)}</div> : <EmptyState icon={<BarChart3 />} title="Sin movimientos financieros" description="No hubo cobros ni reversiones en este periodo." />}
           </Panel>
-          <Panel className="p-5"><p className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Cobros netos</p><h2 className="mt-1 text-lg font-bold">Métodos de pago</h2><div className="mt-6 space-y-5">{dataset.payments.map((payment) => <div key={payment.method}><div className="mb-2 flex justify-between gap-3 text-sm"><span className="font-semibold">{PAYMENT_LABEL[payment.method]}</span><strong className={payment.value < 0 ? "text-error" : ""}>{mxn.format(payment.value)}</strong></div><div className="h-2 rounded-full bg-surface-container-high"><div className={`h-full rounded-full ${payment.value < 0 ? "bg-error" : "bg-tertiary"}`} style={{ width: `${Math.min(100, (Math.abs(payment.value) / paymentMax) * 100)}%` }} /></div></div>)}</div></Panel>
+          <Panel className="p-5"><p className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Cobros netos</p><h2 className="mt-1 text-lg font-bold">Métodos de pago</h2><div className="mt-6 space-y-5">{dataset.payments.map((payment) => <div key={payment.method}><div className="mb-2 flex justify-between gap-3 text-sm"><span className="font-semibold">{PAYMENT_LABEL[payment.method]}</span><strong className={payment.value < 0 ? "text-error" : ""}>{mxn.format(payment.value)}</strong></div><div className="h-2 rounded-full bg-surface-container-high"><div className={`print-fill h-full rounded-full ${payment.value < 0 ? "bg-error" : "bg-tertiary"}`} style={{ width: `${Math.min(100, (Math.abs(payment.value) / paymentMax) * 100)}%` }} /></div></div>)}</div></Panel>
         </div>
 
-        <div className="mt-6 grid gap-6 xl:grid-cols-[1.25fr_.75fr]">
+        <div className="report-print-pair mt-6 grid gap-6 xl:grid-cols-[1.25fr_.75fr]">
           <Panel className="p-5"><div><p className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Todo el periodo</p><h2 className="mt-1 text-lg font-bold">Ventas por hora del día</h2><p className="mt-1 text-sm text-on-surface-variant">Suma la venta neta de cada hora sin importar cuántos días abarque el periodo, para ver a qué horas se vende más.</p></div>
-            {hourlyPattern.some((point) => point.net !== 0) ? <div className="mt-8 flex h-56 items-end gap-1 border-b border-outline-variant/40 px-1">{hourlyPattern.map((point) => <div key={point.hour} className="group flex h-full min-w-0 flex-1 flex-col justify-end gap-2 text-center"><span className="invisible rounded bg-on-surface px-1 py-0.5 text-[10px] text-surface group-hover:visible">{mxn.format(point.net)}</span><div className={`w-full rounded-t-md ${point.net < 0 ? "bg-error" : "bg-primary-fixed group-hover:bg-primary"}`} style={{ height: `${Math.max(3, (Math.abs(point.net) / hourlyMax) * 84)}%` }} /><span className="truncate text-[10px] font-semibold text-outline">{point.hour}h</span></div>)}</div> : <EmptyState icon={<BarChart3 />} title="Sin ventas en el periodo" description="No hay cobros para calcular horas pico." />}
+            {hourlyPattern.some((point) => point.net !== 0) ? <div className="mt-8 flex h-56 items-end gap-1 border-b border-outline-variant/40 px-1">{hourlyPattern.map((point) => <div key={point.hour} className="group flex h-full min-w-0 flex-1 flex-col justify-end gap-2 text-center"><span className="invisible rounded bg-on-surface px-1 py-0.5 text-[10px] text-surface group-hover:visible">{mxn.format(point.net)}</span><div className={`print-fill w-full rounded-t-md ${point.net < 0 ? "bg-error" : "bg-primary-fixed group-hover:bg-primary"}`} style={{ height: `${Math.max(3, (Math.abs(point.net) / hourlyMax) * 84)}%` }} /><span className="truncate text-[10px] font-semibold text-outline">{point.hour}h</span></div>)}</div> : <EmptyState icon={<BarChart3 />} title="Sin ventas en el periodo" description="No hay cobros para calcular horas pico." />}
           </Panel>
           <Panel className="overflow-hidden"><div className="border-b border-outline-variant/25 p-5"><p className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Por día calendario</p><h2 className="mt-1 text-lg font-bold">Ventas por día</h2></div>{dailySales.length ? <div className="max-h-72 overflow-y-auto"><table className="w-full text-left text-sm"><thead className="sticky top-0 bg-surface-container-low text-xs uppercase tracking-wider text-on-surface-variant"><tr><th className="px-5 py-3">Fecha</th><th className="px-5 py-3 text-right">Tickets</th><th className="px-5 py-3 text-right">Ventas netas</th></tr></thead><tbody className="divide-y divide-outline-variant/25">{dailySales.map((row) => <tr key={row.day}><td className="px-5 py-3 font-semibold">{row.label}</td><td className="px-5 py-3 text-right">{row.tickets}</td><td className={`px-5 py-3 text-right font-bold ${row.net < 0 ? "text-error" : ""}`}>{mxn.format(row.net)}</td></tr>)}</tbody></table></div> : <p className="p-6 text-sm text-on-surface-variant">Sin ventas por día en este periodo.</p>}</Panel>
         </div>
 
         <div className="mt-6 grid gap-6 xl:grid-cols-[.85fr_1.15fr]">
-          <Panel className="p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Productos cobrados</p><h2 className="mt-1 text-lg font-bold">{productView === "top" ? "Más vendidos" : "Menos vendidos"}</h2></div><div className="flex flex-wrap items-center gap-2"><SegmentedControl label="Ver más o menos vendidos" value={productView} onChange={setProductView} options={[{ value: "top", label: "Más vendidos" }, { value: "bottom", label: "Menos vendidos" }]} /><SelectField className="mt-0 w-28" value={productMode} onChange={(event) => setProductMode(event.target.value as "quantity" | "revenue")}><option value="quantity">Unidades</option><option value="revenue">Ingreso</option></SelectField></div></div><div className="mt-6 space-y-4">{rankedProducts.length ? rankedProducts.map((product, index) => { const value = productMode === "quantity" ? product.quantity : product.revenue; return <div key={product.name}><div className="mb-2 flex justify-between gap-3 text-sm"><span className="min-w-0 truncate font-semibold"><span className="mr-2 text-outline">{index + 1}</span>{product.name}</span><strong>{productMode === "quantity" ? product.quantity : mxn.format(product.revenue)}</strong></div><div className="h-2 rounded-full bg-surface-container-high"><div className="h-full rounded-full bg-tertiary" style={{ width: `${(value / productMax) * 100}%` }} /></div></div>; }) : <p className="py-6 text-center text-sm text-on-surface-variant">Sin productos cobrados en el periodo.</p>}</div></Panel>
+          <Panel className="p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Productos cobrados</p><h2 className="mt-1 text-lg font-bold">{productView === "top" ? "Más vendidos" : "Menos vendidos"}</h2></div><div className="flex flex-wrap items-center gap-2"><SegmentedControl label="Ver más o menos vendidos" value={productView} onChange={setProductView} options={[{ value: "top", label: "Más vendidos" }, { value: "bottom", label: "Menos vendidos" }]} /><SelectField className="mt-0 w-28" value={productMode} onChange={(event) => setProductMode(event.target.value as "quantity" | "revenue")}><option value="quantity">Unidades</option><option value="revenue">Ingreso</option></SelectField></div></div><div className="mt-6 space-y-4">{rankedProducts.length ? rankedProducts.map((product, index) => { const value = productMode === "quantity" ? product.quantity : product.revenue; return <div key={product.name}><div className="mb-2 flex justify-between gap-3 text-sm"><span className="min-w-0 truncate font-semibold"><span className="mr-2 text-outline">{index + 1}</span>{product.name}</span><strong>{productMode === "quantity" ? product.quantity : mxn.format(product.revenue)}</strong></div><div className="h-2 rounded-full bg-surface-container-high"><div className="print-fill h-full rounded-full bg-tertiary" style={{ width: `${(value / productMax) * 100}%` }} /></div></div>; }) : <p className="py-6 text-center text-sm text-on-surface-variant">Sin productos cobrados en el periodo.</p>}</div></Panel>
           <Panel className="min-w-0 overflow-hidden print:hidden"><div className="flex items-center justify-between gap-3 border-b border-outline-variant/25 p-5"><div><p className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Detalle auditable</p><h2 className="mt-1 text-lg font-bold">Ventas y movimientos</h2></div><Badge tone="neutral">{dataset.rows.length} registros</Badge></div>{dataset.rows.length ? <><div className="table-scroll-x"><table className="w-full min-w-[900px] text-left text-sm"><thead className="bg-surface-container-low text-xs uppercase tracking-wider text-on-surface-variant"><tr><th className="px-5 py-3">Venta</th><th className="px-5 py-3">Evento</th><th className="px-5 py-3">Empleado</th><th className="px-5 py-3">Tipo</th><th className="px-5 py-3 text-right">Bruta</th><th className="px-5 py-3 text-right">Reversión</th><th className="px-5 py-3 text-right">Neta</th><th className="px-5 py-3 text-right">Propina</th></tr></thead><tbody className="divide-y divide-outline-variant/25">{visibleRows.map((row) => <tr key={row.order.id} className="hover:bg-surface-container-low/60"><td className="px-5 py-4"><Link className="font-bold text-primary hover:underline" to={`/venta/${row.order.id}`}>#{row.order.folio}</Link><p className="mt-1 text-xs text-on-surface-variant">{formatDate(row.order.closedAt ?? row.order.reversedAt ?? row.order.updatedAt)}</p></td><td className="px-5 py-4"><Badge tone={row.reversedInRange || row.cancelledInRange ? "danger" : "success"}>{reportEventLabel(row)}</Badge></td><td className="px-5 py-4">{row.order.closedByName ?? "—"}</td><td className="px-5 py-4">{row.order.type === "table" ? "Mesa" : "Para llevar"}</td><td className="px-5 py-4 text-right font-semibold">{mxn.format(row.gross)}</td><td className="px-5 py-4 text-right text-error">{row.reversal ? `-${mxn.format(row.reversal)}` : "—"}</td><td className={`px-5 py-4 text-right font-bold ${row.net < 0 ? "text-error" : ""}`}>{mxn.format(row.net)}</td><td className="px-5 py-4 text-right">{mxn.format(row.tip)}</td></tr>)}</tbody></table></div><div className="flex items-center justify-between gap-3 border-t border-outline-variant/25 p-4"><p className="text-sm text-on-surface-variant">Página {page + 1} de {pageCount}</p><div className="flex gap-2"><Button size="sm" disabled={page === 0} onClick={() => setPage((value) => value - 1)}>Anterior</Button><Button size="sm" disabled={page >= pageCount - 1} onClick={() => setPage((value) => value + 1)}>Siguiente</Button></div></div></> : <EmptyState icon={<ReceiptText />} title="Sin registros" description="No hay ventas, reversiones o cancelaciones que coincidan con los filtros." />}</Panel>
         </div>
-        {contradictory.length > 0 && <div className="mt-6 print:hidden"><InlineAlert>
+
+        <PrintSalesTable rows={dataset.rows} />
+        {contradictory.length > 0 && <div className="mt-6"><InlineAlert>
           {contradictory.length === 1 ? "Una venta figura" : `${contradictory.length} ventas figuran`} cobrada{contradictory.length === 1 ? "" : "s"} y cancelada{contradictory.length === 1 ? "" : "s"} a la vez: {contradictory.map((row) => `#${row.order.folio}`).join(", ")}. Ese dinero no cuadra con ningún registro válido; revísalas y decide si procede revertir la venta.
         </InlineAlert></div>}
-        <Panel className="mt-6 overflow-hidden print:hidden"><div className="flex items-center justify-between gap-3 border-b border-outline-variant/25 p-5"><div><p className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Trazabilidad del periodo</p><h2 className="mt-1 text-lg font-bold">Incidencias</h2></div><Badge tone="danger">{incidents.length} registros</Badge></div>{incidents.length ? <div className="table-scroll-x"><table className="w-full min-w-[760px] text-left text-sm"><thead className="bg-surface-container-low text-xs uppercase tracking-wider text-on-surface-variant"><tr><th className="px-5 py-3">Venta</th><th className="px-5 py-3">Tipo</th><th className="px-5 py-3">Empleado</th><th className="px-5 py-3">Motivo</th><th className="px-5 py-3 text-right">Importe</th><th className="px-5 py-3">Fecha</th></tr></thead><tbody className="divide-y divide-outline-variant/25">{incidents.map((incident) => <tr key={incident.id} className="hover:bg-surface-container-low/60"><td className="px-5 py-4">{incident.folio === undefined ? "—" : <Link className="font-bold text-primary hover:underline" to={`/venta/${incident.orderId}`}>#{incident.folio}</Link>}</td><td className="px-5 py-4"><Badge tone="danger">{INCIDENT_LABEL[incident.incidentType] ?? incident.incidentType}</Badge></td><td className="px-5 py-4">{incident.createdByName ?? "—"}</td><td className="max-w-md px-5 py-4">{incident.reason}</td><td className="px-5 py-4 text-right font-semibold">{mxn.format(incident.amountCents / 100)}</td><td className="px-5 py-4 text-on-surface-variant">{formatDate(incident.createdAt)}</td></tr>)}</tbody></table></div> : <EmptyState icon={<XCircle />} title="Sin incidencias" description="No hubo cancelaciones, reversiones o reembolsos en este periodo." />}</Panel>
-        <Panel className="mt-6 overflow-hidden print:hidden"><div className="border-b border-outline-variant/25 p-5"><p className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Insumos del periodo</p><h2 className="mt-1 text-lg font-bold">Consumo contado vs. receta teórica</h2><p className="mt-1 text-sm text-on-surface-variant">Compara lo que dicen los conteos con lo que las recetas descontaron al cobrar, entre los mismos dos conteos.</p></div>{inventoryAnalysis.length ? <InventoryAnalysisTable rows={inventoryAnalysis} /> : <div className="p-6 text-sm text-on-surface-variant">No hay información comparable de insumos para este periodo.</div>}</Panel>
+        <Panel className="report-print-flow mt-6 overflow-hidden"><div className="flex items-center justify-between gap-3 border-b border-outline-variant/25 p-5"><div><p className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Trazabilidad del periodo</p><h2 className="mt-1 text-lg font-bold">Incidencias</h2></div><Badge tone="danger">{incidents.length} registros</Badge></div>{incidents.length ? <div className="table-scroll-x"><table className="w-full min-w-[760px] text-left text-sm"><thead className="bg-surface-container-low text-xs uppercase tracking-wider text-on-surface-variant"><tr><th className="px-5 py-3">Venta</th><th className="px-5 py-3">Tipo</th><th className="px-5 py-3">Empleado</th><th className="px-5 py-3">Motivo</th><th className="px-5 py-3 text-right">Importe</th><th className="px-5 py-3">Fecha</th></tr></thead><tbody className="divide-y divide-outline-variant/25">{incidents.map((incident) => <tr key={incident.id} className="hover:bg-surface-container-low/60"><td className="px-5 py-4">{incident.folio === undefined ? "—" : <Link className="font-bold text-primary hover:underline" to={`/venta/${incident.orderId}`}>#{incident.folio}</Link>}</td><td className="px-5 py-4"><Badge tone="danger">{INCIDENT_LABEL[incident.incidentType] ?? incident.incidentType}</Badge></td><td className="px-5 py-4">{incident.createdByName ?? "—"}</td><td className="max-w-md px-5 py-4">{incident.reason}</td><td className="px-5 py-4 text-right font-semibold">{mxn.format(incident.amountCents / 100)}</td><td className="px-5 py-4 text-on-surface-variant">{formatDate(incident.createdAt)}</td></tr>)}</tbody></table></div> : <EmptyState icon={<XCircle />} title="Sin incidencias" description="No hubo cancelaciones, reversiones o reembolsos en este periodo." />}</Panel>
+        <Panel className="report-print-flow mt-6 overflow-hidden"><div className="border-b border-outline-variant/25 p-5"><p className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Insumos del periodo</p><h2 className="mt-1 text-lg font-bold">Consumo contado vs. receta teórica</h2><p className="mt-1 text-sm text-on-surface-variant">Compara lo que dicen los conteos con lo que las recetas descontaron al cobrar, entre los mismos dos conteos.</p></div>{inventoryAnalysis.length ? <InventoryAnalysisTable rows={inventoryAnalysis} /> : <div className="p-6 text-sm text-on-surface-variant">No hay información comparable de insumos para este periodo.</div>}</Panel>
       </>}
     </Page>
   );
