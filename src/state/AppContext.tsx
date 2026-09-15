@@ -116,6 +116,7 @@ interface AppContextValue {
   forceSync: () => Promise<void>;
   addTable: () => Promise<CafeTable>;
   updateTable: (tableId: string, patch: Partial<Pick<CafeTable, "seats" | "shape" | "x" | "y" | "active">>) => Promise<void>;
+  removeTable: (tableId: string) => Promise<void>;
   createProduct: (product: Omit<Product, "id">) => Promise<Product>;
   updateProduct: (productId: string, patch: Partial<Omit<Product, "id">>) => Promise<void>;
   deleteProduct: (productId: string) => Promise<void>;
@@ -205,7 +206,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       id: `t${row.number}`, number: Number(row.number), seats: Number(row.seats), shape: row.shape as CafeTable["shape"],
       x: Number(row.x), y: Number(row.y), active: Boolean(row.active)
     }));
-    await db.cafeTables.bulkPut(remoteTables);
+    // Reemplaza en vez de fusionar: una mesa borrada en otra estación no debe revivir desde IndexedDB.
+    await db.transaction("rw", db.cafeTables, async () => { await db.cafeTables.clear(); await db.cafeTables.bulkPut(remoteTables); });
     setTables(remoteTables);
   }, []);
 
@@ -594,17 +596,50 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const addTable = useCallback(async () => {
     if (session?.role !== "manager") throw new Error("Sólo gerencia puede editar mesas.");
-    const nextNumber = Math.max(0, ...tables.map((table) => table.number)) + 1;
+    // El número sigue a las mesas visibles. Si ese número pertenece a una mesa archivada (con historial),
+    // se reutiliza su fila: `number` es único en la base y así la numeración no salta.
+    const nextNumber = Math.max(0, ...tables.filter((table) => table.active).map((table) => table.number)) + 1;
     const slot = nextFreeSlot(tables);
     const table: CafeTable = { id: `t${nextNumber}`, number: nextNumber, seats: 2, shape: "square", x: slot.x, y: slot.y, active: true };
+    const archived = tables.some((item) => item.number === nextNumber);
     if (supabase && navigator.onLine) {
-      const { error } = await supabase.from("cafe_tables").insert({ number: table.number, seats: table.seats, shape: table.shape, x: table.x, y: table.y, active: true });
+      const fields = { seats: table.seats, shape: table.shape, x: table.x, y: table.y, active: true };
+      const { error } = archived
+        ? await supabase.from("cafe_tables").update(fields).eq("number", nextNumber)
+        : await supabase.from("cafe_tables").insert({ number: table.number, ...fields });
       if (error) throw new Error(error.message);
     }
     await db.cafeTables.put(table);
-    setTables((current) => [...current, table]);
+    setTables((current) => [...current.filter((item) => item.number !== nextNumber), table]);
     return table;
   }, [tables, session]);
+
+  const removeTable = useCallback(async (tableId: string) => {
+    if (session?.role !== "manager") throw new Error("Sólo gerencia puede editar mesas.");
+    if (isSupabaseConfigured && !navigator.onLine) throw new Error("Necesitas conexión para quitar una mesa.");
+    const table = tables.find((item) => item.id === tableId); if (!table) return;
+    let keepArchived = orders.some((order) => order.tableId === tableId);
+    if (supabase) {
+      if (!keepArchived) {
+        const { error } = await supabase.from("cafe_tables").delete().eq("number", table.number);
+        // 23503: pedidos de la mesa que este dispositivo no tiene cargados. 42501: falta el permiso de borrado.
+        if (error && error.code !== "23503" && error.code !== "42501") throw new Error(error.message);
+        keepArchived = Boolean(error);
+      }
+      if (keepArchived) {
+        const { error } = await supabase.from("cafe_tables").update({ active: false }).eq("number", table.number);
+        if (error) throw new Error(error.message);
+      }
+    }
+    if (keepArchived) {
+      const archived = { ...table, active: false };
+      await db.cafeTables.put(archived);
+      setTables((current) => current.map((item) => item.id === tableId ? archived : item));
+    } else {
+      await db.cafeTables.delete(tableId);
+      setTables((current) => current.filter((item) => item.id !== tableId));
+    }
+  }, [tables, orders, session]);
 
   const updateTable = useCallback(async (tableId: string, patch: Partial<Pick<CafeTable, "seats" | "shape" | "x" | "y" | "active">>) => {
     if (session?.role !== "manager") throw new Error("Sólo gerencia puede editar mesas.");
@@ -780,14 +815,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     session, hydrated, orders, tables, products, categories, extras, online, syncStatus, liveStatus, pendingCount, demoMode: !isSupabaseConfigured,
     cashSession, cashSessionRequired, canTakeOrders: ordersAllowed, refreshCashSession,
     login, logout, startOrder, addItem, changeQuantity, cancelCommandedItem, dispatchPending, markOrderReady, finalizeOrder, addPayment,
-    closeOrder, setDiscount, cancelOrder, reverseSale, forceSync, addTable, updateTable,
+    closeOrder, setDiscount, cancelOrder, reverseSale, forceSync, addTable, updateTable, removeTable,
     splitOrder, renameSubaccount, assignItemUnits, reassignItemUnits, clearSplit,
     createProduct, updateProduct, deleteProduct, createExtra, updateExtra, deleteExtra, createCategory, updateCategory, deleteCategory, uploadProductImage
   }), [
     session, hydrated, orders, tables, products, categories, extras, online, syncStatus, liveStatus, pendingCount,
     cashSession, cashSessionRequired, ordersAllowed, refreshCashSession,
     login, logout, startOrder, addItem, changeQuantity, cancelCommandedItem, dispatchPending, markOrderReady, finalizeOrder, addPayment,
-    closeOrder, setDiscount, cancelOrder, reverseSale, forceSync, addTable, updateTable,
+    closeOrder, setDiscount, cancelOrder, reverseSale, forceSync, addTable, updateTable, removeTable,
     splitOrder, renameSubaccount, assignItemUnits, reassignItemUnits, clearSplit,
     createProduct, updateProduct, deleteProduct, createExtra, updateExtra, deleteExtra, createCategory, updateCategory, deleteCategory, uploadProductImage
   ]);
