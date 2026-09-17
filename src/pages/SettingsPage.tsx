@@ -17,7 +17,6 @@ export function SettingsPage() {
         </div>
         <Button variant="primary" onClick={() => navigate("/configuracion/impresion")}><Printer size={18} /> Configurar y probar</Button>
       </div>
-      <p className="mt-5 rounded-xl bg-surface-container-low p-4 text-sm text-on-surface-variant">No requiere QZ Tray ni certificados. La impresora se elige desde el diálogo de Windows y el diseño del ticket se guarda al pulsar <strong>Guardar</strong>.</p>
     </Panel>
   </Page>;
 }
