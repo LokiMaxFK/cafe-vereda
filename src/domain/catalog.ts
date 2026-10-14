@@ -1,5 +1,5 @@
 import { quantityIn } from "./units";
-import type { Category, InventoryItem, InventoryUnit, Product } from "./types";
+import type { Category, InventoryItem, InventoryUnit, Product, ProductVariant } from "./types";
 
 // El servidor guarda el orden del menú en `categories.position`, pero ese orden se perdía al
 // pasar por IndexedDB: Dexie devuelve `toArray()` ordenado por clave primaria, que es el
@@ -23,6 +23,19 @@ export function sortCategories(categories: Category[]): Category[] {
 export function productDisplayPrice(product: Pick<Product, "price" | "variants">): number {
   const variantPrices = (product.variants ?? []).map((variant) => variant.price).filter((price) => Number.isFinite(price));
   return variantPrices.length ? Math.min(...variantPrices) : product.price;
+}
+
+/**
+ * Tamaños con los que arranca un producto que hasta ahora tenía precio único. Cada tamaño cobra
+ * su propio precio y reemplaza al base, así que si el primer tamaño fuera sólo el nuevo, el precio
+ * base quedaría guardado sin que ninguna opción del pedido lo cobrara. Por eso el base entra como
+ * un tamaño más, con nombre, antes de la fila vacía que el usuario pidió. La fila nueva arranca
+ * con ese mismo precio y no en $0: si no, el precio base derivado (el tamaño más barato) caería
+ * a cero mientras la fila siguiera sin llenar.
+ */
+export function firstVariants(basePrice: number, newId: () => string = () => crypto.randomUUID()): ProductVariant[] {
+  const price = Number.isFinite(basePrice) && basePrice >= 0 ? basePrice : 0;
+  return [{ id: newId(), name: "Normal", price }, { id: newId(), name: "", price }];
 }
 
 /** El "desde" sólo tiene sentido cuando hay más de una presentación entre las que elegir. */

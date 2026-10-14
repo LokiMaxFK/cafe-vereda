@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Coffee, ImagePlus, Pencil, Plus, Search, Sparkles, Tags, Trash2, X } from "lucide-react";
 import { Badge, Button, FieldLabel, InlineAlert, Page, PageHeader, Panel, SelectField, TextareaField, TextField } from "../../design-system/react";
 import { Modal } from "../components/Modal";
-import { recipeProblem, type RecipeLine } from "../domain/catalog";
+import { firstVariants, productDisplayPrice, recipeProblem, type RecipeLine } from "../domain/catalog";
 import { mxn } from "../domain/money";
 import type { CatalogExtra, Category, InventoryItem, InventoryUnit, Product, ProductVariant } from "../domain/types";
 import { areUnitsCompatible, convertQuantity, preferredUnit, quantityIn } from "../domain/units";
@@ -32,11 +32,19 @@ function ProductForm({ product, categories, onSave, onDelete, onClose }: {
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState("");
 
+  // Con tamaños, el precio base no se cobra nunca (cada tamaño lo reemplaza), así que deja de ser
+  // un dato capturado a mano y pasa a ser el tamaño más barato, igual que lo anuncia el selector.
+  const hasVariants = variants.length > 0;
+  const effectivePrice = productDisplayPrice({ price: Number(price), variants });
+  const staleBasePrice = product?.variants?.length && !product.variants.some((variant) => variant.price === product.price) ? product.price : null;
+
   function addVariant() {
-    setVariants((current) => [...current, { id: crypto.randomUUID(), name: "", price: 0 }]);
+    setVariants((current) => current.length ? [...current, { id: crypto.randomUUID(), name: "", price: effectivePrice }] : firstVariants(Number(price)));
   }
   function removeVariant(id: string) {
-    setVariants((current) => current.filter((variant) => variant.id !== id));
+    const remaining = variants.filter((variant) => variant.id !== id);
+    if (!remaining.length) setPrice(String(effectivePrice));
+    setVariants(remaining);
   }
 
   function selectImage(event: FormEvent<HTMLInputElement>) {
@@ -57,7 +65,7 @@ function ProductForm({ product, categories, onSave, onDelete, onClose }: {
   async function submit(event: FormEvent) {
     event.preventDefault();
     const numericPrice = Number(price);
-    if (!name.trim() || !categoryId || !Number.isFinite(numericPrice) || numericPrice < 0 || variants.some((variant) => !variant.name.trim() || !Number.isFinite(Number(variant.price)) || Number(variant.price) < 0)) {
+    if (!name.trim() || !categoryId || (!hasVariants && (!Number.isFinite(numericPrice) || numericPrice < 0)) || variants.some((variant) => !variant.name.trim() || !Number.isFinite(Number(variant.price)) || Number(variant.price) < 0)) {
       setError("Completa el nombre, la categoría, un precio válido y el nombre/precio de cada tamaño.");
       return;
     }
@@ -66,7 +74,7 @@ function ProductForm({ product, categories, onSave, onDelete, onClose }: {
     try {
       const finalImageUrl = imageFile ? await uploadProductImage(imageFile) : imageUrl;
       await onSave({
-        name: name.trim(), categoryId, description: description.trim() || undefined, price: numericPrice,
+        name: name.trim(), categoryId, description: description.trim() || undefined, price: effectivePrice,
         available, seasonal, imageUrl: finalImageUrl,
         variants: variants.length ? variants.map((variant) => ({ ...variant, name: variant.name.trim(), price: Number(variant.price) })) : undefined
       });
@@ -92,7 +100,11 @@ function ProductForm({ product, categories, onSave, onDelete, onClose }: {
     <div className="grid gap-4 sm:grid-cols-2">
       <FieldLabel label="Nombre del producto"><TextField required value={name} onChange={(event) => setName(event.target.value)} placeholder="Ej. Latte vainilla" /></FieldLabel>
       <FieldLabel label="Categoría"><SelectField required value={categoryId} onChange={(event) => setCategoryId(event.target.value)}>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</SelectField></FieldLabel>
-      <FieldLabel label="Precio base (MXN)"><TextField required type="number" min="0" step="0.01" value={price} onChange={(event) => setPrice(event.target.value)} placeholder="0.00" /></FieldLabel>
+      <FieldLabel label="Precio base (MXN)" hint={hasVariants ? <>Con tamaños, cada uno define su precio; aquí se muestra el más barato.{staleBasePrice !== null && ` El precio guardado (${mxn.format(staleBasePrice)}) no lo cobra ningún tamaño; si debe seguir a la venta, agrégalo como tamaño.`}</> : undefined}>
+        {hasVariants
+          ? <TextField type="number" disabled value={effectivePrice} readOnly />
+          : <TextField required type="number" min="0" step="0.01" value={price} onChange={(event) => setPrice(event.target.value)} placeholder="0.00" />}
+      </FieldLabel>
     </div>
     <FieldLabel label="Descripción"><TextareaField rows={3} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Ingredientes o una descripción breve" /></FieldLabel>
 

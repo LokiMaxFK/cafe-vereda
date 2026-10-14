@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PRODUCT_IMAGE_MAX_BYTES, hasPriceChoices, productDisplayPrice, productImageError, recipeProblem, sortCategories } from "./catalog";
+import { PRODUCT_IMAGE_MAX_BYTES, firstVariants, hasPriceChoices, productDisplayPrice, productImageError, recipeProblem, sortCategories } from "./catalog";
 import type { Category, InventoryItem } from "./types";
 
 const category = (id: string, name: string, position: number): Category => ({ id, name, position });
@@ -69,6 +69,26 @@ describe("productDisplayPrice", () => {
 
   it("ignora precios no numéricos en vez de devolver NaN", () => {
     expect(productDisplayPrice(product(55, [{ id: "a", name: "Rara", price: NaN }]))).toBe(55);
+  });
+});
+
+describe("firstVariants", () => {
+  let next = 0;
+  const newId = () => `v${++next}`;
+
+  it("conserva el precio base como primer tamaño para que siga siendo cobrable", () => {
+    // El caso que lo destapó: base $10 y luego tamaños de $15 y $40. Al pedir, los $10 ya no
+    // aparecían en ninguna parte.
+    const [base, added] = firstVariants(10, newId);
+    expect(base).toMatchObject({ name: "Normal", price: 10 });
+    // La fila nueva no arranca en $0: hundiría el precio base derivado mientras siga vacía.
+    expect(added).toMatchObject({ name: "", price: 10 });
+    expect(base.id).not.toBe(added.id);
+  });
+
+  it("no arrastra un precio base inválido", () => {
+    expect(firstVariants(NaN, newId)[0].price).toBe(0);
+    expect(firstVariants(-5, newId)[0].price).toBe(0);
   });
 });
 
